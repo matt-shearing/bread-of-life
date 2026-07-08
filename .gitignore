@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# env
+.env
+.env.local

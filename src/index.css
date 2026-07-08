@@ -1,0 +1,86 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/merriweather/400.css";
+@import "@fontsource/merriweather/700.css";
+@import "@fontsource/merriweather/400-italic.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 40 33% 98%; /* warm paper white */
+    --foreground: 24 10% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 10% 12%;
+    --muted: 40 20% 94%;
+    --muted-foreground: 24 6% 42%;
+    --primary: 38 92% 50%; /* amber-500 #f59e0b */
+    --primary-foreground: 30 40% 12%;
+    --secondary: 240 30% 96%;
+    --secondary-foreground: 240 20% 25%;
+    --accent: 40 40% 92%;
+    --accent-foreground: 24 10% 15%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 55% 40%;
+    --success-foreground: 0 0% 100%;
+    --border: 36 20% 88%;
+    --input: 36 20% 88%;
+    --ring: 38 92% 50%;
+  }
+
+  .dark {
+    --background: 24 12% 9%; /* warm charcoal, not cold black */
+    --foreground: 40 20% 92%;
+    --card: 24 10% 12%;
+    --card-foreground: 40 20% 92%;
+    --popover: 24 10% 12%;
+    --popover-foreground: 40 20% 92%;
+    --muted: 24 8% 18%;
+    --muted-foreground: 40 10% 62%;
+    --primary: 38 92% 55%;
+    --primary-foreground: 30 40% 10%;
+    --secondary: 240 12% 20%;
+    --secondary-foreground: 240 15% 85%;
+    --accent: 24 10% 20%;
+    --accent-foreground: 40 20% 90%;
+    --destructive: 0 62% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 45% 45%;
+    --success-foreground: 0 0% 100%;
+    --border: 24 8% 22%;
+    --input: 24 8% 24%;
+    --ring: 38 92% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Highlight colors for verses (amber is the signature default). */
+.hl-amber { background-color: #fef3c7; }
+.hl-rose { background-color: #ffe4e6; }
+.hl-sky { background-color: #e0f2fe; }
+.hl-green { background-color: #dcfce7; }
+.hl-violet { background-color: #ede9fe; }
+.dark .hl-amber { background-color: rgba(245, 158, 11, 0.28); }
+.dark .hl-rose { background-color: rgba(244, 63, 94, 0.26); }
+.dark .hl-sky { background-color: rgba(14, 165, 233, 0.26); }
+.dark .hl-green { background-color: rgba(34, 197, 94, 0.26); }
+.dark .hl-violet { background-color: rgba(139, 92, 246, 0.26); }
+
+/* Thin, calm scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
