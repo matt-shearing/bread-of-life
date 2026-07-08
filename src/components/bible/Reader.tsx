@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy, Highlighter, NotebookPen, HandHeart, StickyNote } from "lucide-react";
+import { Copy, NotebookPen, HandHeart, StickyNote } from "lucide-react";
 import { db, type HighlightColor } from "@/db";
 import { setHighlight, clearHighlight, saveNote, recordProgress } from "@/db/repos";
 import { getChapter, type Chapter } from "@/data/bible";
@@ -96,17 +96,18 @@ export function Reader() {
               {item.text}
             </h3>
           ) : (
-            <Verse
-              key={i}
-              ho={ho}
-              chapter={chapter}
-              n={item.n}
-              text={item.text}
-              color={hlByVerse.get(item.n)}
-              hasNote={noteByVerse.has(item.n)}
-              onNote={() => setNoteVerse(item.n)}
-              onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
-            />
+            <Fragment key={i}>
+              <Verse
+                ho={ho}
+                chapter={chapter}
+                n={item.n}
+                text={item.text}
+                color={hlByVerse.get(item.n)}
+                hasNote={noteByVerse.has(item.n)}
+                onNote={() => setNoteVerse(item.n)}
+                onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
+              />{" "}
+            </Fragment>
           ),
         )}
         <p className="mt-10 text-center text-xs text-muted-foreground">
@@ -151,76 +152,110 @@ interface VerseProps {
 }
 
 function Verse({ ho, chapter, n, text, color, hasNote, onNote, onCapture }: VerseProps) {
+  const [open, setOpen] = useState(false);
   const toggleColor = (c: HighlightColor) => {
     if (color === c) clearHighlight(ho, chapter, n);
     else setHighlight(ho, chapter, n, c);
   };
+  const copy = () => navigator.clipboard?.writeText(`${text} — ${refLabel(ho, chapter, n)} (BSB)`);
 
+  // The verse itself is the trigger: click or right-click pops a floating
+  // toolbar anchored to the verse. Nothing is reserved in the text flow, so
+  // the reading column stays clean.
   return (
-    <span className="group relative">
-      <span
-        className={cn(
-          "font-serif leading-[2] transition-colors [text-align:justify]",
-          color && CLASS_BY_COLOR[color],
-          color && "rounded px-0.5",
-        )}
-      >
-        <sup className="mr-1 select-none text-[0.65em] font-sans font-semibold text-primary-600">{n}</sup>
-        {text}
-        {hasNote && (
-          <StickyNote
-            className="ml-1 inline-block align-super text-primary-500"
-            style={{ width: 12, height: 12 }}
-          />
-        )}
-      </span>{" "}
-      <span className="inline-flex translate-y-[-1px] gap-0.5 align-middle opacity-0 transition-opacity group-hover:opacity-100">
-        <Popover>
-          <Tooltip label="Highlight">
-            <PopoverTrigger asChild>
-              <button className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
-                <Highlighter style={{ width: 14, height: 14 }} />
-              </button>
-            </PopoverTrigger>
-          </Tooltip>
-          <PopoverContent className="flex gap-1.5">
-            {COLORS.map((c) => (
-              <button
-                key={c.key}
-                aria-label={c.key}
-                onClick={() => toggleColor(c.key)}
-                className={cn(
-                  "h-6 w-6 rounded-full border border-border",
-                  c.className,
-                  color === c.key && "ring-2 ring-primary ring-offset-1",
-                )}
-              />
-            ))}
-            {color && (
-              <button
-                onClick={() => clearHighlight(ho, chapter, n)}
-                className="ml-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent"
-              >
-                Clear
-              </button>
-            )}
-          </PopoverContent>
-        </Popover>
-
-        <IconBtn label="Note" onClick={onNote} active={hasNote}>
-          <NotebookPen style={{ width: 14, height: 14 }} />
-        </IconBtn>
-        <IconBtn label="Copy" onClick={() => navigator.clipboard?.writeText(`${text} — ${refLabel(ho, chapter, n)} (BSB)`)}>
-          <Copy style={{ width: 14, height: 14 }} />
-        </IconBtn>
-        <IconBtn label="Journal" onClick={() => onCapture("journal")}>
-          <span className="text-[11px] font-semibold">J</span>
-        </IconBtn>
-        <IconBtn label="Pray" onClick={() => onCapture("prayer")}>
-          <HandHeart style={{ width: 14, height: 14 }} />
-        </IconBtn>
-      </span>
-    </span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setOpen(true);
+          }}
+          className={cn(
+            "cursor-pointer rounded-sm font-serif leading-[2] transition-colors hover:bg-accent/60",
+            color && CLASS_BY_COLOR[color],
+            color && "px-0.5",
+            open && "bg-accent ring-1 ring-primary/40",
+          )}
+        >
+          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-600">
+            {n}
+          </sup>
+          {text}
+          {hasNote && (
+            <StickyNote
+              className="ml-1 inline-block align-super text-primary-500"
+              style={{ width: 12, height: 12 }}
+            />
+          )}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" sideOffset={4} className="w-auto p-2">
+        <div className="mb-1.5 px-0.5 text-xs font-semibold text-muted-foreground">
+          {refLabel(ho, chapter, n)}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {COLORS.map((c) => (
+            <button
+              key={c.key}
+              aria-label={`Highlight ${c.key}`}
+              onClick={() => toggleColor(c.key)}
+              className={cn(
+                "h-6 w-6 rounded-full border border-border transition-transform hover:scale-110",
+                c.className,
+                color === c.key && "ring-2 ring-primary ring-offset-1",
+              )}
+            />
+          ))}
+          {color && (
+            <button
+              onClick={() => clearHighlight(ho, chapter, n)}
+              className="ml-0.5 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="mt-2 flex items-center gap-0.5 border-t border-border pt-2">
+          <IconBtn
+            label="Note"
+            onClick={() => {
+              setOpen(false);
+              onNote();
+            }}
+            active={hasNote}
+          >
+            <NotebookPen style={{ width: 15, height: 15 }} />
+          </IconBtn>
+          <IconBtn
+            label="Copy"
+            onClick={() => {
+              copy();
+              setOpen(false);
+            }}
+          >
+            <Copy style={{ width: 15, height: 15 }} />
+          </IconBtn>
+          <IconBtn
+            label="Journal"
+            onClick={() => {
+              setOpen(false);
+              onCapture("journal");
+            }}
+          >
+            <span className="text-[12px] font-semibold">J</span>
+          </IconBtn>
+          <IconBtn
+            label="Pray"
+            onClick={() => {
+              setOpen(false);
+              onCapture("prayer");
+            }}
+          >
+            <HandHeart style={{ width: 15, height: 15 }} />
+          </IconBtn>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -240,7 +275,7 @@ function IconBtn({
       <button
         onClick={onClick}
         className={cn(
-          "flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground",
+          "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
           active && "text-primary-600",
         )}
       >

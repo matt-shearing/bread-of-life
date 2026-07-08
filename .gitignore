@@ -14,3 +14,6 @@ src-tauri/gen/
 # env
 .env
 .env.local
+
+# local screenshots
+screenshots/
