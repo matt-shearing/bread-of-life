@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AlignLeft, ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Rows3, Search } from "lucide-react";
 import { ChapterPicker } from "@/components/bible/ChapterPicker";
 import { TranslationPicker } from "@/components/bible/TranslationPicker";
+import { ParallelPicker } from "@/components/bible/ParallelPicker";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
 import { useUI } from "@/store/ui";
@@ -89,6 +90,7 @@ export function BiblePage() {
             </Button>
           </Tooltip>
           <TranslationPicker />
+          <ParallelPicker />
           <Tooltip label={railOpen ? "Hide commentary" : "Show commentary"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle commentary">
               {railOpen ? (

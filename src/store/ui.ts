@@ -21,6 +21,9 @@ interface UIState {
   translation: string;
   setTranslation: (id: string) => void;
 
+  parallel: string | null; // second translation shown side-by-side, or null
+  setParallel: (id: string | null) => void;
+
   // right study rail (commentary)
   railOpen: boolean;
   toggleRail: () => void;
@@ -57,6 +60,9 @@ export const useUI = create<UIState>()(
 
       translation: "BSB",
       setTranslation: (id) => set({ translation: id }),
+
+      parallel: null,
+      setParallel: (id) => set({ parallel: id }),
 
       railOpen: true,
       toggleRail: () => set((s) => ({ railOpen: !s.railOpen })),

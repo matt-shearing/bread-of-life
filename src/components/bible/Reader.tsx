@@ -33,8 +33,9 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
 ) as Record<HighlightColor, string>;
 
 export function Reader() {
-  const { ho, chapter, translation, fontScale, readingLayout, selectVerse } = useUI();
+  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse } = useUI();
   const [ch, setCh] = useState<Chapter | null>(null);
+  const [ch2, setCh2] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<{ mode: "journal" | "prayer"; verse: number; text: string } | null>(null);
   const [noteVerse, setNoteVerse] = useState<number | null>(null);
@@ -53,6 +54,24 @@ export function Reader() {
       alive = false;
     };
   }, [translation, ho, chapter]);
+
+  useEffect(() => {
+    if (!parallel) {
+      setCh2(null);
+      return;
+    }
+    let alive = true;
+    getChapterFor(parallel, ho, chapter).then((c) => alive && setCh2(c));
+    return () => {
+      alive = false;
+    };
+  }, [parallel, ho, chapter]);
+
+  const secMap = useMemo(() => {
+    const m = new Map<number, string>();
+    if (ch2) for (const it of ch2.items) if (it.t === "v") m.set(it.n, it.text);
+    return m;
+  }, [ch2]);
 
   const order = bookByHo(ho)?.order ?? 0;
   const start = order * 1_000_000 + chapter * 1_000;
@@ -96,11 +115,17 @@ export function Reader() {
       className="h-full overflow-y-auto"
       style={{ fontSize: `${fontScale}rem` }}
     >
-      <article className="mx-auto max-w-2xl px-8 py-8">
+      <article className={cn("mx-auto px-8 py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
         <div className="mb-6 flex items-center justify-between gap-3">
           <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
           <AudioPlayer audio={ch.audio} />
         </div>
+        {parallel && (
+          <div className="mb-3 grid grid-cols-2 gap-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <div>{translationById(translation)?.short ?? translation}</div>
+            <div>{translationById(parallel)?.short ?? parallel}</div>
+          </div>
+        )}
         {ch.items.map((item, i) => {
           if (item.t === "h") {
             return (
@@ -122,6 +147,19 @@ export function Reader() {
               onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
             />
           );
+          if (parallel) {
+            return (
+              <div key={i} className="mb-3 grid grid-cols-2 gap-6">
+                <div>{verse}</div>
+                <div className="font-serif leading-relaxed text-foreground/90">
+                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-600">
+                    {item.n}
+                  </sup>
+                  {secMap.get(item.n) ?? "…"}
+                </div>
+              </div>
+            );
+          }
           return readingLayout === "lines" ? (
             <p key={i} className="mb-2 leading-relaxed">
               {verse}
