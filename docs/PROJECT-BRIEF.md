@@ -36,7 +36,7 @@ Not scholars, not a market segment, not a startup.
 
 | Module | v1 (this build) | Later |
 |---|---|---|
-| **Bible** | BSB reader; book/chapter nav; headings; per-verse hover actions (highlight ×5 colors, note, copy, → journal, → prayer); reading position remembered | more translations, parallel view, Strong's/word-study, cross-refs, audio (links already in data), reading plans |
+| **Bible** | Reader with **5 translations** (BSB bundled offline; WEB/KJV/ASV/YLT fetched + cached via HelloAO); book/chapter nav; headings; per-verse floating toolbar on click/right-click (highlight ×5 colors, note, copy, → journal, → prayer); reading position remembered. **Full-text search** across BSB. | parallel view, Strong's/word-study, cross-refs, audio (links already in data), reading plans, red-letter (data has `wordsOfJesus`) |
 | **Prayer** ⭐ | add/edit prayers; categories; "prayed N times"; **mark answered with date + how God answered**; dedicated **Answered** review; stats | reminders, prayer wall (opt-in), recurring |
 | **Journal** | rich-ish entries (title/body/tags); link verses; **quick-capture from Bible & prayer** | Tiptap editor, backlinks, search |
 | **Commentary** | right-rail that **tracks the current chapter**; public-domain sources via HelloAO (Matthew Henry etc.), cached offline; source picker | Matt's own `commentary-parser` corpus as a source; split-pane; PDF |

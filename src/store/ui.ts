@@ -17,6 +17,9 @@ interface UIState {
   chapter: number;
   goTo: (ho: string, chapter: number) => void;
 
+  translation: string;
+  setTranslation: (id: string) => void;
+
   // right study rail (commentary)
   railOpen: boolean;
   toggleRail: () => void;
@@ -37,6 +40,9 @@ export const useUI = create<UIState>()(
       ho: "JHN",
       chapter: 1,
       goTo: (ho, chapter) => set({ ho, chapter }),
+
+      translation: "BSB",
+      setTranslation: (id) => set({ translation: id }),
 
       railOpen: true,
       toggleRail: () => set((s) => ({ railOpen: !s.railOpen })),

@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { BookOpen, HandHeart, Home, NotebookPen, Settings, Moon, Sun, Wheat } from "lucide-react";
+import { BookOpen, HandHeart, Home, NotebookPen, Search, Settings, Moon, Sun, Wheat } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/db";
 import { useUI } from "@/store/ui";
@@ -9,6 +9,7 @@ import { Button, Tooltip } from "@/components/ui";
 const NAV = [
   { to: "/", label: "Dashboard", icon: Home, end: true },
   { to: "/bible", label: "Bible", icon: BookOpen, end: false },
+  { to: "/search", label: "Search", icon: Search, end: false },
   { to: "/prayers", label: "Prayers", icon: HandHeart, end: false },
   { to: "/journal", label: "Journal", icon: NotebookPen, end: false },
 ];

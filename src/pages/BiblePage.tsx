@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Search } from "lucide-react";
 import { ChapterPicker } from "@/components/bible/ChapterPicker";
+import { TranslationPicker } from "@/components/bible/TranslationPicker";
 import { Reader } from "@/components/bible/Reader";
 import { CommentaryRail } from "@/components/bible/CommentaryRail";
 import { useUI } from "@/store/ui";
@@ -10,6 +12,7 @@ import { Button, Tooltip } from "@/components/ui";
 
 export function BiblePage() {
   const { ho, chapter, goTo, railOpen, toggleRail } = useUI();
+  const navigate = useNavigate();
   const [index, setIndex] = useState<BookIndexEntry[]>([]);
 
   useEffect(() => {
@@ -52,8 +55,13 @@ export function BiblePage() {
             </Button>
           </Tooltip>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground">BSB</span>
+        <div className="ml-auto flex items-center gap-1">
+          <Tooltip label="Search scripture">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/search")} aria-label="Search">
+              <Search style={{ width: 18, height: 18 }} />
+            </Button>
+          </Tooltip>
+          <TranslationPicker />
           <Tooltip label={railOpen ? "Hide commentary" : "Show commentary"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle commentary">
               {railOpen ? (

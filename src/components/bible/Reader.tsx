@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Copy, NotebookPen, HandHeart, StickyNote } from "lucide-react";
 import { db, type HighlightColor } from "@/db";
 import { setHighlight, clearHighlight, saveNote, recordProgress } from "@/db/repos";
-import { getChapter, type Chapter } from "@/data/bible";
+import { getChapterFor, translationById, type Chapter } from "@/data/bible";
 import { refLabel, bookByHo } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import {
@@ -32,7 +32,7 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
 ) as Record<HighlightColor, string>;
 
 export function Reader() {
-  const { ho, chapter, fontScale } = useUI();
+  const { ho, chapter, translation, fontScale } = useUI();
   const [ch, setCh] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<{ mode: "journal" | "prayer"; verse: number; text: string } | null>(null);
@@ -41,7 +41,7 @@ export function Reader() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    getChapter(ho, chapter).then((c) => {
+    getChapterFor(translation, ho, chapter).then((c) => {
       if (!alive) return;
       setCh(c);
       setLoading(false);
@@ -51,7 +51,7 @@ export function Reader() {
     return () => {
       alive = false;
     };
-  }, [ho, chapter]);
+  }, [translation, ho, chapter]);
 
   const order = bookByHo(ho)?.order ?? 0;
   const start = order * 1_000_000 + chapter * 1_000;
@@ -80,7 +80,14 @@ export function Reader() {
   }, [notes, start]);
 
   if (loading) return <div className="p-10 text-muted-foreground">Loading…</div>;
-  if (!ch) return <div className="p-10 text-muted-foreground">Chapter not found.</div>;
+  if (!ch)
+    return (
+      <div className="p-10 text-muted-foreground">
+        {translation === "BSB"
+          ? "Chapter not found."
+          : `Couldn't load ${translationById(translation)?.name ?? translation} here — you may be offline. It caches after the first online view; BSB always works offline.`}
+      </div>
+    );
 
   return (
     <div
@@ -111,7 +118,7 @@ export function Reader() {
           ),
         )}
         <p className="mt-10 text-center text-xs text-muted-foreground">
-          Berean Standard Bible · Public Domain (CC0)
+          {translationById(translation)?.name ?? translation} · Public Domain
         </p>
       </article>
 

@@ -7,6 +7,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { BiblePage } from "@/pages/BiblePage";
 import { PrayersPage } from "@/pages/PrayersPage";
 import { JournalPage } from "@/pages/JournalPage";
+import { SearchPage } from "@/pages/SearchPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 
 // HashRouter: works identically under Vite dev and Tauri's file:// asset loading.
@@ -17,6 +18,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "bible", element: <BiblePage /> },
+      { path: "search", element: <SearchPage /> },
       { path: "prayers", element: <PrayersPage /> },
       { path: "journal", element: <JournalPage /> },
       { path: "settings", element: <SettingsPage /> },

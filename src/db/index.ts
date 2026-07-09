@@ -74,6 +74,12 @@ export interface CommentaryCache {
   fetchedAt: number;
 }
 
+export interface BibleCache {
+  key: string; // `${translation}:${chapterOsis}` — non-bundled translations only
+  json: string; // serialised Chapter
+  fetchedAt: number;
+}
+
 export const db = new Dexie("bread-of-life") as Dexie & {
   highlights: EntityTable<Highlight, "id">;
   notes: EntityTable<Note, "id">;
@@ -82,6 +88,7 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   progress: EntityTable<ReadingProgress, "chapterOsis">;
   settings: EntityTable<Setting, "key">;
   commentary: EntityTable<CommentaryCache, "key">;
+  bibleCache: EntityTable<BibleCache, "key">;
 };
 
 db.version(1).stores({
@@ -92,6 +99,10 @@ db.version(1).stores({
   progress: "chapterOsis, at",
   settings: "key",
   commentary: "key, fetchedAt",
+});
+
+db.version(2).stores({
+  bibleCache: "key, fetchedAt",
 });
 
 export function uid(): string {

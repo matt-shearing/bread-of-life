@@ -3,7 +3,8 @@
  * Immutable, offline, ~10ms cached reads. This is the "static JSON wins" result
  * from the prior data bake-off, on real public-domain BSB text.
  */
-import { BOOKS, type BookMeta } from "@/lib/osis";
+import { BOOKS, toBbcccvvv, toOsis, type BookMeta } from "@/lib/osis";
+import { db } from "@/db";
 
 export interface VerseItem {
   t: "v";
@@ -69,12 +70,130 @@ export async function getChapter(ho: string, chapter: number): Promise<Chapter |
   return book.chapters.find((c) => c.number === chapter) ?? null;
 }
 
+/* --------------------------- multiple translations --------------------------- */
+
+export interface Translation {
+  id: string; // HelloAO id
+  name: string;
+  short: string;
+  bundled?: boolean; // BSB ships offline; others fetch-on-demand + cache
+}
+
+export const TRANSLATIONS: Translation[] = [
+  { id: "BSB", name: "Berean Standard Bible", short: "BSB", bundled: true },
+  { id: "ENGWEBP", name: "World English Bible", short: "WEB" },
+  { id: "eng_kjv", name: "King James Version", short: "KJV" },
+  { id: "eng_asv", name: "American Standard Version", short: "ASV" },
+  { id: "eng_ylt", name: "Young's Literal Translation", short: "YLT" },
+];
+
+export const translationById = (id: string) => TRANSLATIONS.find((t) => t.id === id);
+
+function flattenHelloAO(content: unknown[]): string {
+  const parts: string[] = [];
+  for (const item of content) {
+    if (typeof item === "string") parts.push(item);
+    else if (item && typeof item === "object" && "text" in item) parts.push(String((item as any).text));
+  }
+  return parts.join(" ").replace(/¶\s*/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Chapter for any translation. BSB is served from bundled JSON; others are
+ *  fetched from HelloAO once and cached in Dexie (offline after first view). */
+export async function getChapterFor(
+  translation: string,
+  ho: string,
+  chapter: number,
+): Promise<Chapter | null> {
+  if (translation === "BSB") return getChapter(ho, chapter);
+
+  const key = `${translation}:${toOsis(ho, chapter)}`;
+  const cached = await db.bibleCache.get(key);
+  if (cached) return JSON.parse(cached.json) as Chapter;
+
+  try {
+    const res = await fetch(`https://bible.helloao.org/api/${translation}/${ho}/${chapter}.json`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const ch = json.chapter;
+    if (!ch) return null;
+    const items: ChapterItem[] = [];
+    for (const node of ch.content ?? []) {
+      if (node.type === "heading") {
+        const text = flattenHelloAO(node.content ?? []);
+        if (text) items.push({ t: "h", text });
+      } else if (node.type === "verse") {
+        items.push({ t: "v", n: node.number, text: flattenHelloAO(node.content ?? []) });
+      }
+    }
+    const result: Chapter = { number: chapter, items };
+    await db.bibleCache.put({ key, json: JSON.stringify(result), fetchedAt: Date.now() });
+    return result;
+  } catch {
+    return null;
+  }
+}
+
 export function verses(chapter: Chapter): VerseItem[] {
   return chapter.items.filter((i): i is VerseItem => i.t === "v");
 }
 
 export function bookMeta(ho: string): BookMeta | undefined {
   return BOOKS.find((b) => b.ho === ho);
+}
+
+/* ---------------------------------- search ----------------------------------- */
+
+export interface SearchHit {
+  ho: string;
+  chapter: number;
+  verse: number;
+  text: string;
+  bbcccvvv: number;
+}
+
+let allVersesCache: SearchHit[] | null = null;
+
+async function loadAllVerses(): Promise<SearchHit[]> {
+  if (allVersesCache) return allVersesCache;
+  const out: SearchHit[] = [];
+  for (const b of BOOKS) {
+    const book = await loadBook(b.ho);
+    for (const ch of book.chapters) {
+      for (const it of ch.items) {
+        if (it.t === "v") {
+          out.push({
+            ho: b.ho,
+            chapter: ch.number,
+            verse: it.n,
+            text: it.text,
+            bbcccvvv: toBbcccvvv(b.ho, ch.number, it.n),
+          });
+        }
+      }
+    }
+  }
+  allVersesCache = out;
+  return out;
+}
+
+/** Full-text search across the bundled BSB. All query words must appear;
+ *  exact-phrase matches rank first, then canonical order. */
+export async function searchBible(query: string, limit = 200): Promise<SearchHit[]> {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const terms = q.split(/\s+/).filter(Boolean);
+  const verses = await loadAllVerses();
+  const scored: { hit: SearchHit; score: number }[] = [];
+  for (const v of verses) {
+    const t = v.text.toLowerCase();
+    if (terms.every((term) => t.includes(term))) {
+      const score = (t.includes(q) ? 1000 : 0) + terms.length;
+      scored.push({ hit: v, score });
+    }
+  }
+  scored.sort((a, b) => b.score - a.score || a.hit.bbcccvvv - b.hit.bbcccvvv);
+  return scored.slice(0, limit).map((s) => s.hit);
 }
 
 /** Deterministic verse-of-the-day: rotates through a curated list by day number. */
