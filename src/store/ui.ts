@@ -7,6 +7,7 @@ import { persist } from "zustand/middleware";
  * "five competing state systems" that sank the prior attempt.
  */
 type Theme = "light" | "dark";
+export type ReadingLayout = "lines" | "flowing";
 
 interface UIState {
   theme: Theme;
@@ -29,6 +30,16 @@ interface UIState {
 
   fontScale: number; // scripture font multiplier
   setFontScale: (n: number) => void;
+
+  readingLayout: ReadingLayout;
+  setReadingLayout: (l: ReadingLayout) => void;
+
+  // verse currently selected for study (Strong's / cross-refs in the rail)
+  selectedVerse: number | null;
+  selectVerse: (n: number | null) => void;
+
+  railTab: "commentary" | "xref" | "strongs";
+  setRailTab: (t: "commentary" | "xref" | "strongs") => void;
 }
 
 export const useUI = create<UIState>()(
@@ -52,6 +63,15 @@ export const useUI = create<UIState>()(
 
       fontScale: 1,
       setFontScale: (n) => set({ fontScale: Math.min(1.5, Math.max(0.85, n)) }),
+
+      readingLayout: "lines",
+      setReadingLayout: (l) => set({ readingLayout: l }),
+
+      selectedVerse: null,
+      selectVerse: (n) => set({ selectedVerse: n }),
+
+      railTab: "commentary",
+      setRailTab: (t) => set({ railTab: t }),
     }),
     { name: "bol-ui" },
   ),

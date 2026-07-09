@@ -32,7 +32,7 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
 ) as Record<HighlightColor, string>;
 
 export function Reader() {
-  const { ho, chapter, translation, fontScale } = useUI();
+  const { ho, chapter, translation, fontScale, readingLayout, selectVerse } = useUI();
   const [ch, setCh] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<{ mode: "journal" | "prayer"; verse: number; text: string } | null>(null);
@@ -97,26 +97,35 @@ export function Reader() {
     >
       <article className="mx-auto max-w-2xl px-8 py-8">
         <h2 className="mb-6 font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
-        {ch.items.map((item, i) =>
-          item.t === "h" ? (
-            <h3 key={i} className="mb-2 mt-6 font-serif text-lg font-bold text-primary-700 dark:text-primary-300">
-              {item.text}
-            </h3>
+        {ch.items.map((item, i) => {
+          if (item.t === "h") {
+            return (
+              <h3 key={i} className="mb-2 mt-6 font-serif text-lg font-bold text-primary-700 dark:text-primary-300">
+                {item.text}
+              </h3>
+            );
+          }
+          const verse = (
+            <Verse
+              ho={ho}
+              chapter={chapter}
+              n={item.n}
+              text={item.text}
+              color={hlByVerse.get(item.n)}
+              hasNote={noteByVerse.has(item.n)}
+              onSelect={() => selectVerse(item.n)}
+              onNote={() => setNoteVerse(item.n)}
+              onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
+            />
+          );
+          return readingLayout === "lines" ? (
+            <p key={i} className="mb-2 leading-relaxed">
+              {verse}
+            </p>
           ) : (
-            <Fragment key={i}>
-              <Verse
-                ho={ho}
-                chapter={chapter}
-                n={item.n}
-                text={item.text}
-                color={hlByVerse.get(item.n)}
-                hasNote={noteByVerse.has(item.n)}
-                onNote={() => setNoteVerse(item.n)}
-                onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
-              />{" "}
-            </Fragment>
-          ),
-        )}
+            <Fragment key={i}>{verse} </Fragment>
+          );
+        })}
         <p className="mt-10 text-center text-xs text-muted-foreground">
           {translationById(translation)?.name ?? translation} · Public Domain
         </p>
@@ -154,11 +163,12 @@ interface VerseProps {
   text: string;
   color?: HighlightColor;
   hasNote: boolean;
+  onSelect: () => void;
   onNote: () => void;
   onCapture: (mode: "journal" | "prayer") => void;
 }
 
-function Verse({ ho, chapter, n, text, color, hasNote, onNote, onCapture }: VerseProps) {
+function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCapture }: VerseProps) {
   const [open, setOpen] = useState(false);
   const toggleColor = (c: HighlightColor) => {
     if (color === c) clearHighlight(ho, chapter, n);
@@ -170,9 +180,16 @@ function Verse({ ho, chapter, n, text, color, hasNote, onNote, onCapture }: Vers
   // toolbar anchored to the verse. Nothing is reserved in the text flow, so
   // the reading column stays clean.
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) onSelect();
+      }}
+    >
       <PopoverTrigger asChild>
         <span
+          onClick={onSelect}
           onContextMenu={(e) => {
             e.preventDefault();
             setOpen(true);

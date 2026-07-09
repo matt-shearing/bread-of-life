@@ -77,6 +77,7 @@ export interface Translation {
   name: string;
   short: string;
   bundled?: boolean; // BSB ships offline; others fetch-on-demand + cache
+  licensed?: boolean; // copyrighted — not in any open repo; needs a paid provider
 }
 
 export const TRANSLATIONS: Translation[] = [
@@ -85,7 +86,14 @@ export const TRANSLATIONS: Translation[] = [
   { id: "eng_kjv", name: "King James Version", short: "KJV" },
   { id: "eng_asv", name: "American Standard Version", short: "ASV" },
   { id: "eng_ylt", name: "Young's Literal Translation", short: "YLT" },
+  // Copyrighted by the Lockman Foundation — not available in any free/open
+  // dataset. Shown here for intent; enabling them needs a licensed provider
+  // (e.g. API.Bible with a Lockman licence + key). See docs/TECH-LANDSCAPE.
+  { id: "NASB2020", name: "New American Standard (2020)", short: "NASB", licensed: true },
+  { id: "AMP", name: "Amplified Bible", short: "AMP", licensed: true },
 ];
+
+export const AVAILABLE_TRANSLATIONS = TRANSLATIONS.filter((t) => !t.licensed);
 
 export const translationById = (id: string) => TRANSLATIONS.find((t) => t.id === id);
 

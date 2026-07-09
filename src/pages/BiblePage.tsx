@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Search } from "lucide-react";
+import { AlignLeft, ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Rows3, Search } from "lucide-react";
 import { ChapterPicker } from "@/components/bible/ChapterPicker";
 import { TranslationPicker } from "@/components/bible/TranslationPicker";
 import { Reader } from "@/components/bible/Reader";
-import { CommentaryRail } from "@/components/bible/CommentaryRail";
+import { StudyRail } from "@/components/bible/StudyRail";
 import { useUI } from "@/store/ui";
 import { loadIndex, type BookIndexEntry } from "@/data/bible";
 import { BOOKS } from "@/lib/osis";
 import { Button, Tooltip } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 export function BiblePage() {
-  const { ho, chapter, goTo, railOpen, toggleRail } = useUI();
+  const { ho, chapter, goTo, railOpen, toggleRail, readingLayout, setReadingLayout } = useUI();
   const navigate = useNavigate();
   const [index, setIndex] = useState<BookIndexEntry[]>([]);
 
@@ -56,6 +57,32 @@ export function BiblePage() {
           </Tooltip>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <div className="mr-1 flex items-center rounded-md border border-border p-0.5">
+            <Tooltip label="Verse per line">
+              <button
+                onClick={() => setReadingLayout("lines")}
+                aria-label="Verse per line"
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded",
+                  readingLayout === "lines" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Rows3 style={{ width: 16, height: 16 }} />
+              </button>
+            </Tooltip>
+            <Tooltip label="Flowing paragraphs">
+              <button
+                onClick={() => setReadingLayout("flowing")}
+                aria-label="Flowing paragraphs"
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded",
+                  readingLayout === "flowing" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <AlignLeft style={{ width: 16, height: 16 }} />
+              </button>
+            </Tooltip>
+          </div>
           <Tooltip label="Search scripture">
             <Button variant="ghost" size="icon" onClick={() => navigate("/search")} aria-label="Search">
               <Search style={{ width: 18, height: 18 }} />
@@ -78,7 +105,7 @@ export function BiblePage() {
         <div className="min-w-0 flex-1">
           <Reader />
         </div>
-        {railOpen && <CommentaryRail />}
+        {railOpen && <StudyRail />}
       </div>
     </div>
   );

@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Lock } from "lucide-react";
 import { TRANSLATIONS } from "@/data/bible";
 import { useUI } from "@/store/ui";
-import { Button, Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
+import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function TranslationPicker() {
@@ -18,8 +18,8 @@ export function TranslationPicker() {
           <ChevronDown style={{ width: 14, height: 14 }} className="opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-1">
-        {TRANSLATIONS.map((t) => (
+      <PopoverContent align="end" className="w-72 p-1">
+        {TRANSLATIONS.filter((t) => !t.licensed).map((t) => (
           <button
             key={t.id}
             onClick={() => {
@@ -38,6 +38,19 @@ export function TranslationPicker() {
             )}
             {t.id === translation && <Check style={{ width: 15, height: 15 }} className="text-primary-600" />}
           </button>
+        ))}
+
+        <div className="mt-1 border-t border-border px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Requires a licence
+        </div>
+        {TRANSLATIONS.filter((t) => t.licensed).map((t) => (
+          <Tooltip key={t.id} label="Copyrighted (Lockman Foundation) — needs a licensed provider + key">
+            <div className="flex w-full cursor-not-allowed items-center gap-2 rounded-md px-2 py-2 text-left text-sm opacity-55">
+              <span className="w-10 shrink-0 text-xs font-semibold text-muted-foreground">{t.short}</span>
+              <span className="flex-1">{t.name}</span>
+              <Lock style={{ width: 13, height: 13 }} className="text-muted-foreground" />
+            </div>
+          </Tooltip>
         ))}
       </PopoverContent>
     </Popover>
