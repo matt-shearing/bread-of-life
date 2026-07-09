@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Link2, NotebookPen, Plus, Trash2 } from "lucide-react";
+import { Link2, NotebookPen, Plus, Search, Trash2, X } from "lucide-react";
 import { db, type JournalEntry } from "@/db";
 import { addJournalEntry, deleteJournalEntry, updateJournalEntry } from "@/db/repos";
 import { parseOsis, refLabel } from "@/lib/osis";
@@ -14,6 +14,7 @@ import {
   Input,
   Textarea,
 } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 function osisToLabel(osis: string) {
   const p = parseOsis(osis);
@@ -22,7 +23,27 @@ function osisToLabel(osis: string) {
 
 export function JournalPage() {
   const [editing, setEditing] = useState<JournalEntry | "new" | null>(null);
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState<string | null>(null);
   const entries = useLiveQuery(() => db.journal.orderBy("updatedAt").reverse().toArray(), [], []);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of entries ?? []) for (const t of e.tags) set.add(t);
+    return [...set].sort();
+  }, [entries]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = (entries ?? []).filter((e) => {
+    if (tag && !e.tags.includes(tag)) return false;
+    if (!q) return true;
+    return (
+      e.title.toLowerCase().includes(q) ||
+      e.body.toLowerCase().includes(q) ||
+      e.tags.some((t) => t.toLowerCase().includes(q))
+    );
+  });
+  const hasEntries = (entries ?? []).length > 0;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -37,7 +58,7 @@ export function JournalPage() {
           </Button>
         </div>
 
-        {(entries ?? []).length === 0 ? (
+        {!hasEntries ? (
           <Card className="flex flex-col items-center gap-3 p-10 text-center">
             <NotebookPen style={{ width: 32, height: 32 }} className="text-primary-500" />
             <p className="text-muted-foreground">
@@ -48,8 +69,54 @@ export function JournalPage() {
             </Button>
           </Card>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {(entries ?? []).map((e) => (
+          <>
+            <div className="mb-4 space-y-3">
+              <div className="relative">
+                <Search
+                  style={{ width: 16, height: 16 }}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search your journal…"
+                  className="pl-9"
+                />
+              </div>
+              {allTags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {allTags.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTag(tag === t ? null : t)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-xs",
+                        tag === t
+                          ? "border-primary bg-primary/10 text-primary-700 dark:text-primary-300"
+                          : "border-border text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      #{t}
+                    </button>
+                  ))}
+                  {tag && (
+                    <button
+                      onClick={() => setTag(null)}
+                      className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+                    >
+                      <X style={{ width: 12, height: 12 }} /> clear
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {filtered.length === 0 ? (
+              <Card className="p-8 text-center text-sm text-muted-foreground">
+                No entries match your search.
+              </Card>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {filtered.map((e) => (
               <Card key={e.id} className="group cursor-pointer p-4 hover:border-primary/40" onClick={() => setEditing(e)}>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{e.title}</h3>
@@ -82,8 +149,10 @@ export function JournalPage() {
                   </span>
                 </div>
               </Card>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
