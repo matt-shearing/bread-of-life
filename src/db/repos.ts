@@ -183,8 +183,7 @@ export async function resetPlan(planId: string) {
 
 /* ------------------------------- devotional ------------------------------- */
 
-export async function setDevotionDone(mmdd: string, slot: "m" | "e", done: boolean) {
-  const id = `${mmdd}:${slot}`;
+export async function setDevotionDone(id: string, done: boolean) {
   if (done) await db.devotions.put({ id, completedAt: Date.now() });
   else await db.devotions.delete(id);
 }

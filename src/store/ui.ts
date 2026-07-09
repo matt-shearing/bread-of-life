@@ -51,6 +51,9 @@ interface UIState {
   notifyPrayers: boolean;
   setNotifyPrayers: (v: boolean) => void;
 
+  devotionalId: string;
+  setDevotionalId: (id: string) => void;
+
   // devotional reminder
   notifyDevotion: boolean;
   devotionTime: string; // "HH:MM"
@@ -114,6 +117,9 @@ export const useUI = create<UIState>()(
 
       notifyPrayers: false,
       setNotifyPrayers: (v) => set({ notifyPrayers: v }),
+
+      devotionalId: "spurgeon-morning-evening",
+      setDevotionalId: (id) => set({ devotionalId: id }),
 
       notifyDevotion: false,
       devotionTime: "07:00",

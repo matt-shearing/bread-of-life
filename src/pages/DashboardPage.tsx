@@ -7,7 +7,14 @@ import { DashboardBackground } from "@/components/dashboard/DashboardBackground"
 import { cn } from "@/lib/cn";
 import { verseOfTheDay } from "@/data/bible";
 import { getPlan, type Plan } from "@/data/plans";
-import { currentSlot, getDevotionDay, mmdd, type DevotionDay, type DevotionEntry, type Slot } from "@/data/devotional";
+import {
+  currentReadingIndex,
+  devotionalById,
+  getDevotionDay,
+  mmdd,
+  type DevotionDay,
+  type DevotionReading,
+} from "@/data/devotional";
 import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
@@ -321,48 +328,49 @@ export function DashboardPage() {
 
 function DevotionTile() {
   const navigate = useNavigate();
-  const { goTo } = useUI();
+  const { goTo, devotionalId } = useUI();
+  const dev = devotionalById(devotionalId);
   const key = mmdd();
-  const [slot, setSlot] = useState<Slot>(currentSlot());
   const [day, setDay] = useState<DevotionDay | null>(null);
+  const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    getDevotionDay(key).then(setDay);
-  }, [key]);
+    getDevotionDay(dev, key).then((d) => {
+      setDay(d);
+      setIndex(d ? currentReadingIndex(d) : 0);
+    });
+  }, [dev, key]);
 
-  const doneM = useLiveQuery(() => db.devotions.get(`${key}:m`), [key]);
-  const doneE = useLiveQuery(() => db.devotions.get(`${key}:e`), [key]);
+  const done0 = useLiveQuery(() => db.devotions.get(`${dev.id}:${key}:0`), [dev.id, key]);
+  const done1 = useLiveQuery(() => db.devotions.get(`${dev.id}:${key}:1`), [dev.id, key]);
 
-  if (!day) return null;
-  const entry = day[slot];
-  const isDone = slot === "m" ? !!doneM : !!doneE;
-  const snippet = entry.text.replace(/\s+/g, " ").slice(0, 160).trim() + "…";
-  const openVerse = (e: DevotionEntry) => {
+  if (!day || !day.readings.length) return null;
+  const reading = day.readings[Math.min(index, day.readings.length - 1)];
+  const isDone = index === 0 ? !!done0 : !!done1;
+  const snippet = reading.text.replace(/\s+/g, " ").slice(0, 160).trim() + "…";
+  const openVerse = (e: DevotionReading) => {
     if (e.ho && e.chapter) {
       goTo(e.ho, e.chapter);
       navigate("/bible");
     }
   };
+  const Icon = reading.label === "Evening" ? Sunset : reading.label === "Morning" ? Sunrise : Sparkles;
 
   return (
     <>
       <Card className="mb-6 p-5">
         <div className="mb-1 flex items-center gap-2">
-          {slot === "m" ? (
-            <Sunrise style={{ width: 16, height: 16 }} className="text-primary-600" />
-          ) : (
-            <Sunset style={{ width: 16, height: 16 }} className="text-primary-600" />
-          )}
+          <Icon style={{ width: 16, height: 16 }} className="text-primary-600" />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">Spurgeon’s Morning &amp; Evening</div>
+            <div className="text-sm font-semibold">{dev.name}</div>
             <div className="text-xs text-muted-foreground">
-              Today’s Devotional · {slot === "m" ? "Morning" : "Evening"}
+              Today’s Devotional{reading.label ? ` · ${reading.label}` : ""} · {dev.author}
             </div>
           </div>
           {isDone && <Badge className="border-success/40 text-success">Done ✓</Badge>}
         </div>
-        <div className="font-serif text-base font-bold">{entry.ref}</div>
+        <div className="font-serif text-base font-bold">{reading.ref}</div>
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{snippet}</p>
         <div className="mt-3 flex gap-2">
           <Button size="sm" onClick={() => setOpen(true)}>
@@ -375,12 +383,15 @@ function DevotionTile() {
       </Card>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-          <DialogTitle>Spurgeon’s Morning &amp; Evening</DialogTitle>
+          <DialogTitle>
+            {dev.name} · {dev.author}
+          </DialogTitle>
           <DevotionView
+            dev={dev}
             dayKey={key}
             day={day}
-            slot={slot}
-            setSlot={setSlot}
+            index={index}
+            setIndex={setIndex}
             onOpenVerse={(e) => {
               setOpen(false);
               openVerse(e);
