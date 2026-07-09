@@ -1,0 +1,20 @@
+Bread of Life is a calm, offline-first "homebase" for your devotional life —
+one place for reading, prayer, and reflection instead of five separate apps.
+
+Features:
+
+* Read the Berean Standard Bible (public domain), bundled for full offline use,
+  plus WEB, KJV, ASV and YLT. Verse-per-line or flowing layout, highlights,
+  notes, chapter audio, and a fast full-text search.
+* A study rail with public-domain commentary, cross-references (Treasury of
+  Scripture Knowledge), and Strong's word-study — Greek for the NT and an
+  accurate Hebrew interlinear (Westminster Leningrad Codex) for the OT.
+* A prayer log at the heart of it: mark prayers answered and look back on what
+  God has done. Daily reminders optional.
+* A rich-text journal with tags, search, and one-tap capture from any verse.
+* Selectable public-domain devotionals (Spurgeon's Morning & Evening and
+  Faith's Checkbook) with a warm dashboard and reading plans.
+* An optional AI study companion you bring your own key for (Claude, OpenAI,
+  or a local model via Ollama).
+
+Everything you write stays on your device. No account required.

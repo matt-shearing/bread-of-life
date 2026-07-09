@@ -15,7 +15,10 @@
     "build:devotional": "node scripts/build-devotional.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build --apk"
   },
   "dependencies": {
     "@fontsource/inter": "^5.1.0",

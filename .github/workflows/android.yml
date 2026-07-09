@@ -1,0 +1,110 @@
+name: Android APK
+
+# Builds a signed Android APK and attaches it to a GitHub Release.
+# Obtainium installs/updates directly from these Release assets.
+#
+# Trigger: push a tag like `v0.1.0`, or run manually (workflow_dispatch).
+#
+# Secrets required for a *signed* build (Settings → Secrets → Actions):
+#   ANDROID_KEYSTORE_BASE64  – base64 of your release keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# Generate one:
+#   keytool -genkey -v -keystore bol.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias bol
+#   base64 -w0 bol.jks   # → ANDROID_KEYSTORE_BASE64
+# Without the secrets the job still builds an UNSIGNED apk artifact (not
+# installable) so you can verify the build.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK + build tools
+        run: |
+          sdkmanager "ndk;27.1.12297006" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.1.12297006" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/27.1.12297006" >> "$GITHUB_ENV"
+
+      - name: Rust + Android targets
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Init + build Android (unsigned APK)
+        run: |
+          pnpm tauri android init --ci
+          pnpm tauri android build --apk --target aarch64
+
+      - name: Locate unsigned APK
+        id: apk
+        run: |
+          APK=$(find src-tauri/gen/android -name '*-release-unsigned.apk' | head -1)
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Found: $APK"
+
+      - name: Sign APK
+        id: sign
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
+          BT="$ANDROID_SDK_ROOT/build-tools/34.0.0"
+          OUT=bread-of-life-${GITHUB_REF_NAME:-dev}.apk
+          "$BT/zipalign" -p -f 4 "${{ steps.apk.outputs.path }}" aligned.apk
+          "$BT/apksigner" sign --ks release.jks \
+            --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+            --out "$OUT" aligned.apk
+          "$BT/apksigner" verify "$OUT"
+          echo "signed=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bread-of-life-apk
+          path: |
+            ${{ steps.sign.outputs.signed || steps.apk.outputs.path }}
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/') && steps.sign.outputs.signed != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.sign.outputs.signed }}
+          fail_on_unmatched_files: true
