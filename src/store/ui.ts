@@ -94,7 +94,7 @@ export const useUI = create<UIState>()(
       parallel: null,
       setParallel: (id) => set({ parallel: id }),
 
-      railOpen: true,
+      railOpen: false,
       toggleRail: () => set((s) => ({ railOpen: !s.railOpen })),
 
       commentarySource: "matthew-henry",

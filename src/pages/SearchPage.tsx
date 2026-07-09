@@ -65,7 +65,7 @@ export function SearchPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-8 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-8">
         <h1 className="mb-1 font-serif text-3xl font-bold">Search</h1>
         <p className="mb-5 text-sm text-muted-foreground">Search the Berean Standard Bible.</p>
 

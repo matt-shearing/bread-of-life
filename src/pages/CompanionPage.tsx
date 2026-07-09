@@ -91,7 +91,7 @@ export function CompanionPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-border px-6 py-4">
+      <header className="flex items-center gap-2 border-b border-border px-4 py-4 md:px-6">
         <Sparkles style={{ width: 20, height: 20 }} className="text-primary-600" />
         <div>
           <h1 className="font-serif text-xl font-bold">Study Companion</h1>
@@ -106,7 +106,7 @@ export function CompanionPage() {
         )}
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
         <div className="mx-auto max-w-2xl space-y-4">
           {!configured ? (
             <Card className="p-6 text-center">
@@ -123,7 +123,7 @@ export function CompanionPage() {
               <p className="text-sm text-muted-foreground">
                 Ask anything about {refLabel(ho, chapter)} — or the Bible more broadly. Try:
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {QUICK.map((q) => (
                   <button
                     key={q}
@@ -162,7 +162,7 @@ export function CompanionPage() {
         </div>
       </div>
 
-      <div className="border-t border-border px-6 py-4">
+      <div className="border-t border-border px-4 py-4 md:px-6">
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <Textarea
             value={input}

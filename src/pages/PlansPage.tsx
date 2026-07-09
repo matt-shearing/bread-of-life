@@ -57,7 +57,7 @@ export function PlansPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-8 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
         <div className="mb-1 flex items-center gap-3">
           <h1 className="font-serif text-3xl font-bold">Reading Plans</h1>
           <Button className="ml-auto" onClick={() => setCreating(true)}>
@@ -68,7 +68,7 @@ export function PlansPage() {
           Build a rhythm in the Word. Progress is tracked by chapters read — never by the clock — so you
           can’t fall behind.
         </p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {plans.map((p) => {
             const done = byId.get(p.id)?.completedDays.length ?? 0;
             const pct = Math.round((done / p.days.length) * 100);
@@ -134,7 +134,7 @@ function PlanDetail({
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-8 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-8">
         <Button variant="ghost" size="sm" className="mb-4 -ml-2" onClick={onBack}>
           <ArrowLeft style={{ width: 16, height: 16 }} /> All plans
         </Button>

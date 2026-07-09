@@ -117,7 +117,7 @@ export function Reader() {
       className="h-full overflow-y-auto"
       style={{ fontSize: `${fontScale}rem` }}
     >
-      <article className={cn("mx-auto px-8 py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
+      <article className={cn("mx-auto px-4 py-6 md:px-8 md:py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
         <div className="mb-6 flex items-center justify-between gap-3">
           <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
           <AudioPlayer audio={ch.audio} />

@@ -43,7 +43,7 @@ export function BiblePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-2 border-b border-border bg-background/80 px-4 py-3 backdrop-blur">
+      <header className="flex flex-wrap items-center gap-2 border-b border-border bg-background/80 px-3 py-2.5 backdrop-blur md:px-4 md:py-3">
         <ChapterPicker />
         <div className="flex items-center gap-1">
           <Tooltip label="Previous chapter">
@@ -58,7 +58,7 @@ export function BiblePage() {
           </Tooltip>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <div className="mr-1 flex items-center rounded-md border border-border p-0.5">
+          <div className="mr-1 hidden items-center rounded-md border border-border p-0.5 sm:flex">
             <Tooltip label="Verse per line">
               <button
                 onClick={() => setReadingLayout("lines")}
@@ -90,7 +90,9 @@ export function BiblePage() {
             </Button>
           </Tooltip>
           <TranslationPicker />
-          <ParallelPicker />
+          <div className="hidden sm:block">
+            <ParallelPicker />
+          </div>
           <Tooltip label={railOpen ? "Hide commentary" : "Show commentary"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle commentary">
               {railOpen ? (

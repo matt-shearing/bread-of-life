@@ -167,7 +167,7 @@ export function DashboardPage() {
   return (
     <div className="relative h-full overflow-y-auto">
       <DashboardBackground />
-      <div className="relative z-10 mx-auto max-w-5xl px-8 py-8">
+      <div className="relative z-10 mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
         <div className="mb-6 flex items-start gap-3">
           <div>
             <h1 className="font-serif text-3xl font-bold">{greeting()}.</h1>
@@ -225,7 +225,7 @@ export function DashboardPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {/* Continue reading */}
           <Card className="p-5">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
@@ -310,7 +310,7 @@ export function DashboardPage() {
               Nothing yet — highlight a verse and send it to your journal to begin.
             </Card>
           ) : (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {(journal ?? []).map((e) => (
                 <Card key={e.id} className="cursor-pointer p-4 hover:border-primary/40" onClick={() => navigate("/journal")}>
                   <h3 className="font-medium">{e.title}</h3>

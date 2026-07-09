@@ -47,7 +47,7 @@ export function JournalPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-8 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
         <div className="mb-6 flex items-center gap-3">
           <div>
             <h1 className="font-serif text-3xl font-bold">Journal</h1>
@@ -115,7 +115,7 @@ export function JournalPage() {
                 No entries match your search.
               </Card>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {filtered.map((e) => (
               <Card key={e.id} className="group cursor-pointer p-4 hover:border-primary/40" onClick={() => setEditing(e)}>
                 <div className="flex items-start justify-between gap-2">

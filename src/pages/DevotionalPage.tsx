@@ -64,7 +64,7 @@ export function DevotionalPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl px-8 py-8">
+      <div className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-8">
         <div className="mb-6 flex items-center gap-3">
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
             <PopoverTrigger asChild>

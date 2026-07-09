@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { MobileNav } from "./MobileNav";
 import { useUI } from "@/store/ui";
 import { TooltipProvider } from "@/components/ui";
 import { maybeNotifyDevotion, maybeNotifyPrayers } from "@/lib/notify";
@@ -29,11 +30,12 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen w-screen overflow-hidden">
+      <div className="flex h-[100dvh] w-screen overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <Outlet />
         </main>
+        <MobileNav />
       </div>
     </TooltipProvider>
   );

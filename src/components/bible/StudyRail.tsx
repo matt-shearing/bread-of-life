@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookMarked, Languages, Link2 } from "lucide-react";
+import { BookMarked, Languages, Link2, X } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { bookByHo, parseOsis, refLabel } from "@/lib/osis";
 import { getChapterFor, verses } from "@/data/bible";
@@ -21,9 +21,9 @@ import {
 import { cn } from "@/lib/cn";
 
 export function StudyRail() {
-  const { railTab, setRailTab } = useUI();
+  const { railTab, setRailTab, toggleRail } = useUI();
   return (
-    <aside className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-card">
+    <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-border bg-card md:static md:z-auto md:w-[360px] md:shrink-0">
       <div className="flex items-center border-b border-border px-2">
         <TabButton active={railTab === "commentary"} onClick={() => setRailTab("commentary")} icon={<BookMarked style={{ width: 15, height: 15 }} />}>
           Commentary
@@ -34,6 +34,13 @@ export function StudyRail() {
         <TabButton active={railTab === "strongs"} onClick={() => setRailTab("strongs")} icon={<Languages style={{ width: 15, height: 15 }} />}>
           Strong's
         </TabButton>
+        <button
+          onClick={toggleRail}
+          aria-label="Close study panel"
+          className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent md:hidden"
+        >
+          <X style={{ width: 18, height: 18 }} />
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {railTab === "commentary" && <CommentaryPanel />}

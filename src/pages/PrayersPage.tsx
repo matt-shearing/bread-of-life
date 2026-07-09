@@ -69,7 +69,7 @@ export function PrayersPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-8 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
         <div className="mb-6 flex items-center gap-3">
           <div>
             <h1 className="font-serif text-3xl font-bold">Prayers</h1>
@@ -83,7 +83,7 @@ export function PrayersPage() {
         </div>
 
         {/* stats */}
-        <div className="mb-6 grid grid-cols-4 gap-3">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Active" value={stats.active} />
           <Stat label="Answered" value={stats.answered} accent />
           <Stat label="Days praying" value={stats.daysPraying} />

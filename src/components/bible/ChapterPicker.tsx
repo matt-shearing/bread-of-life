@@ -30,7 +30,7 @@ export function ChapterPicker() {
           <ChevronDown style={{ width: 16, height: 16 }} className="opacity-60" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[520px] p-0">
+      <PopoverContent align="start" className="w-[min(520px,calc(100vw-1.5rem))] p-0">
         <div className="grid grid-cols-2">
           <div className="max-h-80 overflow-y-auto border-r border-border p-2">
             <div className="px-2 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
