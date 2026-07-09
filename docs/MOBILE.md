@@ -55,8 +55,7 @@ pnpm android:build     # produce the APK
 1. Install Obtainium (from F-Droid or its GitHub Releases).
 2. **Add App** → paste this repo's URL: `https://github.com/matt-shearing/bread-of-life`.
 3. Obtainium finds the latest Release APK and installs it; it auto-checks for
-   updates on new releases. (The repo is private — sign in Obtainium with a
-   GitHub token that can read it, or make releases public.)
+   updates on new releases. The repo is public, so no token is needed.
 
 ## F-Droid submission (when ready)
 
