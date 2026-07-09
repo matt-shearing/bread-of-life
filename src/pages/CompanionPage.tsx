@@ -4,7 +4,7 @@ import { Send, Sparkles, Trash2, Settings as SettingsIcon } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { getChapter, verses } from "@/data/bible";
 import { refLabel } from "@/lib/osis";
-import { askCompanion, PROVIDERS, type ChatMessage } from "@/ai/client";
+import { streamCompanion, PROVIDERS, type ChatMessage } from "@/ai/client";
 import { Button, Card, Textarea } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -34,12 +34,13 @@ async function buildSystem(ho: string, chapter: number): Promise<string> {
 
 export function CompanionPage() {
   const navigate = useNavigate();
-  const { ho, chapter, ai } = useUI();
+  const { ho, chapter, ai, companionSeed, setCompanionSeed } = useUI();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const seedConsumed = useRef(false);
 
   const meta = PROVIDERS[ai.provider];
   const configured = !meta.needsKey || ai.apiKey.trim().length > 0;
@@ -48,20 +49,41 @@ export function CompanionPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, loading]);
 
+  // Consume a seed question passed from the reader's "Ask" action (once).
+  useEffect(() => {
+    if (companionSeed && !seedConsumed.current) {
+      seedConsumed.current = true;
+      const q = companionSeed;
+      setCompanionSeed(null);
+      if (configured) send(q);
+      else setInput(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companionSeed]);
+
   async function send(text: string) {
     const q = text.trim();
     if (!q || loading) return;
     setError(null);
     const next = [...messages, { role: "user" as const, content: q }];
-    setMessages(next);
+    // add an empty assistant bubble we stream into
+    setMessages([...next, { role: "assistant", content: "" }]);
     setInput("");
     setLoading(true);
     try {
       const system = await buildSystem(ho, chapter);
-      const reply = await askCompanion(ai, system, next);
-      setMessages((m) => [...m, { role: "assistant", content: reply }]);
+      await streamCompanion(ai, system, next, (chunk) => {
+        setMessages((m) => {
+          const copy = m.slice();
+          const last = copy[copy.length - 1];
+          if (last?.role === "assistant") copy[copy.length - 1] = { ...last, content: last.content + chunk };
+          return copy;
+        });
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      // drop the empty assistant bubble on error
+      setMessages((m) => (m[m.length - 1]?.role === "assistant" && !m[m.length - 1].content ? m.slice(0, -1) : m));
     } finally {
       setLoading(false);
     }
@@ -114,7 +136,8 @@ export function CompanionPage() {
               </div>
             </div>
           ) : (
-            messages.map((m, i) => (
+            messages.map((m, i) =>
+              m.role === "assistant" && m.content === "" ? null : (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                 <div
                   className={cn(
@@ -127,9 +150,12 @@ export function CompanionPage() {
                   {m.content}
                 </div>
               </div>
-            ))
+            ),
+            )
           )}
-          {loading && <div className="text-sm text-muted-foreground">Thinking…</div>}
+          {loading && messages[messages.length - 1]?.content === "" && (
+            <div className="text-sm text-muted-foreground">Thinking…</div>
+          )}
           {error && (
             <Card className="border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</Card>
           )}

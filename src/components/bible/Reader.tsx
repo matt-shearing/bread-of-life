@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy, NotebookPen, HandHeart, StickyNote } from "lucide-react";
+import { Copy, NotebookPen, HandHeart, Sparkles, StickyNote } from "lucide-react";
 import { db, type HighlightColor } from "@/db";
 import { setHighlight, clearHighlight, saveNote, recordProgress } from "@/db/repos";
 import { getChapterFor, translationById, type Chapter } from "@/data/bible";
@@ -33,7 +34,8 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
 ) as Record<HighlightColor, string>;
 
 export function Reader() {
-  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse } = useUI();
+  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed } = useUI();
+  const navigate = useNavigate();
   const [ch, setCh] = useState<Chapter | null>(null);
   const [ch2, setCh2] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,6 +147,10 @@ export function Reader() {
               onSelect={() => selectVerse(item.n)}
               onNote={() => setNoteVerse(item.n)}
               onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
+              onAsk={() => {
+                setCompanionSeed(`Help me understand ${refLabel(ho, chapter, item.n)}: “${item.text}”`);
+                navigate("/companion");
+              }}
             />
           );
           if (parallel) {
@@ -208,9 +214,10 @@ interface VerseProps {
   onSelect: () => void;
   onNote: () => void;
   onCapture: (mode: "journal" | "prayer") => void;
+  onAsk: () => void;
 }
 
-function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCapture }: VerseProps) {
+function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCapture, onAsk }: VerseProps) {
   const [open, setOpen] = useState(false);
   const toggleColor = (c: HighlightColor) => {
     if (color === c) clearHighlight(ho, chapter, n);
@@ -319,6 +326,15 @@ function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCaptu
           >
             <HandHeart style={{ width: 15, height: 15 }} />
           </IconBtn>
+          <IconBtn
+            label="Ask companion"
+            onClick={() => {
+              setOpen(false);
+              onAsk();
+            }}
+          >
+            <Sparkles style={{ width: 15, height: 15 }} />
+          </IconBtn>
         </div>
       </PopoverContent>
     </Popover>
@@ -340,6 +356,7 @@ function IconBtn({
     <Tooltip label={label}>
       <button
         onClick={onClick}
+        aria-label={label}
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
           active && "text-primary-600",

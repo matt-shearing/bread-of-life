@@ -72,54 +72,92 @@ async function getFetch(): Promise<typeof fetch> {
   return window.fetch.bind(window);
 }
 
-/** Ask the configured model, grounded by `system`, with a short chat `history`.
- *  Returns the assistant's reply text. Throws with the provider error on failure. */
-export async function askCompanion(config: AIConfig, system: string, history: ChatMessage[]): Promise<string> {
+/** Stream the model's reply, grounded by `system`, with a short chat `history`.
+ *  Calls `onDelta` with each text chunk as it arrives and resolves with the full
+ *  text. Throws with the provider error on failure. Works in the Tauri webview
+ *  (via the HTTP plugin) and in a plain browser. */
+export async function streamCompanion(
+  config: AIConfig,
+  system: string,
+  history: ChatMessage[],
+  onDelta: (chunk: string) => void,
+): Promise<string> {
   const f = await getFetch();
   const meta = PROVIDERS[config.provider];
 
-  if (meta.kind === "anthropic") {
-    const res = await f("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model: config.model || meta.defaultModel,
-        max_tokens: 2048,
-        system,
-        messages: history,
-      }),
-    });
-    if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    return (data.content ?? [])
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
-      .join("\n")
-      .trim();
-  }
+  let url: string;
+  let headers: Record<string, string>;
+  let body: unknown;
 
-  // OpenAI-compatible (OpenAI, Ollama, custom)
-  const base = (config.baseUrl || meta.defaultBaseUrl || "").replace(/\/$/, "");
-  if (!base) throw new Error("No base URL configured for this provider.");
-  const res = await f(`${base}/chat/completions`, {
-    method: "POST",
-    headers: {
+  if (meta.kind === "anthropic") {
+    url = "https://api.anthropic.com/v1/messages";
+    headers = {
+      "content-type": "application/json",
+      "x-api-key": config.apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    };
+    body = { model: config.model || meta.defaultModel, max_tokens: 2048, system, messages: history, stream: true };
+  } else {
+    const base = (config.baseUrl || meta.defaultBaseUrl || "").replace(/\/$/, "");
+    if (!base) throw new Error("No base URL configured for this provider.");
+    url = `${base}/chat/completions`;
+    headers = {
       "content-type": "application/json",
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
-    },
-    body: JSON.stringify({
+    };
+    body = {
       model: config.model || meta.defaultModel,
       messages: [{ role: "system", content: system }, ...history],
       max_tokens: 2048,
-      stream: false,
-    }),
-  });
+      stream: true,
+    };
+  }
+
+  const res = await f(url, { method: "POST", headers, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${meta.label} ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return (data.choices?.[0]?.message?.content ?? "").trim();
+  if (!res.body) {
+    // No stream available — fall back to a whole-response read.
+    const text = await res.text();
+    onDelta(text);
+    return text;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+
+  const handle = (json: any) => {
+    let chunk = "";
+    if (meta.kind === "anthropic") {
+      if (json.type === "content_block_delta" && json.delta?.type === "text_delta") chunk = json.delta.text;
+    } else {
+      chunk = json.choices?.[0]?.delta?.content ?? "";
+    }
+    if (chunk) {
+      full += chunk;
+      onDelta(chunk);
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        handle(JSON.parse(data));
+      } catch {
+        /* keep-alive / partial line — ignore */
+      }
+    }
+  }
+  return full.trim();
 }

@@ -63,6 +63,8 @@ interface UIState {
   // AI study companion
   ai: AIConfig;
   setAI: (patch: Partial<AIConfig>) => void;
+  companionSeed: string | null; // a question to auto-send when the companion opens
+  setCompanionSeed: (q: string | null) => void;
 }
 
 export type AIProvider = "anthropic" | "openai" | "ollama" | "custom";
@@ -123,6 +125,8 @@ export const useUI = create<UIState>()(
 
       ai: { provider: "anthropic", model: "claude-opus-4-8", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),
+      companionSeed: null,
+      setCompanionSeed: (q) => set({ companionSeed: q }),
     }),
     { name: "bol-ui" },
   ),
