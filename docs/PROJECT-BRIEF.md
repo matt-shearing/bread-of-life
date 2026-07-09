@@ -40,6 +40,7 @@ Not scholars, not a market segment, not a startup.
 | **Prayer** ⭐ | add/edit prayers; categories; "prayed N times"; **mark answered with date + how God answered**; dedicated **Answered** review; stats; **daily reminders** (bell → dashboard "Pray today" + optional OS notification) | prayer wall (opt-in), recurring/scheduled times |
 | **Journal** | rich-ish entries (title/body/tags); link verses; **quick-capture from Bible & prayer** | Tiptap editor, backlinks, search |
 | **Study rail** | Tabbed right rail: **Commentary** (public-domain via HelloAO, tracks chapter, cached), **Cross-references** (OpenBible TSK, 342k, CC-BY — click a verse), **Strong's word-study** (BSB word tags + Greek/Hebrew lexicon; NT reliable, OT flagged approximate) | Matt's own `commentary-parser` corpus; split-pane; PDF; morphology |
+| **AI companion** | Grounded study chat that includes the current passage as context; **multi-provider** — Claude (Anthropic), OpenAI, Ollama (local open models), or any OpenAI-compatible endpoint; key stored locally; desktop calls route through the Tauri HTTP plugin (no CORS) | streaming responses; local `sqlite-vec` RAG over the whole corpus; per-verse "ask" action |
 | **Translations** | 5 public-domain (BSB/WEB/KJV/ASV/YLT). NASB 2020 + Amplified shown but **licence-gated** (Lockman copyright — not in any open repo; needs a licensed provider + key). | wire a licensed provider (API.Bible) behind a key |
 | **Dashboard** | warm landing: **cozy countryside background** (plain / still / animated toggle; day+dusk art via Nano Banana), Verse of the Day, **devotional tile** (pop-up reader), Today's Plan, Pray-today, Continue Reading, streak, recent journal | customizable widgets, user-submitted scenes |
 | **Devotional** | **Spurgeon's _Morning & Evening_** (public domain, 366 days × AM/PM); read from the dashboard tile or a full page; verse refs deep-link into the reader; mark complete; **daily reminder notification** at a set time | more devotionals (selectable), streaks |
@@ -108,8 +109,13 @@ reminders · **Spurgeon Morning & Evening devotional + devotional reminders** ·
 dashboard background (plain/still/animated)**. (Details in the module table above.)
 
 **Next:**
-1. **SQLite swap** for user data (`@tauri-apps/plugin-sql`) + full-text search over notes/journal.
-2. **Matt's own commentary** as a `CommentarySource` fed from the `commentary-parser` canonical DB.
+1. **SQLite swap** for user data — _deliberately deferred._ IndexedDB (Dexie) already persists offline
+   inside the Tauri webview, so the swap's real payoff is FTS over notes/journal + portability to the
+   `commentary-parser` schema, not "offline". A true `@tauri-apps/plugin-sql` backend can't run in the
+   browser dev/verify loop, so it'd cost the fast iteration that's produced all of this. Do it when we
+   wire the commentary corpus (which _is_ SQLite), behind the existing `src/db` repository seam.
+2. **Streaming** AI responses + **local `sqlite-vec` RAG** over scripture + commentary + notes (semantic study).
+3. **Matt's own commentary** as a `CommentarySource` fed from the `commentary-parser` canonical DB.
 3. **Better OT Strong's** (OSHB/Open Scriptures or Berean interlinear tables) + morphology; red-letter (`wordsOfJesus`).
 4. **AI study companion**: local `sqlite-vec` RAG over the whole corpus (scripture + commentary + notes); capture assistant.
 5. **Licensed translations** (NASB/AMP) via API.Bible behind the user's key.

@@ -4,7 +4,9 @@ import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { PROVIDERS } from "@/ai/client";
+import type { AIProvider } from "@/store/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function SettingsPage() {
@@ -21,7 +23,10 @@ export function SettingsPage() {
     devotionTime,
     setNotifyDevotion,
     setDevotionTime,
+    ai,
+    setAI,
   } = useUI();
+  const aiMeta = PROVIDERS[ai.provider];
   const counts = useLiveQuery(
     async () => ({
       highlights: await db.highlights.count(),
@@ -135,6 +140,83 @@ export function SettingsPage() {
                   app is open).
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>AI study companion</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <div className="mb-2 text-sm">Provider</div>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(PROVIDERS) as AIProvider[]).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() =>
+                        setAI({
+                          provider: p,
+                          model: PROVIDERS[p].defaultModel,
+                          baseUrl: PROVIDERS[p].defaultBaseUrl ?? "",
+                        })
+                      }
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-sm",
+                        ai.provider === p
+                          ? "border-primary bg-primary/10 text-primary-700 dark:text-primary-300"
+                          : "border-border text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      {PROVIDERS[p].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1 text-sm">Model</div>
+                <Input
+                  list="ai-model-suggestions"
+                  value={ai.model}
+                  onChange={(e) => setAI({ model: e.target.value })}
+                  placeholder={aiMeta.defaultModel || "model id"}
+                />
+                <datalist id="ai-model-suggestions">
+                  {aiMeta.modelSuggestions.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              </div>
+
+              {(aiMeta.needsKey || ai.provider === "custom") && (
+                <div>
+                  <div className="mb-1 text-sm">API key {aiMeta.needsKey ? "" : "(optional)"}</div>
+                  <Input
+                    type="password"
+                    value={ai.apiKey}
+                    onChange={(e) => setAI({ apiKey: e.target.value })}
+                    placeholder={aiMeta.keyHint ?? "API key"}
+                  />
+                </div>
+              )}
+
+              {aiMeta.needsBaseUrl && (
+                <div>
+                  <div className="mb-1 text-sm">Base URL</div>
+                  <Input
+                    value={ai.baseUrl}
+                    onChange={(e) => setAI({ baseUrl: e.target.value })}
+                    placeholder={aiMeta.defaultBaseUrl ?? "https://…/v1"}
+                  />
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                Your key is stored locally on this device and used only to call your chosen provider.
+                In the desktop app requests go out natively (no CORS); OpenAI/custom providers may be
+                blocked by CORS in a plain browser.
+              </p>
             </CardContent>
           </Card>
 

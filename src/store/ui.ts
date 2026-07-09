@@ -59,6 +59,18 @@ interface UIState {
 
   dashboardBg: DashboardBg;
   setDashboardBg: (b: DashboardBg) => void;
+
+  // AI study companion
+  ai: AIConfig;
+  setAI: (patch: Partial<AIConfig>) => void;
+}
+
+export type AIProvider = "anthropic" | "openai" | "ollama" | "custom";
+export interface AIConfig {
+  provider: AIProvider;
+  model: string;
+  apiKey: string;
+  baseUrl: string; // for ollama / custom OpenAI-compatible
 }
 
 export const useUI = create<UIState>()(
@@ -108,6 +120,9 @@ export const useUI = create<UIState>()(
 
       dashboardBg: "still",
       setDashboardBg: (b) => set({ dashboardBg: b }),
+
+      ai: { provider: "anthropic", model: "claude-opus-4-8", apiKey: "", baseUrl: "" },
+      setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),
     }),
     { name: "bol-ui" },
   ),
