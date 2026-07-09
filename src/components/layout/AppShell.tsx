@@ -30,7 +30,7 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-[100dvh] w-screen overflow-hidden">
+      <div className="flex h-[100dvh] w-full overflow-hidden pt-[env(safe-area-inset-top)]">
         <Sidebar />
         <main className="flex-1 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <Outlet />

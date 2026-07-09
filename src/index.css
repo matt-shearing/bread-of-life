@@ -62,6 +62,10 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    @apply overflow-x-hidden;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";

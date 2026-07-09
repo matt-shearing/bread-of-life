@@ -23,7 +23,7 @@ import { cn } from "@/lib/cn";
 export function StudyRail() {
   const { railTab, setRailTab, toggleRail } = useUI();
   return (
-    <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-border bg-card md:static md:z-auto md:w-[360px] md:shrink-0">
+    <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-border bg-card pt-[env(safe-area-inset-top)] md:static md:z-auto md:w-[360px] md:shrink-0 md:pt-0">
       <div className="flex items-center border-b border-border px-2">
         <TabButton active={railTab === "commentary"} onClick={() => setRailTab("commentary")} icon={<BookMarked style={{ width: 15, height: 15 }} />}>
           Commentary

@@ -70,7 +70,7 @@ interface UIState {
   setCompanionSeed: (q: string | null) => void;
 }
 
-export type AIProvider = "anthropic" | "openai" | "ollama" | "custom";
+export type AIProvider = "anthropic" | "openai" | "xai" | "google" | "deepseek" | "ollama" | "custom";
 export interface AIConfig {
   provider: AIProvider;
   model: string;
