@@ -354,12 +354,13 @@ function DevotionTile() {
           ) : (
             <Sunset style={{ width: 16, height: 16 }} className="text-primary-600" />
           )}
-          <span className="text-sm font-semibold text-muted-foreground">
-            Today’s Devotional · {slot === "m" ? "Morning" : "Evening"}
-          </span>
-          {isDone && (
-            <Badge className="ml-auto border-success/40 text-success">Done ✓</Badge>
-          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">Spurgeon’s Morning &amp; Evening</div>
+            <div className="text-xs text-muted-foreground">
+              Today’s Devotional · {slot === "m" ? "Morning" : "Evening"}
+            </div>
+          </div>
+          {isDone && <Badge className="border-success/40 text-success">Done ✓</Badge>}
         </div>
         <div className="font-serif text-base font-bold">{entry.ref}</div>
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{snippet}</p>
@@ -374,7 +375,7 @@ function DevotionTile() {
       </Card>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-          <DialogTitle>Morning &amp; Evening</DialogTitle>
+          <DialogTitle>Spurgeon’s Morning &amp; Evening</DialogTitle>
           <DevotionView
             dayKey={key}
             day={day}
