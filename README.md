@@ -40,6 +40,13 @@ pnpm build                      # typecheck + web build → dist/
 pnpm tauri:build                # native installers (AppImage/deb on Linux, etc.)
 ```
 
+## Install it
+
+- **Linux desktop** — grab the `.AppImage` (any distro) or `.deb` from the
+  [latest release](https://github.com/matt-shearing/bread-of-life/releases). See `docs/DESKTOP.md`.
+- **Android** — install via [Obtainium](https://github.com/ImranR98/Obtainium) pointed at this repo,
+  or sideload the release APK. See `docs/MOBILE.md`.
+
 ## Stack
 
 Tauri 2 · React 18 + Vite + TypeScript · Tailwind + Radix · Zustand (UI state) · Dexie (data).
