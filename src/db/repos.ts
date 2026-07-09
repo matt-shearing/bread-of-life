@@ -181,6 +181,14 @@ export async function resetPlan(planId: string) {
   await db.plans.delete(planId);
 }
 
+/* ------------------------------- devotional ------------------------------- */
+
+export async function setDevotionDone(mmdd: string, slot: "m" | "e", done: boolean) {
+  const id = `${mmdd}:${slot}`;
+  if (done) await db.devotions.put({ id, completedAt: Date.now() });
+  else await db.devotions.delete(id);
+}
+
 /* ---------------------------------- settings ----------------------------------- */
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {

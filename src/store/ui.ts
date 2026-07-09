@@ -8,6 +8,7 @@ import { persist } from "zustand/middleware";
  */
 type Theme = "light" | "dark";
 export type ReadingLayout = "lines" | "flowing";
+export type DashboardBg = "plain" | "still" | "animated";
 
 interface UIState {
   theme: Theme;
@@ -49,6 +50,15 @@ interface UIState {
 
   notifyPrayers: boolean;
   setNotifyPrayers: (v: boolean) => void;
+
+  // devotional reminder
+  notifyDevotion: boolean;
+  devotionTime: string; // "HH:MM"
+  setNotifyDevotion: (v: boolean) => void;
+  setDevotionTime: (t: string) => void;
+
+  dashboardBg: DashboardBg;
+  setDashboardBg: (b: DashboardBg) => void;
 }
 
 export const useUI = create<UIState>()(
@@ -90,6 +100,14 @@ export const useUI = create<UIState>()(
 
       notifyPrayers: false,
       setNotifyPrayers: (v) => set({ notifyPrayers: v }),
+
+      notifyDevotion: false,
+      devotionTime: "07:00",
+      setNotifyDevotion: (v) => set({ notifyDevotion: v }),
+      setDevotionTime: (t) => set({ devotionTime: t }),
+
+      dashboardBg: "still",
+      setDashboardBg: (b) => set({ dashboardBg: b }),
     }),
     { name: "bol-ui" },
   ),

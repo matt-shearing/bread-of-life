@@ -80,6 +80,35 @@
 .dark .hl-green { background-color: rgba(34, 197, 94, 0.26); }
 .dark .hl-violet { background-color: rgba(139, 92, 246, 0.26); }
 
+/* Dashboard countryside background + gentle ambient animation */
+@keyframes bol-kenburns {
+  0% { transform: scale(1.03) translateY(0); }
+  50% { transform: scale(1.07) translateY(-1.2%); }
+  100% { transform: scale(1.03) translateY(0); }
+}
+@keyframes bol-cloud-drift {
+  from { transform: translateX(-8%); }
+  to { transform: translateX(8%); }
+}
+.bol-bg-anim { animation: bol-kenburns 48s ease-in-out infinite; }
+.bol-clouds {
+  background-image:
+    radial-gradient(70px 30px at 18% 22%, rgba(255, 255, 255, 0.75), transparent 70%),
+    radial-gradient(95px 36px at 44% 15%, rgba(255, 255, 255, 0.6), transparent 72%),
+    radial-gradient(60px 26px at 68% 24%, rgba(255, 255, 255, 0.7), transparent 70%),
+    radial-gradient(110px 40px at 88% 17%, rgba(255, 255, 255, 0.5), transparent 72%);
+  animation: bol-cloud-drift 55s ease-in-out infinite alternate;
+}
+.dark .bol-clouds {
+  background-image:
+    radial-gradient(80px 32px at 22% 20%, rgba(255, 240, 220, 0.16), transparent 72%),
+    radial-gradient(100px 38px at 60% 16%, rgba(255, 235, 210, 0.13), transparent 72%),
+    radial-gradient(70px 28px at 85% 22%, rgba(255, 240, 220, 0.14), transparent 72%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bol-bg-anim, .bol-clouds { animation: none; }
+}
+
 /* Thin, calm scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }

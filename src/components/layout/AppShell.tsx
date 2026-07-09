@@ -3,11 +3,13 @@ import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { useUI } from "@/store/ui";
 import { TooltipProvider } from "@/components/ui";
-import { maybeNotifyPrayers } from "@/lib/notify";
+import { maybeNotifyDevotion, maybeNotifyPrayers } from "@/lib/notify";
 
 export function AppShell() {
   const theme = useUI((s) => s.theme);
   const notifyPrayers = useUI((s) => s.notifyPrayers);
+  const notifyDevotion = useUI((s) => s.notifyDevotion);
+  const devotionTime = useUI((s) => s.devotionTime);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -17,6 +19,13 @@ export function AppShell() {
   useEffect(() => {
     maybeNotifyPrayers(notifyPrayers);
   }, [notifyPrayers]);
+
+  // Devotional reminder: check on mount and once a minute while the app is open.
+  useEffect(() => {
+    maybeNotifyDevotion(notifyDevotion, devotionTime);
+    const id = setInterval(() => maybeNotifyDevotion(notifyDevotion, devotionTime), 60_000);
+    return () => clearInterval(id);
+  }, [notifyDevotion, devotionTime]);
 
   return (
     <TooltipProvider>

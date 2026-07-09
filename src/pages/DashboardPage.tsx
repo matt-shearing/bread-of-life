@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowRight, BellRing, BookOpen, CalendarCheck, Check, Flame, HandHeart, NotebookPen, Sparkles } from "lucide-react";
+import { ArrowRight, Ban, BellRing, BookOpen, CalendarCheck, Check, Flame, HandHeart, Image, NotebookPen, Sparkles, Sunrise, Sunset, Wind } from "lucide-react";
 import { db } from "@/db";
+import { DashboardBackground } from "@/components/dashboard/DashboardBackground";
+import { cn } from "@/lib/cn";
 import { verseOfTheDay } from "@/data/bible";
 import { getPlan, type Plan } from "@/data/plans";
+import { currentSlot, getDevotionDay, mmdd, type DevotionDay, type DevotionEntry, type Slot } from "@/data/devotional";
 import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
-import { Button, Card, CardContent } from "@/components/ui";
+import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
+import { DevotionView } from "@/components/devotional/DevotionView";
 
 function greeting() {
   const h = new Date().getHours();
@@ -154,10 +158,16 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-8 py-8">
-        <h1 className="mb-1 font-serif text-3xl font-bold">{greeting()}.</h1>
-        <p className="mb-6 text-muted-foreground">Welcome back to your homebase.</p>
+    <div className="relative h-full overflow-y-auto">
+      <DashboardBackground />
+      <div className="relative z-10 mx-auto max-w-5xl px-8 py-8">
+        <div className="mb-6 flex items-start gap-3">
+          <div>
+            <h1 className="font-serif text-3xl font-bold">{greeting()}.</h1>
+            <p className="text-muted-foreground">Welcome back to your homebase.</p>
+          </div>
+          <BgToggle />
+        </div>
 
         {/* Verse of the day hero */}
         <Card className="mb-6 overflow-hidden border-none bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-card">
@@ -180,6 +190,8 @@ export function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <DevotionTile />
 
         <TodaysPlan />
 
@@ -303,6 +315,105 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DevotionTile() {
+  const navigate = useNavigate();
+  const { goTo } = useUI();
+  const key = mmdd();
+  const [slot, setSlot] = useState<Slot>(currentSlot());
+  const [day, setDay] = useState<DevotionDay | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    getDevotionDay(key).then(setDay);
+  }, [key]);
+
+  const doneM = useLiveQuery(() => db.devotions.get(`${key}:m`), [key]);
+  const doneE = useLiveQuery(() => db.devotions.get(`${key}:e`), [key]);
+
+  if (!day) return null;
+  const entry = day[slot];
+  const isDone = slot === "m" ? !!doneM : !!doneE;
+  const snippet = entry.text.replace(/\s+/g, " ").slice(0, 160).trim() + "…";
+  const openVerse = (e: DevotionEntry) => {
+    if (e.ho && e.chapter) {
+      goTo(e.ho, e.chapter);
+      navigate("/bible");
+    }
+  };
+
+  return (
+    <>
+      <Card className="mb-6 p-5">
+        <div className="mb-1 flex items-center gap-2">
+          {slot === "m" ? (
+            <Sunrise style={{ width: 16, height: 16 }} className="text-primary-600" />
+          ) : (
+            <Sunset style={{ width: 16, height: 16 }} className="text-primary-600" />
+          )}
+          <span className="text-sm font-semibold text-muted-foreground">
+            Today’s Devotional · {slot === "m" ? "Morning" : "Evening"}
+          </span>
+          {isDone && (
+            <Badge className="ml-auto border-success/40 text-success">Done ✓</Badge>
+          )}
+        </div>
+        <div className="font-serif text-base font-bold">{entry.ref}</div>
+        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{snippet}</p>
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" onClick={() => setOpen(true)}>
+            <BookOpen style={{ width: 15, height: 15 }} /> Read now
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => navigate("/devotional")}>
+            Browse all
+          </Button>
+        </div>
+      </Card>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogTitle>Morning &amp; Evening</DialogTitle>
+          <DevotionView
+            dayKey={key}
+            day={day}
+            slot={slot}
+            setSlot={setSlot}
+            onOpenVerse={(e) => {
+              setOpen(false);
+              openVerse(e);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function BgToggle() {
+  const { dashboardBg, setDashboardBg } = useUI();
+  const opts = [
+    { key: "plain" as const, label: "Plain", icon: <Ban style={{ width: 15, height: 15 }} /> },
+    { key: "still" as const, label: "Scene", icon: <Image style={{ width: 15, height: 15 }} /> },
+    { key: "animated" as const, label: "Living", icon: <Wind style={{ width: 15, height: 15 }} /> },
+  ];
+  return (
+    <div className="ml-auto flex items-center rounded-lg border border-border bg-card/70 p-0.5 backdrop-blur">
+      {opts.map((o) => (
+        <button
+          key={o.key}
+          onClick={() => setDashboardBg(o.key)}
+          title={`${o.label} background`}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+            dashboardBg === o.key ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {o.icon}
+          <span className="hidden sm:inline">{o.label}</span>
+        </button>
+      ))}
     </div>
   );
 }

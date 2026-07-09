@@ -41,7 +41,8 @@ Not scholars, not a market segment, not a startup.
 | **Journal** | rich-ish entries (title/body/tags); link verses; **quick-capture from Bible & prayer** | Tiptap editor, backlinks, search |
 | **Study rail** | Tabbed right rail: **Commentary** (public-domain via HelloAO, tracks chapter, cached), **Cross-references** (OpenBible TSK, 342k, CC-BY — click a verse), **Strong's word-study** (BSB word tags + Greek/Hebrew lexicon; NT reliable, OT flagged approximate) | Matt's own `commentary-parser` corpus; split-pane; PDF; morphology |
 | **Translations** | 5 public-domain (BSB/WEB/KJV/ASV/YLT). NASB 2020 + Amplified shown but **licence-gated** (Lockman copyright — not in any open repo; needs a licensed provider + key). | wire a licensed provider (API.Bible) behind a key |
-| **Dashboard** | warm landing: Verse of the Day, **Today's Plan** (active reading plan), Continue Reading, reading streak, open prayers, recent journal | customizable widgets |
+| **Dashboard** | warm landing: **cozy countryside background** (plain / still / animated toggle; day+dusk art via Nano Banana), Verse of the Day, **devotional tile** (pop-up reader), Today's Plan, Pray-today, Continue Reading, streak, recent journal | customizable widgets, user-submitted scenes |
+| **Devotional** | **Spurgeon's _Morning & Evening_** (public domain, 366 days × AM/PM); read from the dashboard tile or a full page; verse refs deep-link into the reader; mark complete; **daily reminder notification** at a set time | more devotionals (selectable), streaks |
 | **Plans** | 5 reading plans (John 21d, Proverbs 31d, Psalms 30d, NT 90d, Bible-in-a-Year); progress by chapters read (never "behind"); mark days done; open readings; set active | custom plans, calendar view |
 | **Devotional** | — | ingest "The Word for Today" etc.; deep-linked references + back |
 | **AI study companion** | — | local RAG (`sqlite-vec`) over scripture + commentary + notes; capture assistant |
@@ -103,17 +104,16 @@ app _consumes_ its output later).
 
 **Shipped since v1:** 5 translations + parallel view · full-text search · reading-layout toggle ·
 chapter audio · cross-references + Strong's word-study rail · reading plans + Today's-Plan · prayer
-reminders. (Details in the module table above.)
+reminders · **Spurgeon Morning & Evening devotional + devotional reminders** · **cozy countryside
+dashboard background (plain/still/animated)**. (Details in the module table above.)
 
 **Next:**
 1. **SQLite swap** for user data (`@tauri-apps/plugin-sql`) + full-text search over notes/journal.
 2. **Matt's own commentary** as a `CommentarySource` fed from the `commentary-parser` canonical DB.
 3. **Better OT Strong's** (OSHB/Open Scriptures or Berean interlinear tables) + morphology; red-letter (`wordsOfJesus`).
-4. **Devotionals** — deep-linked daily readings with a back button. Blocked on a *source*: "The Word for
-   Today" (Bob Gass) is copyrighted, so this needs either a licensed feed or a public-domain devotional
-   (e.g. Spurgeon's _Morning & Evening_, public domain — a clean first candidate).
-5. **AI study companion**: local `sqlite-vec` RAG over the whole corpus (scripture + commentary + notes); capture assistant.
-6. **Licensed translations** (NASB/AMP) via API.Bible behind the user's key.
+4. **AI study companion**: local `sqlite-vec` RAG over the whole corpus (scripture + commentary + notes); capture assistant.
+5. **Licensed translations** (NASB/AMP) via API.Bible behind the user's key.
+6. **More scenes / user-submitted backgrounds**; true background devotional/prayer notifications when the app is closed (Tauri notification scheduling).
 7. **Optional sync** (only if multi-device becomes real): libsql/Turso or a OneQode-hosted endpoint.
 
 ## 10. Definition of done for v1

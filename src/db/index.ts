@@ -87,6 +87,11 @@ export interface PlanProgress {
   completedDays: number[]; // day indices marked done
 }
 
+export interface DevotionDone {
+  id: string; // `${MM-DD}:${'m'|'e'}`
+  completedAt: number;
+}
+
 export const db = new Dexie("bread-of-life") as Dexie & {
   highlights: EntityTable<Highlight, "id">;
   notes: EntityTable<Note, "id">;
@@ -97,6 +102,7 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   commentary: EntityTable<CommentaryCache, "key">;
   bibleCache: EntityTable<BibleCache, "key">;
   plans: EntityTable<PlanProgress, "planId">;
+  devotions: EntityTable<DevotionDone, "id">;
 };
 
 db.version(1).stores({
@@ -115,6 +121,10 @@ db.version(2).stores({
 
 db.version(3).stores({
   plans: "planId",
+});
+
+db.version(4).stores({
+  devotions: "id, completedAt",
 });
 
 export function uid(): string {

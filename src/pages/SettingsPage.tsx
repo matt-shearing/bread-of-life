@@ -17,6 +17,10 @@ export function SettingsPage() {
     setCommentarySource,
     notifyPrayers,
     setNotifyPrayers,
+    notifyDevotion,
+    devotionTime,
+    setNotifyDevotion,
+    setDevotionTime,
   } = useUI();
   const counts = useLiveQuery(
     async () => ({
@@ -104,6 +108,33 @@ export function SettingsPage() {
                 Prayers you mark with the bell show up on your dashboard until you’ve prayed for them
                 that day. When on, you’ll also get a notification when you open the app.
               </p>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <Row label="Devotional reminder">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="time"
+                      value={devotionTime}
+                      onChange={(e) => setDevotionTime(e.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        if (notifyDevotion) setNotifyDevotion(false);
+                        else setNotifyDevotion(await enablePrayerNotifications());
+                      }}
+                    >
+                      {notifyDevotion ? "On" : "Off"}
+                    </Button>
+                  </div>
+                </Row>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  At this time each day you’ll be reminded to read your Spurgeon devotional (while the
+                  app is open).
+                </p>
+              </div>
             </CardContent>
           </Card>
 
