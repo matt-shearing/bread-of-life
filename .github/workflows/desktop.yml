@@ -45,6 +45,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build desktop bundles
+        # extract-and-run lets the AppImage tooling work without FUSE;
+        # NO_STRIP avoids a strip step that can fail on some runners.
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
         run: pnpm tauri build --bundles appimage,deb
 
       - name: Collect bundles
