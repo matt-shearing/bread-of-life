@@ -40,6 +40,9 @@ interface UIState {
 
   railTab: "commentary" | "xref" | "strongs";
   setRailTab: (t: "commentary" | "xref" | "strongs") => void;
+
+  activePlanId: string | null;
+  setActivePlan: (id: string | null) => void;
 }
 
 export const useUI = create<UIState>()(
@@ -72,6 +75,9 @@ export const useUI = create<UIState>()(
 
       railTab: "commentary",
       setRailTab: (t) => set({ railTab: t }),
+
+      activePlanId: null,
+      setActivePlan: (id) => set({ activePlanId: id }),
     }),
     { name: "bol-ui" },
   ),

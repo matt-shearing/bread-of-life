@@ -36,12 +36,13 @@ Not scholars, not a market segment, not a startup.
 
 | Module | v1 (this build) | Later |
 |---|---|---|
-| **Bible** | Reader with **5 translations** (BSB bundled offline; WEB/KJV/ASV/YLT fetched + cached via HelloAO); book/chapter nav; headings; per-verse floating toolbar on click/right-click (highlight ×5 colors, note, copy, → journal, → prayer); **reading-layout toggle** (verse-per-line / flowing); reading position remembered. **Full-text search** across BSB. | parallel view, chapter audio (links in data), reading plans, red-letter (`wordsOfJesus`), better OT Strong's source (OSHB/Berean tables) |
+| **Bible** | Reader with **5 translations** (BSB bundled offline; WEB/KJV/ASV/YLT fetched + cached via HelloAO); book/chapter nav; headings; per-verse floating toolbar on click/right-click (highlight ×5 colors, note, copy, → journal, → prayer); **reading-layout toggle** (verse-per-line / flowing); **chapter audio** (BSB narration, 3 narrators); reading position remembered. **Full-text search** across BSB. | parallel view, red-letter (`wordsOfJesus`), better OT Strong's source (OSHB/Berean tables) |
 | **Prayer** ⭐ | add/edit prayers; categories; "prayed N times"; **mark answered with date + how God answered**; dedicated **Answered** review; stats | reminders, prayer wall (opt-in), recurring |
 | **Journal** | rich-ish entries (title/body/tags); link verses; **quick-capture from Bible & prayer** | Tiptap editor, backlinks, search |
 | **Study rail** | Tabbed right rail: **Commentary** (public-domain via HelloAO, tracks chapter, cached), **Cross-references** (OpenBible TSK, 342k, CC-BY — click a verse), **Strong's word-study** (BSB word tags + Greek/Hebrew lexicon; NT reliable, OT flagged approximate) | Matt's own `commentary-parser` corpus; split-pane; PDF; morphology |
 | **Translations** | 5 public-domain (BSB/WEB/KJV/ASV/YLT). NASB 2020 + Amplified shown but **licence-gated** (Lockman copyright — not in any open repo; needs a licensed provider + key). | wire a licensed provider (API.Bible) behind a key |
-| **Dashboard** | warm landing: Verse of the Day, Continue Reading, reading streak, open prayers, recent journal | customizable widgets, Today's Plan / reading-plan progress |
+| **Dashboard** | warm landing: Verse of the Day, **Today's Plan** (active reading plan), Continue Reading, reading streak, open prayers, recent journal | customizable widgets |
+| **Plans** | 5 reading plans (John 21d, Proverbs 31d, Psalms 30d, NT 90d, Bible-in-a-Year); progress by chapters read (never "behind"); mark days done; open readings; set active | custom plans, calendar view |
 | **Devotional** | — | ingest "The Word for Today" etc.; deep-linked references + back |
 | **AI study companion** | — | local RAG (`sqlite-vec`) over scripture + commentary + notes; capture assistant |
 

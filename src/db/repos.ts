@@ -144,6 +144,29 @@ export async function recordProgress(ho: string, chapter: number, lastVerse = 1)
   });
 }
 
+/* ------------------------------- reading plans -------------------------------- */
+
+export async function startPlan(planId: string) {
+  const existing = await db.plans.get(planId);
+  if (!existing) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [] });
+}
+
+export async function setDayDone(planId: string, day: number, done: boolean) {
+  const p = await db.plans.get(planId);
+  if (!p) {
+    if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day] });
+    return;
+  }
+  const set = new Set(p.completedDays);
+  if (done) set.add(day);
+  else set.delete(day);
+  await db.plans.update(planId, { completedDays: [...set].sort((a, b) => a - b) });
+}
+
+export async function resetPlan(planId: string) {
+  await db.plans.delete(planId);
+}
+
 /* ---------------------------------- settings ----------------------------------- */
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {

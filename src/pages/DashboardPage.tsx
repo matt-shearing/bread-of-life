@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowRight, BookOpen, Flame, HandHeart, NotebookPen, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarCheck, Check, Flame, HandHeart, NotebookPen, Sparkles } from "lucide-react";
 import { db } from "@/db";
 import { verseOfTheDay } from "@/data/bible";
+import { getPlan, type Plan } from "@/data/plans";
+import { setDayDone } from "@/db/repos";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { Button, Card, CardContent } from "@/components/ui";
@@ -13,6 +15,82 @@ function greeting() {
   if (h < 12) return "Good morning";
   if (h < 18) return "Good afternoon";
   return "Good evening";
+}
+
+function TodaysPlan() {
+  const navigate = useNavigate();
+  const { goTo, activePlanId } = useUI();
+  const [plan, setPlan] = useState<Plan | null>(null);
+
+  useEffect(() => {
+    if (activePlanId) getPlan(activePlanId).then((p) => setPlan(p ?? null));
+    else setPlan(null);
+  }, [activePlanId]);
+
+  const prog = useLiveQuery(
+    async () => (activePlanId ? await db.plans.get(activePlanId) : undefined),
+    [activePlanId],
+  );
+
+  if (!activePlanId || !plan) {
+    return (
+      <Card className="mb-6 flex items-center gap-3 p-5">
+        <CalendarCheck style={{ width: 22, height: 22 }} className="text-primary-600" />
+        <div>
+          <div className="font-semibold">Reading plan</div>
+          <div className="text-sm text-muted-foreground">Start a plan to build a daily rhythm in the Word.</div>
+        </div>
+        <Button className="ml-auto" variant="outline" onClick={() => navigate("/plans")}>
+          Browse plans
+        </Button>
+      </Card>
+    );
+  }
+
+  const completed = prog?.completedDays ?? [];
+  const doneSet = new Set(completed);
+  let today = 0;
+  while (today < plan.days.length && doneSet.has(today)) today++;
+  const finished = today >= plan.days.length;
+  const readings = finished ? [] : plan.days[today];
+  const pct = Math.round((completed.length / plan.days.length) * 100);
+
+  return (
+    <Card className="mb-6 p-5">
+      <div className="flex items-center gap-2">
+        <CalendarCheck style={{ width: 16, height: 16 }} className="text-primary-600" />
+        <span className="text-sm font-semibold text-muted-foreground">Today’s Plan · {plan.name}</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {completed.length}/{plan.days.length} · {pct}%
+        </span>
+      </div>
+      {finished ? (
+        <p className="mt-3 text-sm">You’ve finished this plan 🎉 — pick another on the Plans page.</p>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">Day {today + 1}:</span>
+          {readings.map((r, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                goTo(r.ho, r.chapter);
+                navigate("/bible");
+              }}
+              className="rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent"
+            >
+              {refLabel(r.ho, r.chapter)}
+            </button>
+          ))}
+          <Button size="sm" variant="success" className="ml-auto" onClick={() => setDayDone(activePlanId, today, true)}>
+            <Check style={{ width: 15, height: 15 }} /> Mark done
+          </Button>
+        </div>
+      )}
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+      </div>
+    </Card>
+  );
 }
 
 function computeStreak(days: Set<string>): number {
@@ -101,6 +179,8 @@ export function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <TodaysPlan />
 
         <div className="grid grid-cols-3 gap-4">
           {/* Continue reading */}

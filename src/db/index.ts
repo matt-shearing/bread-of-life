@@ -80,6 +80,12 @@ export interface BibleCache {
   fetchedAt: number;
 }
 
+export interface PlanProgress {
+  planId: string;
+  startedAt: number;
+  completedDays: number[]; // day indices marked done
+}
+
 export const db = new Dexie("bread-of-life") as Dexie & {
   highlights: EntityTable<Highlight, "id">;
   notes: EntityTable<Note, "id">;
@@ -89,6 +95,7 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   settings: EntityTable<Setting, "key">;
   commentary: EntityTable<CommentaryCache, "key">;
   bibleCache: EntityTable<BibleCache, "key">;
+  plans: EntityTable<PlanProgress, "planId">;
 };
 
 db.version(1).stores({
@@ -103,6 +110,10 @@ db.version(1).stores({
 
 db.version(2).stores({
   bibleCache: "key, fetchedAt",
+});
+
+db.version(3).stores({
+  plans: "planId",
 });
 
 export function uid(): string {

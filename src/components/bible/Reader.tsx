@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { CaptureDialog } from "./CaptureDialog";
+import { AudioPlayer } from "./AudioPlayer";
 
 const COLORS: { key: HighlightColor; className: string }[] = [
   { key: "amber", className: "hl-amber" },
@@ -96,7 +97,10 @@ export function Reader() {
       style={{ fontSize: `${fontScale}rem` }}
     >
       <article className="mx-auto max-w-2xl px-8 py-8">
-        <h2 className="mb-6 font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
+          <AudioPlayer audio={ch.audio} />
+        </div>
         {ch.items.map((item, i) => {
           if (item.t === "h") {
             return (
