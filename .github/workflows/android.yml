@@ -68,6 +68,10 @@ jobs:
       - name: Init + build Android (unsigned APK)
         run: |
           pnpm tauri android init --ci
+          # android init scaffolds gen/android with the DEFAULT Tauri icon.
+          # Regenerate our app icon into the now-existing Android project so
+          # the APK ships the real launcher icon (not the default swirl).
+          pnpm tauri icon src-tauri/app-icon.png
           pnpm tauri android build --apk --target aarch64
 
       - name: Locate unsigned APK
