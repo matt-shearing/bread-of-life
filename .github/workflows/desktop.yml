@@ -1,0 +1,67 @@
+name: Desktop (Linux)
+
+# Builds Linux desktop bundles (AppImage + .deb) and attaches them to the
+# GitHub Release for the tag. Runs alongside the Android workflow.
+#
+# Trigger: push a tag like `v0.1.0`, or run manually.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps (Tauri v2 on Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libappindicator3-dev patchelf file libxdo-dev libssl-dev
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build desktop bundles
+        run: pnpm tauri build --bundles appimage,deb
+
+      - name: Collect bundles
+        id: bundles
+        run: |
+          mkdir -p out
+          find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
+          ls -la out
+          echo "dir=out" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bread-of-life-linux
+          path: out/*
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
