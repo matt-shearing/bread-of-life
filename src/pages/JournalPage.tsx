@@ -12,8 +12,8 @@ import {
   DialogContent,
   DialogTitle,
   Input,
-  Textarea,
 } from "@/components/ui";
+import { RichEditor, htmlToText } from "@/components/journal/RichEditor";
 import { cn } from "@/lib/cn";
 
 function osisToLabel(osis: string) {
@@ -39,7 +39,7 @@ export function JournalPage() {
     if (!q) return true;
     return (
       e.title.toLowerCase().includes(q) ||
-      e.body.toLowerCase().includes(q) ||
+      htmlToText(e.body).toLowerCase().includes(q) ||
       e.tags.some((t) => t.toLowerCase().includes(q))
     );
   });
@@ -131,7 +131,9 @@ export function JournalPage() {
                     <Trash2 style={{ width: 15, height: 15 }} className="text-muted-foreground hover:text-destructive" />
                   </button>
                 </div>
-                {e.body && <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">{e.body}</p>}
+                {htmlToText(e.body) && (
+                  <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">{htmlToText(e.body)}</p>
+                )}
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   {e.linkedOsis.map((o) => (
                     <Badge key={o} className="gap-1 border-primary/30 text-primary-700 dark:text-primary-300">
@@ -185,7 +187,7 @@ function EntryDialog({ entry, onClose }: { entry: JournalEntry | "new"; onClose:
       <DialogContent className="max-w-2xl">
         <DialogTitle>{isNew ? "New journal entry" : "Edit entry"}</DialogTitle>
         <Input autoFocus placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <Textarea placeholder="Write freely…" value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
+        <RichEditor value={body} onChange={setBody} />
         <Input placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
         {!isNew && entry.linkedOsis.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

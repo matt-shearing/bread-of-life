@@ -111,6 +111,24 @@
     radial-gradient(110px 40px at 92% 44%, rgba(255, 236, 210, 0.2), transparent 72%);
 }
 
+/* Journal rich-text editor content */
+.prose-journal h2 { @apply mb-1 mt-3 font-serif text-lg font-bold; }
+.prose-journal h3 { @apply mb-1 mt-3 font-serif text-base font-semibold; }
+.prose-journal p { @apply mb-2 leading-relaxed; }
+.prose-journal ul { @apply mb-2 ml-5 list-disc; }
+.prose-journal ol { @apply mb-2 ml-5 list-decimal; }
+.prose-journal li { @apply mb-0.5; }
+.prose-journal blockquote { @apply my-2 border-l-2 border-primary/40 pl-3 italic text-muted-foreground; }
+.prose-journal strong { @apply font-semibold; }
+.prose-journal:empty::before,
+.prose-journal p.is-editor-empty:first-child::before {
+  content: "Write freely…";
+  @apply text-muted-foreground;
+  float: left;
+  pointer-events: none;
+  height: 0;
+}
+
 /* Thin, calm scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
