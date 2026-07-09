@@ -82,3 +82,38 @@ export async function loadLexicon(): Promise<Record<string, LexEntry>> {
   }
   return lexiconCache;
 }
+
+/* ---- Accurate OT Hebrew interlinear (Open Scriptures Hebrew Bible, CC-BY) ---- */
+
+const hebBookCache = new Map<string, Record<string, StrongToken[]>>();
+let hebLexiconCache: Record<string, LexEntry> | null = null;
+
+async function loadHebBook(ho: string): Promise<Record<string, StrongToken[]>> {
+  const hit = hebBookCache.get(ho);
+  if (hit) return hit;
+  try {
+    const res = await fetch(`${BASE}data/strongs-heb/${ho}.json`);
+    const data = res.ok ? ((await res.json()) as Record<string, StrongToken[]>) : {};
+    hebBookCache.set(ho, data);
+    return data;
+  } catch {
+    hebBookCache.set(ho, {});
+    return {};
+  }
+}
+
+export async function getHebrewVerse(ho: string, chapter: number, verse: number): Promise<StrongToken[]> {
+  const book = await loadHebBook(ho);
+  return book[`${chapter}.${verse}`] ?? [];
+}
+
+export async function loadHebLexicon(): Promise<Record<string, LexEntry>> {
+  if (hebLexiconCache) return hebLexiconCache;
+  try {
+    const res = await fetch(`${BASE}data/strongs/lexicon-heb.json`);
+    hebLexiconCache = res.ok ? ((await res.json()) as Record<string, LexEntry>) : {};
+  } catch {
+    hebLexiconCache = {};
+  }
+  return hebLexiconCache;
+}

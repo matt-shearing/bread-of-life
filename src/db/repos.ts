@@ -181,6 +181,21 @@ export async function resetPlan(planId: string) {
   await db.plans.delete(planId);
 }
 
+export async function addCustomPlan(
+  name: string,
+  description: string,
+  days: { ho: string; chapter: number }[][],
+): Promise<string> {
+  const id = `custom-${uid()}`;
+  await db.customPlans.add({ id, name: name.trim() || "My plan", description, days, createdAt: Date.now() });
+  return id;
+}
+
+export async function deleteCustomPlan(id: string) {
+  await db.customPlans.delete(id);
+  await db.plans.delete(id); // its progress
+}
+
 /* ------------------------------- devotional ------------------------------- */
 
 export async function setDevotionDone(id: string, done: boolean) {

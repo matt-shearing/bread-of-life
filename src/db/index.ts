@@ -92,6 +92,14 @@ export interface DevotionDone {
   completedAt: number;
 }
 
+export interface CustomPlan {
+  id: string;
+  name: string;
+  description: string;
+  days: { ho: string; chapter: number }[][];
+  createdAt: number;
+}
+
 export const db = new Dexie("bread-of-life") as Dexie & {
   highlights: EntityTable<Highlight, "id">;
   notes: EntityTable<Note, "id">;
@@ -103,6 +111,7 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   bibleCache: EntityTable<BibleCache, "key">;
   plans: EntityTable<PlanProgress, "planId">;
   devotions: EntityTable<DevotionDone, "id">;
+  customPlans: EntityTable<CustomPlan, "id">;
 };
 
 db.version(1).stores({
@@ -125,6 +134,10 @@ db.version(3).stores({
 
 db.version(4).stores({
   devotions: "id, completedAt",
+});
+
+db.version(5).stores({
+  customPlans: "id, createdAt",
 });
 
 export function uid(): string {

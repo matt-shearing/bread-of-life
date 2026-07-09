@@ -91,3 +91,17 @@ export async function getPlans(): Promise<Plan[]> {
 export async function getPlan(id: string): Promise<Plan | undefined> {
   return (await getPlans()).find((p) => p.id === id);
 }
+
+/** Build day-buckets for a custom plan spanning a canonical book range. */
+export async function buildReadingRange(
+  startHo: string,
+  endHo: string,
+  days: number,
+): Promise<Reading[][]> {
+  const startOrder = BOOKS.find((b) => b.ho === startHo)?.order ?? 1;
+  const endOrder = BOOKS.find((b) => b.ho === endHo)?.order ?? startOrder;
+  const [lo, hi] = startOrder <= endOrder ? [startOrder, endOrder] : [endOrder, startOrder];
+  const hos = BOOKS.filter((b) => b.order >= lo && b.order <= hi).map((b) => b.ho);
+  const chapters = await chaptersFor(hos);
+  return chunk(chapters, Math.max(1, days));
+}

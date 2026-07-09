@@ -10,7 +10,9 @@ import {
 } from "@/data/commentary";
 import {
   getCrossRefs,
+  getHebrewVerse,
   getStrongsVerse,
+  loadHebLexicon,
   loadLexicon,
   type LexEntry,
   type StrongToken,
@@ -240,7 +242,10 @@ function StrongsPanel() {
     let alive = true;
     setLoading(true);
     setActive(null);
-    Promise.all([getStrongsVerse(ho, chapter, verse), loadLexicon()]).then(([t, l]) => {
+    const loader = isOT
+      ? Promise.all([getHebrewVerse(ho, chapter, verse), loadHebLexicon()])
+      : Promise.all([getStrongsVerse(ho, chapter, verse), loadLexicon()]);
+    loader.then(([t, l]) => {
       if (!alive) return;
       setTokens(t);
       setLex(l);
@@ -249,7 +254,7 @@ function StrongsPanel() {
     return () => {
       alive = false;
     };
-  }, [ho, chapter, verse]);
+  }, [ho, chapter, verse, isOT]);
 
   const entry = active ? lex[active] : null;
 
@@ -259,24 +264,23 @@ function StrongsPanel() {
         Word study · <span className="font-semibold">{refLabel(ho, chapter, verse)}</span>
         {selectedVerse == null && <span className="ml-1 text-xs text-muted-foreground">(click a verse)</span>}
       </div>
-      {isOT && (
-        <p className="mb-3 rounded-md border border-amber-300/50 bg-primary/5 px-2 py-1.5 text-[11px] text-muted-foreground">
-          ⚠ OT Hebrew word tags are approximate (open-data limitation); NT Greek is reliable.
-        </p>
-      )}
+      <p className="mb-3 text-[11px] text-muted-foreground">
+        {isOT ? "Hebrew — Westminster Leningrad Codex (OSHB)" : "Greek — BSB word tags"}
+      </p>
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : tokens.length === 0 ? (
         <p className="text-sm text-muted-foreground">No word-study data for this verse.</p>
       ) : (
         <>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1" dir={isOT ? "rtl" : "ltr"}>
             {tokens.map((t, i) => (
               <button
                 key={i}
                 onClick={() => setActive(t.s)}
                 className={cn(
-                  "rounded border px-1.5 py-0.5 font-serif text-sm transition-colors",
+                  "rounded border px-1.5 py-0.5 font-serif transition-colors",
+                  isOT ? "text-lg" : "text-sm",
                   active === t.s ? "border-primary bg-primary/10" : "border-border hover:bg-accent",
                 )}
                 title={t.s}
