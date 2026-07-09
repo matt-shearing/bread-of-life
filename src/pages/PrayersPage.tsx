@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { CheckCircle2, HandHeart, Plus, RotateCcw, Sparkles, Archive } from "lucide-react";
+import { Archive, Bell, BellRing, CheckCircle2, HandHeart, Plus, RotateCcw, Sparkles } from "lucide-react";
 import { db, type Prayer, type PrayerCategory } from "@/db";
 import {
   addPrayer,
@@ -8,6 +8,7 @@ import {
   markAnswered,
   prayedFor,
   reopenPrayer,
+  toggleRemind,
 } from "@/db/repos";
 import {
   Badge,
@@ -167,6 +168,19 @@ function PrayerCard({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">{p.title}</h3>
             <Badge className={cn("bg-transparent", CAT_COLOR[p.category])}>{p.category}</Badge>
+            {!answered && (
+              <button
+                onClick={() => toggleRemind(p.id, !p.remind)}
+                title={p.remind ? "Daily reminder on" : "Remind me daily"}
+                className="rounded p-1 hover:bg-accent"
+              >
+                {p.remind ? (
+                  <BellRing style={{ width: 15, height: 15 }} className="text-primary-600" />
+                ) : (
+                  <Bell style={{ width: 15, height: 15 }} className="text-muted-foreground" />
+                )}
+              </button>
+            )}
           </div>
           {p.body && <p className="mt-1 text-sm text-muted-foreground">{p.body}</p>}
 
@@ -236,6 +250,7 @@ function AddPrayerDialog({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<PrayerCategory>("personal");
+  const [remind, setRemind] = useState(false);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -257,6 +272,17 @@ function AddPrayerDialog({ onClose }: { onClose: () => void }) {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setRemind((r) => !r)}
+          className="flex items-center gap-2 text-left text-sm text-muted-foreground"
+        >
+          {remind ? (
+            <BellRing style={{ width: 16, height: 16 }} className="text-primary-600" />
+          ) : (
+            <Bell style={{ width: 16, height: 16 }} />
+          )}
+          Remind me daily until answered
+        </button>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -264,7 +290,7 @@ function AddPrayerDialog({ onClose }: { onClose: () => void }) {
           <Button
             disabled={!title.trim()}
             onClick={async () => {
-              await addPrayer({ title, body, category });
+              await addPrayer({ title, body, category, remind });
               onClose();
             }}
           >

@@ -52,6 +52,7 @@ export async function addPrayer(input: {
   body?: string;
   category?: PrayerCategory;
   linkedOsis?: string[];
+  remind?: boolean;
 }): Promise<string> {
   const id = uid();
   await db.prayers.add({
@@ -66,8 +67,21 @@ export async function addPrayer(input: {
     answeredAt: null,
     answerNote: null,
     linkedOsis: input.linkedOsis ?? [],
+    remind: input.remind ?? false,
   });
   return id;
+}
+
+export async function toggleRemind(id: string, remind: boolean) {
+  await db.prayers.update(id, { remind });
+}
+
+/** Active + reminder-on prayers that haven't been prayed for today. */
+export function isDueToday(p: { status: string; remind?: boolean; lastPrayedAt: number | null }): boolean {
+  if (p.status !== "active" || !p.remind) return false;
+  if (!p.lastPrayedAt) return true;
+  const today = new Date().toISOString().slice(0, 10);
+  return new Date(p.lastPrayedAt).toISOString().slice(0, 10) !== today;
 }
 
 export async function prayedFor(id: string) {

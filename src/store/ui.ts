@@ -46,6 +46,9 @@ interface UIState {
 
   activePlanId: string | null;
   setActivePlan: (id: string | null) => void;
+
+  notifyPrayers: boolean;
+  setNotifyPrayers: (v: boolean) => void;
 }
 
 export const useUI = create<UIState>()(
@@ -84,6 +87,9 @@ export const useUI = create<UIState>()(
 
       activePlanId: null,
       setActivePlan: (id) => set({ activePlanId: id }),
+
+      notifyPrayers: false,
+      setNotifyPrayers: (v) => set({ notifyPrayers: v }),
     }),
     { name: "bol-ui" },
   ),

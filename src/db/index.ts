@@ -42,6 +42,7 @@ export interface Prayer {
   answeredAt: number | null;
   answerNote: string | null;
   linkedOsis: string[];
+  remind?: boolean; // surface daily until prayed for
 }
 
 export interface JournalEntry {

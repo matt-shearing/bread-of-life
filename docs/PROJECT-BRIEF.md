@@ -37,7 +37,7 @@ Not scholars, not a market segment, not a startup.
 | Module | v1 (this build) | Later |
 |---|---|---|
 | **Bible** | Reader with **5 translations** (BSB bundled offline; WEB/KJV/ASV/YLT fetched + cached via HelloAO); book/chapter nav; headings; per-verse floating toolbar on click/right-click (highlight ×5 colors, note, copy, → journal, → prayer); **reading-layout toggle** (verse-per-line / flowing); **chapter audio** (BSB narration, 3 narrators); reading position remembered. **Full-text search** across BSB. | parallel view, red-letter (`wordsOfJesus`), better OT Strong's source (OSHB/Berean tables) |
-| **Prayer** ⭐ | add/edit prayers; categories; "prayed N times"; **mark answered with date + how God answered**; dedicated **Answered** review; stats | reminders, prayer wall (opt-in), recurring |
+| **Prayer** ⭐ | add/edit prayers; categories; "prayed N times"; **mark answered with date + how God answered**; dedicated **Answered** review; stats; **daily reminders** (bell → dashboard "Pray today" + optional OS notification) | prayer wall (opt-in), recurring/scheduled times |
 | **Journal** | rich-ish entries (title/body/tags); link verses; **quick-capture from Bible & prayer** | Tiptap editor, backlinks, search |
 | **Study rail** | Tabbed right rail: **Commentary** (public-domain via HelloAO, tracks chapter, cached), **Cross-references** (OpenBible TSK, 342k, CC-BY — click a verse), **Strong's word-study** (BSB word tags + Greek/Hebrew lexicon; NT reliable, OT flagged approximate) | Matt's own `commentary-parser` corpus; split-pane; PDF; morphology |
 | **Translations** | 5 public-domain (BSB/WEB/KJV/ASV/YLT). NASB 2020 + Amplified shown but **licence-gated** (Lockman copyright — not in any open repo; needs a licensed provider + key). | wire a licensed provider (API.Bible) behind a key |
@@ -101,12 +101,20 @@ app _consumes_ its output later).
 
 ## 9. Roadmap after v1
 
+**Shipped since v1:** 5 translations + parallel view · full-text search · reading-layout toggle ·
+chapter audio · cross-references + Strong's word-study rail · reading plans + Today's-Plan · prayer
+reminders. (Details in the module table above.)
+
+**Next:**
 1. **SQLite swap** for user data (`@tauri-apps/plugin-sql`) + full-text search over notes/journal.
-2. **Strong's + cross-references** (STEPBible CC-BY + OpenBible TSK) as static datasets → word study, cross-ref popups.
-3. **Matt's own commentary** as a `CommentarySource` fed from the `commentary-parser` canonical DB.
-4. **Reading plans** + Today's-Plan dashboard rail; devotional ingestion with deep-links.
-5. **AI study companion**: local `sqlite-vec` RAG over the whole corpus; capture assistant.
-6. **Optional sync** (only if multi-device becomes real): libsql/Turso or a OneQode-hosted endpoint.
+2. **Matt's own commentary** as a `CommentarySource` fed from the `commentary-parser` canonical DB.
+3. **Better OT Strong's** (OSHB/Open Scriptures or Berean interlinear tables) + morphology; red-letter (`wordsOfJesus`).
+4. **Devotionals** — deep-linked daily readings with a back button. Blocked on a *source*: "The Word for
+   Today" (Bob Gass) is copyrighted, so this needs either a licensed feed or a public-domain devotional
+   (e.g. Spurgeon's _Morning & Evening_, public domain — a clean first candidate).
+5. **AI study companion**: local `sqlite-vec` RAG over the whole corpus (scripture + commentary + notes); capture assistant.
+6. **Licensed translations** (NASB/AMP) via API.Bible behind the user's key.
+7. **Optional sync** (only if multi-device becomes real): libsql/Turso or a OneQode-hosted endpoint.
 
 ## 10. Definition of done for v1
 

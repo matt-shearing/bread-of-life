@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowRight, BookOpen, CalendarCheck, Check, Flame, HandHeart, NotebookPen, Sparkles } from "lucide-react";
+import { ArrowRight, BellRing, BookOpen, CalendarCheck, Check, Flame, HandHeart, NotebookPen, Sparkles } from "lucide-react";
 import { db } from "@/db";
 import { verseOfTheDay } from "@/data/bible";
 import { getPlan, type Plan } from "@/data/plans";
-import { setDayDone } from "@/db/repos";
+import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { Button, Card, CardContent } from "@/components/ui";
@@ -121,6 +121,7 @@ export function DashboardPage() {
 
   const activePrayers = (prayers ?? []).filter((p) => p.status === "active");
   const answeredPrayers = (prayers ?? []).filter((p) => p.status === "answered");
+  const duePrayers = (prayers ?? []).filter(isDueToday);
   const lastRead = progress?.[0];
 
   const streak = useMemo(() => {
@@ -181,6 +182,29 @@ export function DashboardPage() {
         </Card>
 
         <TodaysPlan />
+
+        {duePrayers.length > 0 && (
+          <Card className="mb-6 border-primary/30 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <BellRing style={{ width: 16, height: 16 }} className="text-primary-600" />
+              <span className="text-sm font-semibold">Pray today</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {duePrayers.length} to lift up
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {duePrayers.slice(0, 6).map((p) => (
+                <div key={p.id} className="flex items-center gap-2">
+                  <HandHeart style={{ width: 14, height: 14 }} className="shrink-0 text-primary-500" />
+                  <span className="flex-1 truncate text-sm">{p.title}</span>
+                  <Button size="sm" variant="secondary" onClick={() => prayedFor(p.id)}>
+                    Prayed
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           {/* Continue reading */}

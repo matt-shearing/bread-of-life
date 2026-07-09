@@ -3,11 +3,21 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
+import { enablePrayerNotifications } from "@/lib/notify";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function SettingsPage() {
-  const { theme, toggleTheme, fontScale, setFontScale, commentarySource, setCommentarySource } = useUI();
+  const {
+    theme,
+    toggleTheme,
+    fontScale,
+    setFontScale,
+    commentarySource,
+    setCommentarySource,
+    notifyPrayers,
+    setNotifyPrayers,
+  } = useUI();
   const counts = useLiveQuery(
     async () => ({
       highlights: await db.highlights.count(),
@@ -70,6 +80,30 @@ export function SettingsPage() {
                   </button>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Reminders</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Row label="Daily prayer reminders">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (notifyPrayers) setNotifyPrayers(false);
+                    else setNotifyPrayers(await enablePrayerNotifications());
+                  }}
+                >
+                  {notifyPrayers ? "On" : "Off"}
+                </Button>
+              </Row>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Prayers you mark with the bell show up on your dashboard until you’ve prayed for them
+                that day. When on, you’ll also get a notification when you open the app.
+              </p>
             </CardContent>
           </Card>
 
