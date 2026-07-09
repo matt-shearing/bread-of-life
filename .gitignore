@@ -17,3 +17,6 @@ src-tauri/gen/
 
 # local screenshots
 screenshots/
+
+# icon gen candidates (large)
+art/image-gen/icons/
