@@ -28,7 +28,7 @@ import {
   toggleRemind,
   unlinkJournalPrayer,
 } from "@/db/repos";
-import { syncNow } from "@/db/sync";
+import { syncNow, getSyncStatus } from "@/db/sync";
 import {
   Badge,
   Button,
@@ -105,6 +105,12 @@ export function PrayersPage() {
     if (pullStartY.current == null) return;
     pullStartY.current = null;
     if (pull >= PULL_THRESHOLD && !refreshing) {
+      // Local-only (not signed in): there's nothing to pull, so don't flash a
+      // spinner that does nothing — just release the pull.
+      if ((await getSyncStatus()).mode === "off") {
+        setPull(0);
+        return;
+      }
       setRefreshing(true);
       setPull(PULL_THRESHOLD);
       try {

@@ -8,6 +8,7 @@ import {
   type PrayerCategory,
 } from "./index";
 import { refLabel, toBbcccvvv, toOsis } from "@/lib/osis";
+import { localDayKey } from "@/lib/day";
 
 /* ---------------------------------- highlights --------------------------------- */
 
@@ -81,8 +82,7 @@ export async function toggleRemind(id: string, remind: boolean) {
 export function isDueToday(p: { status: string; remind?: boolean; lastPrayedAt: number | null }): boolean {
   if (p.status !== "active" || !p.remind) return false;
   if (!p.lastPrayedAt) return true;
-  const today = new Date().toISOString().slice(0, 10);
-  return new Date(p.lastPrayedAt).toISOString().slice(0, 10) !== today;
+  return localDayKey(p.lastPrayedAt) !== localDayKey();
 }
 
 export async function prayedFor(id: string) {
@@ -281,7 +281,9 @@ export async function setChapterDone(
 
   const days = new Set(base.completedDays);
   if (chapters.size >= totalChapters && totalChapters > 0) days.add(day);
-  else days.delete(day); // un-ticking a chapter re-opens the day
+  else if (!done) days.delete(day); // only *un-ticking* re-opens the day — ticking a
+  // single chapter must never clear a day that was marked done elsewhere (e.g. the
+  // dashboard "Mark done"), which writes completedDays without chapterProgress.
 
   const next = {
     planId,
@@ -404,9 +406,11 @@ export async function gradeReview(id: string, grade: Grade): Promise<MemoryCard 
 
   if (q < 3) {
     // Failed — relearn. Keep it due again today so it comes back this session.
+    // A lapse only counts if the card had actually been learned (a brand-new card
+    // that's never been recalled isn't "lapsing").
+    if (card.repetitions > 0) lapses += 1;
     repetitions = 0;
     intervalDays = 0;
-    lapses += 1;
   } else {
     repetitions += 1;
     if (repetitions === 1) intervalDays = 1;

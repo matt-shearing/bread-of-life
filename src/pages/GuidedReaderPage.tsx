@@ -235,7 +235,7 @@ export function GuidedReaderPage() {
 
       <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <Reader />
+          <Reader swipeToChapter={false} />
         </div>
         {railOpen && <StudyRail />}
 

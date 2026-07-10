@@ -34,7 +34,13 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
   COLORS.map((c) => [c.key, c.className]),
 ) as Record<HighlightColor, string>;
 
-export function Reader() {
+/**
+ * `swipeToChapter` (default true) wires touch swipes to next/previous chapter via
+ * the GLOBAL ho/chapter. The guided-plan reader drives chapters itself (by plan
+ * cursor), so it passes `false` — otherwise a swipe would move the global chapter
+ * off-plan while the guided header/cursor stayed put (a desync).
+ */
+export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } = {}) {
   const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed, railOpen, setRailOpen } =
     useUI();
   const { step } = useChapterNav();
@@ -64,6 +70,7 @@ export function Reader() {
   function onTouchEnd(e: React.TouchEvent) {
     const s = swipe.current;
     swipe.current = null;
+    if (!swipeToChapter) return; // guided reader owns chapter navigation
     const t = e.changedTouches[0];
     if (!s || !t) return;
     const dx = t.clientX - s.x;

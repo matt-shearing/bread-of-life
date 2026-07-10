@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Brain, Check, Eye, Flame, PenLine, Sparkles, Trash2 } from "lucide-react";
@@ -64,22 +64,29 @@ export function MemoryLanePage() {
     setDone(false);
   }
 
+  const grading = useRef(false);
   async function grade(g: Grade) {
+    if (grading.current) return; // ignore a rapid second tap before the first resolves
     if (!queue || !queue.length) return;
-    const [current, ...rest] = queue;
-    await gradeReview(current.id, g);
-    setReviewedCount((c) => c + 1);
-    setRevealed(false);
-    if (g === "again") {
-      // Relearn this session: send it to the back of the queue.
-      setQueue([...rest, current]);
-    } else if (rest.length) {
-      setQueue(rest);
-    } else {
-      // Deck cleared.
-      setQueue([]);
-      setDone(true);
-      recordMemoryReview();
+    grading.current = true;
+    try {
+      const [current, ...rest] = queue;
+      await gradeReview(current.id, g);
+      setReviewedCount((c) => c + 1);
+      setRevealed(false);
+      if (g === "again") {
+        // Relearn this session: send it to the back of the queue.
+        setQueue([...rest, current]);
+      } else if (rest.length) {
+        setQueue(rest);
+      } else {
+        // Deck cleared.
+        setQueue([]);
+        setDone(true);
+        recordMemoryReview();
+      }
+    } finally {
+      grading.current = false;
     }
   }
 
@@ -93,6 +100,8 @@ export function MemoryLanePage() {
           await addMemoryVerse({ ho: s.ho, chapter: s.chapter, verse: s.verse, text: item.text, source: "starter" });
         }
       }
+    } catch (e) {
+      console.warn("Adding starter verses failed", e);
     } finally {
       setAddingStarters(false);
     }

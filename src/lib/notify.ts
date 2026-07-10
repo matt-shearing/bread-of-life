@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { isDueToday } from "@/db/repos";
+import { localDayKey } from "@/lib/day";
 
 let notifiedThisSession = false;
 
@@ -20,7 +21,7 @@ export async function maybeNotifyDevotion(enabled: boolean, timeHHMM: string): P
   const [hh, mm] = timeHHMM.split(":").map(Number);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   if (nowMin < hh * 60 + mm) return; // not time yet
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = localDayKey();
   if (localStorage.getItem("bol-devotion-notified") === todayKey) return;
   const slot = now.getHours() < 17 ? "m" : "e";
   const md = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -39,7 +40,7 @@ export async function maybeNotifyMemory(enabled: boolean): Promise<void> {
   if (memoryNotifiedThisSession || !enabled) return;
   memoryNotifiedThisSession = true;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDayKey();
   if (localStorage.getItem("bol-memory-notified") === todayKey) return;
   const due = await db.memory.where("dueAt").belowOrEqual(Date.now()).count();
   if (due <= 0) return;

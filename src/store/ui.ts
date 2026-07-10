@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { localDayKey, yesterdayKey } from "@/lib/day";
 
 /**
  * The ONE UI-state store. Everything transient/navigational lives here; all
@@ -160,10 +161,9 @@ export const useUI = create<UIState>()(
       memoryLastReviewDay: null,
       recordMemoryReview: () =>
         set((s) => {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localDayKey();
           if (s.memoryLastReviewDay === today) return s; // already counted today
-          const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-          const streak = s.memoryLastReviewDay === yesterday ? s.memoryStreak + 1 : 1;
+          const streak = s.memoryLastReviewDay === yesterdayKey() ? s.memoryStreak + 1 : 1;
           return { memoryStreak: streak, memoryLastReviewDay: today };
         }),
 

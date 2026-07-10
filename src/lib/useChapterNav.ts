@@ -17,7 +17,12 @@ export function useChapterNav() {
     loadIndex().then(setIndex);
   }, []);
 
-  const chapterCount = index.find((b) => b.id === ho)?.chapters ?? 1;
+  // Until the index resolves, the current book's chapter count is UNKNOWN. Default
+  // to Infinity (not 1) so a forward step stays inside the book instead of falling
+  // through to the cross-book branch and silently skipping the whole book. Crossing
+  // a boundary is gated on `entry` existing, so we never guess across books.
+  const entry = index.find((b) => b.id === ho);
+  const chapterCount = entry?.chapters ?? Infinity;
   const order = BOOKS.find((b) => b.ho === ho)?.order ?? 1;
 
   const canPrev = chapter > 1 || order > 1;
@@ -29,6 +34,7 @@ export function useChapterNav() {
       goTo(ho, next);
       return;
     }
+    if (!entry) return; // index not loaded for this book — don't cross a boundary we can't measure
     // cross book boundaries
     if (delta > 0 && order < 66) {
       const nb = BOOKS[order]; // order is 1-based → BOOKS[order] is the next book
