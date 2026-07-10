@@ -90,9 +90,12 @@ provides it inherently (bonus); the only UX cost is a save-once recovery phrase 
   /`Evolu.SqliteBoolean` (auto system cols createdAt/updatedAt/isDeleted/ownerId); `useEvolu().insert/update`,
   `evolu.createQuery`+`useQuery`. Default public relay `wss://free.evoluhq.com`; self/Matt-host sets a
   custom `transports` url. Relay self-host via `@evolu/relay-node` (`createNodeJsRelay` + a SQLite driver).
-- OPFS persistence: the `opfs-sahpool` VFS avoids COOP/COEP cross-origin-isolation headers (which we must
-  avoid — the webview loads external images/fonts/HelloAO). **Still must confirm Evolu uses sahpool and
-  persists inside webkit2gtk (Linux/Mac) + Android WebView** — verify empirically once wired.
+- OPFS persistence: **confirmed** Evolu bundles the `opfs-sahpool` VFS (`installOpfsSAHPoolVfs` in its
+  sqlite-wasm) → **no COOP/COEP cross-origin-isolation headers required** (those would break the webview
+  loading external images/fonts/HelloAO — so this was the key risk, now cleared). React 18→19 upgrade
+  also verified clean (typecheck + build). Remaining unknown: OPFS actually *persisting* inside
+  webkit2gtk (Linux/Mac desktop) + Android System WebView — needs an on-device check once wired (headless
+  Chromium couldn't be driven in this env, and it only proxies the low-risk Chromium/Android path anyway).
 
 **Build order:**
 1. **React 19 bump + spike** — upgrade React, wire a minimal Evolu table, verify SQLite-WASM
