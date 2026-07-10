@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
+import { requestFeature, reportBug } from "@/lib/feedback";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -229,6 +230,27 @@ export function SettingsPage() {
               <p className="pt-2 text-xs">
                 Everything is stored locally on this device (offline-first). Scripture is the Berean
                 Standard Bible, public domain (CC0).
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Feedback</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Have an idea, or something you'd love the app to do? Requests are read and turned into
+                real changes.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={requestFeature}>🌱 Request a feature</Button>
+                <Button variant="outline" onClick={reportBug}>
+                  Report a bug
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Opens a pre-filled issue on GitHub (needs a free GitHub account).
               </p>
             </CardContent>
           </Card>

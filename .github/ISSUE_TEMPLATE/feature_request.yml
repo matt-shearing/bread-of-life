@@ -1,0 +1,21 @@
+name: 🌱 Feature request
+description: Suggest something you'd love Bread of Life to do
+labels: ["feature-request"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like Bread of Life to do?
+      placeholder: Describe the feature or change.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: How would it help your walk with God, or your day?
+      placeholder: The problem it solves or the good it does.
+  - type: input
+    id: platform
+    attributes:
+      label: Platform (optional)
+      placeholder: Android, Linux, Windows, macOS…
