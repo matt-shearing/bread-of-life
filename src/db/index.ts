@@ -87,6 +87,14 @@ export interface PlanProgress {
   planId: string;
   startedAt: number;
   completedDays: number[]; // day indices marked done
+  /**
+   * Per-day chapter progress for the on-rails guided reader: day index →
+   * the reading indices (within that day's Reading[]) already ticked off.
+   * Lets a half-finished day be resumed exactly where it was left. A day is
+   * "done" once every reading in it is present here (and it also lands in
+   * completedDays). Non-indexed — no schema string change needed.
+   */
+  chapterProgress?: Record<number, number[]>;
 }
 
 export interface DevotionDone {
@@ -163,6 +171,15 @@ db.version(5).stores({
 db.version(6).stores({
   outbox: "key, at",
   syncState: "key",
+});
+
+// On-rails guided reader: PlanProgress gains a non-indexed `chapterProgress`
+// map (day → completed reading indices) for partial per-day completion. The
+// field needs no new index, but we bump the version so the schema intent is
+// explicit and existing rows migrate cleanly (chapterProgress just starts
+// undefined and is filled in as days are read).
+db.version(7).stores({
+  plans: "planId",
 });
 
 export function uid(): string {

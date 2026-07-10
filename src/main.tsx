@@ -9,6 +9,7 @@ import { PrayersPage } from "@/pages/PrayersPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { SearchPage } from "@/pages/SearchPage";
 import { PlansPage } from "@/pages/PlansPage";
+import { GuidedReaderPage } from "@/pages/GuidedReaderPage";
 import { DevotionalPage } from "@/pages/DevotionalPage";
 import { CompanionPage } from "@/pages/CompanionPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -32,6 +33,7 @@ const router = createHashRouter([
       { path: "bible", element: <BiblePage /> },
       { path: "search", element: <SearchPage /> },
       { path: "plans", element: <PlansPage /> },
+      { path: "guided/:planId/:day", element: <GuidedReaderPage /> },
       { path: "devotional", element: <DevotionalPage /> },
       { path: "companion", element: <CompanionPage /> },
       { path: "prayers", element: <PrayersPage /> },
