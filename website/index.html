@@ -166,6 +166,21 @@
       .feat p { margin-top: 0.45rem; color: var(--ink-soft); font-size: 0.97rem; }
       .feat .soon { display: inline-block; margin-top: 0.7rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber-deep); border: 1px solid var(--amber); border-radius: 999px; padding: 2px 8px; }
 
+      /* showcase (screenshot feature breakdowns) */
+      .showcase { background: linear-gradient(180deg, var(--cream), var(--cream-2)); }
+      .show-row { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: center; margin-top: clamp(3rem, 6vw, 5.5rem); }
+      .show-row:first-of-type { margin-top: 3.2rem; }
+      @media (max-width: 820px) { .show-row { grid-template-columns: 1fr; gap: 1.6rem; } .show-row .shot-wrap { order: -1; } }
+      .show-row.flip .show-text { order: 2; }
+      @media (max-width: 820px) { .show-row.flip .show-text { order: 0; } }
+      .shot-wrap { border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: var(--card); }
+      .shot-wrap img { width: 100%; display: block; }
+      .show-text h3 { font-size: clamp(1.4rem, 3vw, 2.05rem); font-weight: 900; letter-spacing: -0.02em; line-height: 1.14; }
+      .show-text p { margin-top: 0.9rem; color: var(--ink-soft); font-size: 1.06rem; }
+      .show-text .kicker { margin-bottom: 0.5rem; display: block; }
+      .badge-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.25rem; }
+      .badge-list span { font-size: 0.8rem; font-weight: 600; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0.32rem 0.85rem; color: var(--ink-soft); }
+
       .rhythm { position: relative; color: #fff; text-align: center; }
       .rhythm-bg { position: absolute; inset: 0; background: url("countryside-day.webp") center/cover; }
       .rhythm-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(30,20,10,.62), rgba(30,20,10,.72)); }
@@ -283,6 +298,58 @@
             <div class="top"><span class="title">Dad's heart, softening toward faith</span><span class="tag praying">Still praying</span></div>
             <p class="meta">Prayed 34 times since Jan 2</p>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase" id="tour">
+      <div class="wrap center">
+        <p class="kicker">A closer look</p>
+        <h2 class="eyebrow-h2">Everything you need to meet with God</h2>
+        <p class="section-lede">Warm and unhurried on the surface; surprisingly deep the moment you want to go further.</p>
+      </div>
+      <div class="wrap">
+        <div class="show-row">
+          <div class="show-text">
+            <span class="kicker">Your daily homebase</span>
+            <h3>Open the app, and the day is already gathered for you.</h3>
+            <p>
+              A Verse of the Day, today's devotional, your reading streak, the prayers on your heart, and
+              where you left off in the Word — all waiting on a cozy countryside scene that shifts from
+              day to dusk.
+            </p>
+          </div>
+          <div class="shot-wrap"><img src="shots/dashboard.webp" alt="Bread of Life dashboard" loading="lazy" /></div>
+        </div>
+
+        <div class="show-row flip">
+          <div class="show-text">
+            <span class="kicker">The Word, richly studied</span>
+            <h3>Trusted commentary, cross-references, and the original languages — right beside the text.</h3>
+            <p>
+              Reading in John? Open the study panel and Matthew Henry, JFB, Clarke, Gill, Keil &amp;
+              Delitzsch and Tyndale are right there, tracking your chapter — alongside cross-references and
+              Greek &amp; Hebrew word study. Generations of faithful teaching, built in and offline.
+            </p>
+            <div class="badge-list">
+              <span>Matthew Henry</span><span>JFB</span><span>Clarke</span><span>Gill</span>
+              <span>Keil &amp; Delitzsch</span><span>Tyndale</span><span>Cross-references</span><span>Strong's</span>
+            </div>
+          </div>
+          <div class="shot-wrap"><img src="shots/commentary.webp" alt="Bible reader with the commentary and study sidebar open" loading="lazy" /></div>
+        </div>
+
+        <div class="show-row">
+          <div class="show-text">
+            <span class="kicker">A plan for every season</span>
+            <h3>Walk through Scripture with a rhythm that fits your life.</h3>
+            <p>
+              Read a Gospel in a fortnight, the Psalms in ten days, the New Testament in ninety, or the
+              whole Bible in a year — including a daily Old Testament · New Testament · Psalm · Proverbs
+              track. Enroll, and a gentle reminder keeps you going.
+            </p>
+          </div>
+          <div class="shot-wrap"><img src="shots/plans.webp" alt="Reading plans in Bread of Life" loading="lazy" /></div>
         </div>
       </div>
     </section>

@@ -28,7 +28,18 @@ Free and open source on every platform. Beta desktop builds are unsigned — a q
 > installed) and it adds the app and keeps it updated from each GitHub release — no store, no account.
 > See [`docs/MOBILE.md`](docs/MOBILE.md). Desktop details in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
-<!-- SCREENSHOTS: added below once captured -->
+## A look inside
+
+<div align="center">
+
+_A warm homebase for your day — and the Word with public-domain commentary, cross-references,
+and Strong's word study right beside it._
+
+<img src="docs/screenshots/dashboard.png" width="49%" alt="Dashboard — Verse of the Day, devotional, reading streak and prayers over a cozy countryside scene" />
+&nbsp;
+<img src="docs/screenshots/study-rail.png" width="49%" alt="Bible reader with the study sidebar open — Matthew Henry commentary, cross-references and Strong's" />
+
+</div>
 
 ## What's inside
 
