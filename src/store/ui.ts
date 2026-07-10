@@ -71,6 +71,12 @@ interface UIState {
   dashboardBg: DashboardBg;
   setDashboardBg: (b: DashboardBg) => void;
 
+  // first-run onboarding + the unobtrusive dashboard sync nudge
+  hasOnboarded: boolean;
+  setHasOnboarded: (v: boolean) => void;
+  syncPromptDismissed: boolean;
+  dismissSyncPrompt: () => void;
+
   // AI study companion
   ai: AIConfig;
   setAI: (patch: Partial<AIConfig>) => void;
@@ -143,6 +149,11 @@ export const useUI = create<UIState>()(
 
       dashboardBg: "still",
       setDashboardBg: (b) => set({ dashboardBg: b }),
+
+      hasOnboarded: false,
+      setHasOnboarded: (v) => set({ hasOnboarded: v }),
+      syncPromptDismissed: false,
+      dismissSyncPrompt: () => set({ syncPromptDismissed: true }),
 
       ai: { provider: "anthropic", model: "claude-opus-4-8", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),

@@ -81,6 +81,8 @@ export interface SyncState {
   cursor: number;
   deviceId: string;
   lastSyncAt: number | null;
+  /** The account (email) we've already run the first-sign-in backfill for. */
+  backfilledFor: string | null;
 }
 
 /** The project's hosted sync service (set at build time); hidden if unset. */
@@ -94,6 +96,7 @@ const DEFAULT_STATE: SyncState = {
   cursor: 0,
   deviceId: "",
   lastSyncAt: null,
+  backfilledFor: null,
 };
 
 export async function getState(): Promise<SyncState> {
@@ -165,6 +168,9 @@ async function authRequest(
   const res = await api<{ token?: string; error?: string }>(base, `/auth/${route}`, { email, password });
   if (res.ok && res.data?.token) {
     await setState({ mode, url: mode === "selfhost" ? url : null, token: res.data.token, email, cursor: 0 });
+    // First sign-in on this account: enqueue ALL existing local rows so pre-sync
+    // data actually uploads (the outbox otherwise only ever sees NEW edits).
+    await backfillIfNeeded();
     void syncNow();
     return { ok: true };
   }
@@ -177,8 +183,77 @@ export const login = (mode: SyncMode, url: string | null, email: string, passwor
   authRequest("login", mode, url, email, password);
 
 export async function signOut(): Promise<void> {
-  await setState({ mode: "off", token: null, email: null, cursor: 0 });
+  // Clear the account AND the backfill marker: signing out empties the outbox, so
+  // any next sign-in (even the same account) must re-backfill to stay trustworthy.
+  await setState({ mode: "off", token: null, email: null, cursor: 0, backfilledFor: null });
   await db.outbox.clear();
+}
+
+/* --------------------------- first-sign-in backfill -------------------------- */
+
+export interface BackfillProgress {
+  running: boolean;
+  done: number;
+  total: number;
+}
+let backfill: BackfillProgress = { running: false, done: 0, total: 0 };
+const backfillListeners = new Set<(p: BackfillProgress) => void>();
+
+function emitBackfill(p: BackfillProgress): void {
+  backfill = p;
+  for (const cb of backfillListeners) cb(p);
+}
+
+/** Observe backfill progress (fires immediately with the current state). */
+export function subscribeBackfill(cb: (p: BackfillProgress) => void): () => void {
+  backfillListeners.add(cb);
+  cb(backfill);
+  return () => {
+    backfillListeners.delete(cb);
+  };
+}
+
+/**
+ * Enqueue every existing local synced-table row into the outbox so that data
+ * created before the account existed (or before sync shipped) uploads on the
+ * next push. Safe to run repeatedly — outbox entries dedup by `${table}:${id}`.
+ */
+export async function runBackfill(): Promise<number> {
+  let total = 0;
+  const counts: Partial<Record<SyncedTable, number>> = {};
+  for (const t of SYNCED) {
+    counts[t] = await db.table(t).count();
+    total += counts[t]!;
+  }
+  emitBackfill({ running: true, done: 0, total });
+  let done = 0;
+  try {
+    for (const t of SYNCED) {
+      const keyPath = KEY_PATH[t];
+      const rows = await db.table(t).toArray();
+      const now = Date.now();
+      const entries = rows.map((r) => {
+        const id = String((r as Record<string, unknown>)[keyPath]);
+        return { key: `${t}:${id}`, table: t as string, id, op: "upsert" as const, at: now };
+      });
+      if (entries.length) await db.outbox.bulkPut(entries);
+      done += rows.length;
+      emitBackfill({ running: true, done, total });
+    }
+  } finally {
+    emitBackfill({ running: false, done, total });
+  }
+  return total;
+}
+
+/** Run the backfill once per account (idempotent), then schedule a push. */
+async function backfillIfNeeded(): Promise<void> {
+  const s = await getState();
+  if (s.mode === "off" || !s.token || !s.email) return;
+  if (s.backfilledFor === s.email) return;
+  await runBackfill();
+  await setState({ backfilledFor: s.email });
+  scheduleSync();
 }
 
 /* ---------------------------------- engine ----------------------------------- */

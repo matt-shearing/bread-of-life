@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { useUI } from "@/store/ui";
 import { TooltipProvider } from "@/components/ui";
+import { Onboarding } from "@/components/onboarding/Onboarding";
 import { maybeNotifyDevotion, maybeNotifyPrayers } from "@/lib/notify";
 
 export function AppShell() {
@@ -37,6 +38,7 @@ export function AppShell() {
         </main>
         <MobileNav />
       </div>
+      <Onboarding />
     </TooltipProvider>
   );
 }

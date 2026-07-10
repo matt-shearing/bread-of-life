@@ -6,7 +6,9 @@ import {
   login,
   signOut,
   signup,
+  subscribeBackfill,
   syncNow,
+  type BackfillProgress,
   type SyncMode,
   type SyncStatus,
 } from "@/db/sync";
@@ -22,6 +24,7 @@ export function SyncSettings() {
   const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [backfill, setBackfill] = useState<BackfillProgress>({ running: false, done: 0, total: 0 });
 
   const refresh = () => getSyncStatus().then(setStatus);
   useEffect(() => {
@@ -29,6 +32,7 @@ export function SyncSettings() {
     const t = setInterval(refresh, 5000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => subscribeBackfill(setBackfill), []);
 
   const signedIn = status && status.mode !== "off";
 
@@ -52,6 +56,7 @@ export function SyncSettings() {
         <CardTitle>Sync &amp; account</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {backfill.running && <BackfillBar backfill={backfill} />}
         {signedIn ? (
           <>
             <div className="flex items-center gap-2 text-sm">
@@ -143,6 +148,24 @@ export function SyncSettings() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+export function BackfillBar({ backfill }: { backfill: BackfillProgress }) {
+  const pct = backfill.total > 0 ? Math.round((backfill.done / backfill.total) * 100) : 100;
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="flex items-center gap-2 text-sm">
+        <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+        <span>Preparing your library for its first upload…</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {backfill.done}/{backfill.total}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
