@@ -40,9 +40,21 @@ on first run (so that build needs network once). System build deps:
 - **Arch:** `sudo pacman -S webkit2gtk-4.1 gtk3 librsvg base-devel`
 - **Debian/Ubuntu:** `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf file`
 
-## Windows / macOS
+## Windows
 
-The same codebase targets both (`.msi`/`.exe` via NSIS, `.dmg`/`.app`), but
-those bundles must be built on their own OS (or a matching CI runner) and, for
-distribution without warnings, code-signed. Not wired into CI yet — the Linux
-AppImage/deb and the Android APK are the shipping channels for the beta.
+Download `Bread of Life_<ver>_x64-setup.exe` from the release and run it.
+The beta installer is **unsigned**, so SmartScreen may warn: click
+**More info → Run anyway**. (Authenticode signing is on the roadmap.)
+
+## macOS
+
+Download `Bread of Life_<ver>_universal.dmg` (works on both Apple Silicon and
+Intel), open it, and drag the app to Applications. The beta is **unsigned/not
+notarized**, so Gatekeeper blocks it on first launch — either **right-click the
+app → Open** (then confirm), or run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Bread of Life.app"
+```
+
+Proper Developer-ID signing + notarization is on the roadmap (see `ROADMAP.md`).
