@@ -180,3 +180,26 @@ reading-plan reminder above.
 - **Migrate to `breadoflife.app`** (user owns it; also owns breadoflife.dev). Move the site + `sync.breadoflife.app`; ensure all features/data migrate cleanly (accounts, sync URL, DNS). Keep breadoflife.dev working/redirecting during transition. Put behind a config so the sync URL etc. can be swapped without a rebuild ideally.
 - **Fix the AppImage on Arch/rolling distros** — it bundles an older (ubuntu-built) webkit that clashes with newer system webkit → blank screen. Fix the Linux build to rely on system webkit (don't bundle it) or otherwise resolve the clash. (.deb/AUR already use system webkit and work.)
 - **Docs hygiene** — README + ROADMAP + the in-app version were lagging; keep them updated each release (Grok flagged this).
+
+## Reading plans — "on-rails" guided reading mode (requested 2026-07-11)
+Starting/continuing a plan's day should drop the user into a focused, guided reader that walks the day's
+chapters one at a time until complete:
+- A Bible-reader variant that runs through the day's `Reading[]` sequentially. Full study features stay
+  available (commentary / cross-refs / Strong's rail). A progress indicator ("Chapter 2 of 4 today").
+- Advancing: "Mark read & next" (and/or reaching the end of a chapter) ticks off that chapter and moves on.
+- **Tracks PARTIAL completion** — extend `PlanProgress` (currently `completedDays: number[]`) to record
+  chapters completed within a day (e.g. per-day completed-chapter set or a cursor), persisted as you go, so a
+  half-finished day is remembered.
+- On finishing the day: a warm completion message/celebration.
+- **Leave-guard**: if the user navigates away mid-day, a gentle confirm ("You're partway through today's
+  reading — leave anyway?"), but partial progress is still saved.
+- Entry points: PlansPage ("Start today's reading") + the dashboard "Today's plan" tile.
+- Files: `src/pages/PlansPage.tsx`, `src/data/plans.ts` (Plan/Reading), `src/db/index.ts` (PlanProgress —
+  new Dexie version for partial tracking), `src/db/repos.ts` (setDayDone + a new setChapterDone), a new
+  guided-reader route/component reusing `src/components/bible/Reader.tsx` + `StudyRail.tsx`, `BiblePage.tsx`.
+
+## Swipe gestures on mobile / fold (requested 2026-07-11)
+- In the Bible reader on touch devices, **swipe left/right to go to next/previous chapter**. Add other
+  sensible same-gestures where natural (e.g. edge-swipe to open/close the study rail). Use lightweight touch
+  handlers (no heavy deps); don't break text selection, parallel view, or vertical scroll. Files:
+  `src/components/bible/Reader.tsx`, `src/pages/BiblePage.tsx` (chapter nav via the UI store `goTo`/next-prev).
