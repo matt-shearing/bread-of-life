@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowRight, Ban, BellRing, BookOpen, CalendarCheck, Check, Flame, HandHeart, Image, NotebookPen, Sparkles, Sunrise, Sunset, Wind } from "lucide-react";
+import { ArrowRight, Ban, BellRing, BookOpen, CalendarCheck, Check, Flame, HandHeart, Image, NotebookPen, Play, Sparkles, Sunrise, Sunset, Wind } from "lucide-react";
 import { db } from "@/db";
 import { DashboardBackground } from "@/components/dashboard/DashboardBackground";
 import { cn } from "@/lib/cn";
@@ -92,9 +92,14 @@ function TodaysPlan() {
               {refLabel(r.ho, r.chapter)}
             </button>
           ))}
-          <Button size="sm" variant="success" className="ml-auto" onClick={() => setDayDone(activePlanId, today, true)}>
-            <Check style={{ width: 15, height: 15 }} /> Mark done
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" onClick={() => navigate(`/guided/${activePlanId}/${today}`)}>
+              <Play style={{ width: 15, height: 15 }} /> Start today's reading
+            </Button>
+            <Button size="sm" variant="success" onClick={() => setDayDone(activePlanId, today, true)}>
+              <Check style={{ width: 15, height: 15 }} /> Mark done
+            </Button>
+          </div>
         </div>
       )}
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">

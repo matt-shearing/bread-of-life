@@ -177,6 +177,43 @@ export async function setDayDone(planId: string, day: number, done: boolean) {
   await db.plans.update(planId, { completedDays: [...set].sort((a, b) => a - b) });
 }
 
+/**
+ * Tick (or un-tick) a single chapter within a plan day for the guided reader.
+ * Persists per-chapter progress so a half-finished day is remembered, and rolls
+ * the whole day into `completedDays` once every reading in it is done. Pass
+ * `totalChapters` (the day's Reading[] length) so we know when the day is full.
+ */
+export async function setChapterDone(
+  planId: string,
+  day: number,
+  chapterIndex: number,
+  done: boolean,
+  totalChapters: number,
+) {
+  const existing = await db.plans.get(planId);
+  const base =
+    existing ?? { planId, startedAt: Date.now(), completedDays: [] as number[], chapterProgress: {} };
+
+  const chapterProgress: Record<number, number[]> = { ...(base.chapterProgress ?? {}) };
+  const chapters = new Set(chapterProgress[day] ?? []);
+  if (done) chapters.add(chapterIndex);
+  else chapters.delete(chapterIndex);
+  chapterProgress[day] = [...chapters].sort((a, b) => a - b);
+
+  const days = new Set(base.completedDays);
+  if (chapters.size >= totalChapters && totalChapters > 0) days.add(day);
+  else days.delete(day); // un-ticking a chapter re-opens the day
+
+  const next = {
+    planId,
+    startedAt: base.startedAt,
+    completedDays: [...days].sort((a, b) => a - b),
+    chapterProgress,
+  };
+  if (existing) await db.plans.update(planId, next);
+  else await db.plans.add(next);
+}
+
 export async function resetPlan(planId: string) {
   await db.plans.delete(planId);
 }

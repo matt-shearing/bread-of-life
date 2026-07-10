@@ -118,6 +118,15 @@ export async function getPlan(id: string): Promise<Plan | undefined> {
   return (await getPlans()).find((p) => p.id === id);
 }
 
+/** Resolve any plan by id — a built-in or a user-created custom plan. */
+export async function getAnyPlan(id: string): Promise<Plan | undefined> {
+  const builtin = await getPlan(id);
+  if (builtin) return builtin;
+  const { db } = await import("@/db");
+  const c = await db.customPlans.get(id);
+  return c ? { id: c.id, name: c.name, description: c.description, days: c.days } : undefined;
+}
+
 /** Build day-buckets for a custom plan spanning a canonical book range. */
 export async function buildReadingRange(
   startHo: string,

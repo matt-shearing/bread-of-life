@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft, BookOpen, Check, CheckCircle2, Plus, RotateCcw, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, CheckCircle2, Play, Plus, RotateCcw, Star, Trash2 } from "lucide-react";
 import { db } from "@/db";
 import { addCustomPlan, deleteCustomPlan, setDayDone, startPlan, resetPlan } from "@/db/repos";
 import { buildReadingRange, getPlans, type Plan } from "@/data/plans";
@@ -149,7 +149,18 @@ function PlanDetail({
             </p>
           </div>
           <div className="ml-auto flex flex-col gap-2">
-            <Button variant={isActive ? "secondary" : "primary"} size="sm" onClick={makeActive}>
+            {today < plan.days.length && (
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await makeActive();
+                  navigate(`/guided/${plan.id}/${today}`);
+                }}
+              >
+                <Play style={{ width: 15, height: 15 }} /> Start today's reading
+              </Button>
+            )}
+            <Button variant={isActive ? "secondary" : "outline"} size="sm" onClick={makeActive}>
               <Star style={{ width: 15, height: 15 }} /> {isActive ? "Active plan" : "Set as active"}
             </Button>
             {started && (
