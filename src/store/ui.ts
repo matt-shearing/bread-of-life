@@ -28,6 +28,7 @@ interface UIState {
   // right study rail (commentary)
   railOpen: boolean;
   toggleRail: () => void;
+  setRailOpen: (open: boolean) => void;
 
   commentarySource: string;
   setCommentarySource: (id: string) => void;
@@ -96,6 +97,7 @@ export const useUI = create<UIState>()(
 
       railOpen: false,
       toggleRail: () => set((s) => ({ railOpen: !s.railOpen })),
+      setRailOpen: (open) => set({ railOpen: open }),
 
       commentarySource: "matthew-henry",
       setCommentarySource: (id) => set({ commentarySource: id }),

@@ -13,12 +13,23 @@ import { Button, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function BiblePage() {
-  const { ho, chapter, goTo, railOpen, toggleRail, readingLayout, setReadingLayout } = useUI();
+  const { ho, chapter, goTo, railOpen, toggleRail, setRailOpen, readingLayout, setReadingLayout } = useUI();
   const navigate = useNavigate();
   const [index, setIndex] = useState<BookIndexEntry[]>([]);
 
   useEffect(() => {
     loadIndex().then(setIndex);
+  }, []);
+
+  // On desktop, surface the study rail (commentary/cross-refs/Strong's) by
+  // default when opening the Bible so its richness is discovered — the reader
+  // can close it. On phones it stays closed (there it's a full-screen overlay).
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) {
+      setRailOpen(true);
+    }
+    // run once on mount (each visit to the Bible page re-opens it on desktop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const chapterCount = index.find((b) => b.id === ho)?.chapters ?? 1;
