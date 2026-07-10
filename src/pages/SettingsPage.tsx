@@ -105,8 +105,15 @@ export function SettingsPage() {
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    if (notifyPrayers) setNotifyPrayers(false);
-                    else setNotifyPrayers(await enablePrayerNotifications());
+                    if (notifyPrayers) {
+                      setNotifyPrayers(false);
+                    } else {
+                      // Best-effort OS permission, but always flip on — on webviews
+                      // where the Notification API is unavailable/denied the toggle
+                      // must still switch, or it looks stuck.
+                      await enablePrayerNotifications();
+                      setNotifyPrayers(true);
+                    }
                   }}
                 >
                   {notifyPrayers ? "On" : "Off"}
@@ -130,8 +137,12 @@ export function SettingsPage() {
                       variant="outline"
                       size="sm"
                       onClick={async () => {
-                        if (notifyDevotion) setNotifyDevotion(false);
-                        else setNotifyDevotion(await enablePrayerNotifications());
+                        if (notifyDevotion) {
+                          setNotifyDevotion(false);
+                        } else {
+                          await enablePrayerNotifications();
+                          setNotifyDevotion(true);
+                        }
                       }}
                     >
                       {notifyDevotion ? "On" : "Off"}
