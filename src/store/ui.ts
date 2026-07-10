@@ -61,6 +61,13 @@ interface UIState {
   setNotifyDevotion: (v: boolean) => void;
   setDevotionTime: (t: string) => void;
 
+  // memory verses ("Memory Lane")
+  notifyMemory: boolean; // opt-in daily "verse to hide in your heart" nudge
+  setNotifyMemory: (v: boolean) => void;
+  memoryStreak: number; // consecutive days with a completed review
+  memoryLastReviewDay: string | null; // YYYY-MM-DD of the last review
+  recordMemoryReview: () => void; // call once when a review session is done
+
   dashboardBg: DashboardBg;
   setDashboardBg: (b: DashboardBg) => void;
 
@@ -127,6 +134,19 @@ export const useUI = create<UIState>()(
       devotionTime: "07:00",
       setNotifyDevotion: (v) => set({ notifyDevotion: v }),
       setDevotionTime: (t) => set({ devotionTime: t }),
+
+      notifyMemory: false,
+      setNotifyMemory: (v) => set({ notifyMemory: v }),
+      memoryStreak: 0,
+      memoryLastReviewDay: null,
+      recordMemoryReview: () =>
+        set((s) => {
+          const today = new Date().toISOString().slice(0, 10);
+          if (s.memoryLastReviewDay === today) return s; // already counted today
+          const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+          const streak = s.memoryLastReviewDay === yesterday ? s.memoryStreak + 1 : 1;
+          return { memoryStreak: streak, memoryLastReviewDay: today };
+        }),
 
       dashboardBg: "still",
       setDashboardBg: (b) => set({ dashboardBg: b }),

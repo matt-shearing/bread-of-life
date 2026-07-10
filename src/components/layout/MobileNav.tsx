@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import {
   BookHeart,
   BookOpen,
+  Brain,
   CalendarCheck,
   HandHeart,
   Home,
@@ -28,6 +29,7 @@ const PRIMARY = [
 const MORE = [
   { to: "/search", label: "Search", icon: Search },
   { to: "/plans", label: "Plans", icon: CalendarCheck },
+  { to: "/memory", label: "Memory", icon: Brain },
   { to: "/journal", label: "Journal", icon: NotebookPen },
   { to: "/companion", label: "Companion", icon: Sparkles },
   { to: "/settings", label: "Settings", icon: Settings },

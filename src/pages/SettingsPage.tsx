@@ -26,6 +26,8 @@ export function SettingsPage() {
     devotionTime,
     setNotifyDevotion,
     setDevotionTime,
+    notifyMemory,
+    setNotifyMemory,
     ai,
     setAI,
   } = useUI();
@@ -152,6 +154,29 @@ export function SettingsPage() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   At this time each day you’ll be reminded to read your Spurgeon devotional (while the
                   app is open).
+                </p>
+              </div>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <Row label="Memory verse reminder">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (notifyMemory) {
+                        setNotifyMemory(false);
+                      } else {
+                        await enablePrayerNotifications();
+                        setNotifyMemory(true);
+                      }
+                    }}
+                  >
+                    {notifyMemory ? "On" : "Off"}
+                  </Button>
+                </Row>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  A gentle daily nudge to review the verses you’re hiding in your heart, whenever cards
+                  are due in Memory Lane.
                 </p>
               </div>
             </CardContent>

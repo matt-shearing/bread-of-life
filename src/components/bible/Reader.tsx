@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Copy, NotebookPen, HandHeart, Sparkles, StickyNote } from "lucide-react";
+import { Brain, Copy, NotebookPen, HandHeart, Sparkles, StickyNote } from "lucide-react";
 import { db, type HighlightColor } from "@/db";
-import { setHighlight, clearHighlight, saveNote, recordProgress } from "@/db/repos";
+import { setHighlight, clearHighlight, saveNote, recordProgress, addMemoryVerse } from "@/db/repos";
 import { getChapterFor, translationById, type Chapter } from "@/data/bible";
 import { refLabel, bookByHo } from "@/lib/osis";
 import { useUI } from "@/store/ui";
@@ -89,6 +89,11 @@ export function Reader() {
     [start, end],
     [],
   );
+  const memory = useLiveQuery(
+    () => db.memory.where("bbcccvvv").between(start, end, true, true).toArray(),
+    [start, end],
+    [],
+  );
 
   const hlByVerse = useMemo(() => {
     const m = new Map<number, HighlightColor>();
@@ -100,6 +105,11 @@ export function Reader() {
     for (const n of notes ?? []) m.set(n.bbcccvvv - start, n.body);
     return m;
   }, [notes, start]);
+  const memByVerse = useMemo(() => {
+    const s = new Set<number>();
+    for (const c of memory ?? []) s.add(c.bbcccvvv - start);
+    return s;
+  }, [memory, start]);
 
   if (loading) return <div className="p-10 text-muted-foreground">Loading…</div>;
   if (!ch)
@@ -144,8 +154,12 @@ export function Reader() {
               text={item.text}
               color={hlByVerse.get(item.n)}
               hasNote={noteByVerse.has(item.n)}
+              memorised={memByVerse.has(item.n)}
               onSelect={() => selectVerse(item.n)}
               onNote={() => setNoteVerse(item.n)}
+              onMemorise={() =>
+                addMemoryVerse({ ho, chapter, verse: item.n, text: item.text, translation })
+              }
               onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
               onAsk={() => {
                 setCompanionSeed(`Help me understand ${refLabel(ho, chapter, item.n)}: “${item.text}”`);
@@ -211,14 +225,17 @@ interface VerseProps {
   text: string;
   color?: HighlightColor;
   hasNote: boolean;
+  memorised: boolean;
   onSelect: () => void;
   onNote: () => void;
+  onMemorise: () => void;
   onCapture: (mode: "journal" | "prayer") => void;
   onAsk: () => void;
 }
 
-function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCapture, onAsk }: VerseProps) {
+function Verse({ ho, chapter, n, text, color, hasNote, memorised, onSelect, onNote, onMemorise, onCapture, onAsk }: VerseProps) {
   const [open, setOpen] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
   const toggleColor = (c: HighlightColor) => {
     if (color === c) clearHighlight(ho, chapter, n);
     else setHighlight(ho, chapter, n, c);
@@ -256,6 +273,12 @@ function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCaptu
           {text}
           {hasNote && (
             <StickyNote
+              className="ml-1 inline-block align-super text-primary-500"
+              style={{ width: 12, height: 12 }}
+            />
+          )}
+          {(memorised || justAdded) && (
+            <Brain
               className="ml-1 inline-block align-super text-primary-500"
               style={{ width: 12, height: 12 }}
             />
@@ -298,6 +321,17 @@ function Verse({ ho, chapter, n, text, color, hasNote, onSelect, onNote, onCaptu
             active={hasNote}
           >
             <NotebookPen style={{ width: 15, height: 15 }} />
+          </IconBtn>
+          <IconBtn
+            label={memorised || justAdded ? "In Memory Lane" : "Memorise"}
+            onClick={() => {
+              onMemorise();
+              setJustAdded(true);
+              setTimeout(() => setOpen(false), 550);
+            }}
+            active={memorised || justAdded}
+          >
+            <Brain style={{ width: 15, height: 15 }} />
           </IconBtn>
           <IconBtn
             label="Copy"
