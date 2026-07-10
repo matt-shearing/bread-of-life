@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { BookMarked, Languages, Link2, X } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { bookByHo, parseOsis, refLabel } from "@/lib/osis";
@@ -21,9 +21,23 @@ import {
 import { cn } from "@/lib/cn";
 
 export function StudyRail() {
-  const { railTab, setRailTab, toggleRail } = useUI();
+  const { railTab, setRailTab, toggleRail, railWidth } = useUI();
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   return (
-    <aside className="fixed inset-0 z-40 flex w-full flex-col border-l border-border bg-card pt-[env(safe-area-inset-top)] md:static md:z-auto md:w-[360px] md:shrink-0 md:pt-0">
+    <aside
+      style={isDesktop ? { width: railWidth } : undefined}
+      className="fixed inset-0 z-40 flex w-full flex-col border-l border-border bg-card pt-[env(safe-area-inset-top)] md:relative md:z-auto md:shrink-0 md:pt-0"
+    >
+      <ResizeHandle />
       <div className="flex items-center border-b border-border px-2">
         <TabButton active={railTab === "commentary"} onClick={() => setRailTab("commentary")} icon={<BookMarked style={{ width: 15, height: 15 }} />}>
           Commentary
@@ -48,6 +62,44 @@ export function StudyRail() {
         {railTab === "strongs" && <StrongsPanel />}
       </div>
     </aside>
+  );
+}
+
+/**
+ * Draggable left-edge divider — desktop only. The rail is the right-most
+ * element, so its right edge sits at the viewport edge; the new width is simply
+ * the distance from the pointer to that edge. Clamping lives in the store.
+ */
+function ResizeHandle() {
+  const setRailWidth = useUI((s) => s.setRailWidth);
+
+  function onPointerDown(e: ReactPointerEvent) {
+    e.preventDefault();
+    const move = (ev: PointerEvent) => setRailWidth(window.innerWidth - ev.clientX);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onDoubleClick={() => setRailWidth(360)}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize study panel"
+      className="group absolute inset-y-0 left-0 z-10 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none md:block"
+      title="Drag to resize · double-click to reset"
+    >
+      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-primary/60 group-active:bg-primary" />
+    </div>
   );
 }
 

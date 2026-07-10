@@ -30,6 +30,13 @@ interface UIState {
   toggleRail: () => void;
   setRailOpen: (open: boolean) => void;
 
+  railWidth: number; // desktop study-rail width in px (clamped)
+  setRailWidth: (px: number) => void;
+
+  // left nav (Spotify-style collapse to icons-only on desktop)
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+
   commentarySource: string;
   setCommentarySource: (id: string) => void;
 
@@ -98,6 +105,12 @@ export const useUI = create<UIState>()(
       railOpen: false,
       toggleRail: () => set((s) => ({ railOpen: !s.railOpen })),
       setRailOpen: (open) => set({ railOpen: open }),
+
+      railWidth: 360,
+      setRailWidth: (px) => set({ railWidth: Math.min(640, Math.max(280, Math.round(px))) }),
+
+      sidebarCollapsed: false,
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
       commentarySource: "matthew-henry",
       setCommentarySource: (id) => set({ commentarySource: id }),
