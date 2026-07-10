@@ -104,8 +104,30 @@ provides it inherently (bonus); the only UX cost is a save-once recovery phrase 
    Chromium-ish (low risk); webkit2gtk/WKWebView need an actual on-device check.
 2. Model synced entities as Evolu tables behind `src/db/`; keep ephemeral UI state in Zustand.
 3. One-time Dexie→Evolu importer on first run.
-4. Account screen: local-only (default) · hosted (Matt relay) · self-host (relay URL).
-5. Deploy the Evolu relay on OneQode ([[oneqode-cloud-deploy-access]]); document self-host `docker run`.
+4. Account screen: local-only (default) · hosted (the app-hosted relay) · self-host (relay URL).
+5. Deploy the Evolu relay on the app cloud; document self-host `docker run`.
+
+## Notifications — proper, cross-platform (requested 2026-07-10)
+
+Today's reminders lean on the web Notification API (in-app scheduler) — they don't fire reliably when
+the app is closed and little is on by default. Rebuild on **real OS notifications** via
+`tauri-plugin-notification` (desktop incl. Linux + Android), with **scheduled** delivery so they fire
+even when the app isn't focused. Each notification **deep-links** to the right screen.
+
+- **Reading-plan reminder** — when enrolled in a plan, a **daily** nudge (default **ON** on enroll) to
+  read today's portion; tap → today's reading. User-set time.
+- **Devotional reminder** — **opt-in**; tap → straight into the devotional, with a check-off action.
+- **Prayer prompts** — an occasional "take a moment to add your prayers" nudge, **default OFF**. Plus
+  any prayer with a per-prayer reminder set fires its own daily notification (→ that prayer).
+- All toggleable in Settings. Verify delivery per platform (Linux notifications; Android channels +
+  scheduled/background delivery — the closed-app case is the real risk). Upgrades `src/lib/notify.ts`.
+
+## Reading plans — "Soul Food" Bible-in-a-year (requested 2026-07-10)
+
+Add a built-in **OT · NT · Psalm · Proverbs** daily plan (the J. Vernon McGee / Chuck Missler-style
+4-track "Bible in a year" — a portion from each track every day). Generate the 365-day schedule into
+the plans system (`PlanProgress`/`setDayDone`), surface it beside the existing plans, and wire it to the
+reading-plan reminder above.
 
 ## Later (unchanged)
 - Matt's own commentary corpus as a pluggable source (`~/dev/commentary-parser`).
