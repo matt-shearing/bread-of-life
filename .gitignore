@@ -20,3 +20,6 @@ screenshots/
 
 # icon gen candidates (large)
 art/image-gen/icons/
+
+# subagent worktrees (isolation:worktree)
+.claude/worktrees/
