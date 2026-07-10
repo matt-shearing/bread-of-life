@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowRight, Ban, BellRing, BookOpen, CalendarCheck, Check, Flame, HandHeart, Image, NotebookPen, Sparkles, Sunrise, Sunset, Wind } from "lucide-react";
+import { ArrowRight, Ban, BellRing, BookOpen, CalendarCheck, Check, Cloud, Flame, HandHeart, Image, NotebookPen, Sparkles, Sunrise, Sunset, Wind, X } from "lucide-react";
+import { getSyncStatus } from "@/db/sync";
 import { db } from "@/db";
 import { DashboardBackground } from "@/components/dashboard/DashboardBackground";
 import { cn } from "@/lib/cn";
@@ -321,7 +322,46 @@ export function DashboardPage() {
             </div>
           )}
         </div>
+
+        <SyncNudge />
       </div>
+    </div>
+  );
+}
+
+function SyncNudge() {
+  const navigate = useNavigate();
+  const dismissed = useUI((s) => s.syncPromptDismissed);
+  const dismiss = useUI((s) => s.dismissSyncPrompt);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getSyncStatus().then((s) => alive && setSignedIn(s.mode !== "off"));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (dismissed || signedIn !== false) return null;
+
+  return (
+    <div className="mt-8 flex items-center gap-3 rounded-xl border border-border/70 bg-card/60 px-4 py-3 text-sm backdrop-blur">
+      <Cloud style={{ width: 18, height: 18 }} className="shrink-0 text-primary-500" />
+      <div className="min-w-0 flex-1">
+        <span className="font-medium">Keep your prayers &amp; journal safe across devices.</span>{" "}
+        <span className="text-muted-foreground">Set up optional sync — it's free and works offline too.</span>
+      </div>
+      <Button size="sm" variant="outline" onClick={() => navigate("/settings")}>
+        Set up sync
+      </Button>
+      <button
+        aria-label="Dismiss"
+        className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+        onClick={dismiss}
+      >
+        <X style={{ width: 16, height: 16 }} />
+      </button>
     </div>
   );
 }
