@@ -8,8 +8,11 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.2.0** — adds optional cross-device sync (prayers, journal, notes, reading progress & plans),
-the *Soul Food* Bible-in-a-year plan, and desktop builds for Windows & macOS.
+**Latest: v0.3.0** — adds **Memory Lane** (memorise verses with spaced-repetition review), an
+**on-rails guided reading-plan mode**, richer journal ↔ prayer cross-linking, a first-run onboarding
+flow, custom prayer categories, mobile swipe-to-turn-chapter, a resizable/collapsible study layout,
+and a fixed Linux AppImage for rolling distros. Builds on v0.2's optional cross-device sync and the
+*Soul Food* Bible-in-a-year plan.
 
 </div>
 
@@ -51,10 +54,14 @@ and Strong's word study right beside it._
   → journal, → prayer. Your reading position and streak are remembered.
 - **Answered-prayer log** ⭐ — add prayers, track how often you've prayed, and **mark them answered with a
   note on _how_ God answered**. A dedicated *Answered* view is your record of His faithfulness.
-- **Journal** — entries with tags and verse links; capture a verse straight from the reader.
+- **Journal** — rich entries with tags and verse links; capture a verse straight from the reader, and
+  cross-link entries with the prayers they belong to (each side references the other).
+- **Memory Lane** 🧠 — memorise verses from the reader and review them on a spaced-repetition
+  schedule (SM-2), with fill-in-the-blank tests and a review streak to keep the habit warm.
 - **Reading plans & devotionals** — structured plans (including **Soul Food**, a four-track
   *Bible-in-a-year*: an Old Testament, New Testament, Psalm and Proverbs portion every day) plus
-  Spurgeon's *Morning & Evening* and more.
+  Spurgeon's *Morning & Evening* and more. Start a day and drop into a **guided on-rails reader**
+  that ticks off each passage and remembers where you left off.
 - **Commentary, cross-references & Strong's** — public-domain commentaries that track your chapter,
   OpenBible cross-references, and Greek/Hebrew word study, right beside the text.
 - **AI study companion** — optional, grounded in the passage you're reading; bring your own key

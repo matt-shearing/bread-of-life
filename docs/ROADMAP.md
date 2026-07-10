@@ -136,6 +136,30 @@ reading-plan reminder above.
 
 ---
 
+# ✅ Shipped in v0.3.0 (integrated 2026-07-11)
+
+The v0.3 candidate work below was built on isolated branches and merged to `main` for the 0.3.0 tag.
+Landed in this release:
+
+- **Memory Lane** — memorise verses from the reader (Brain action) → SM-2 spaced-repetition deck at
+  `/memory`, with due-today counts, fill-in-the-blank tests, a review streak, opt-in daily reminder,
+  a 15-verse starter set, and cross-device sync of cards (Dexie `memory`, `version(9)`).
+- **On-rails guided reading-plan mode** — starting a plan day drops into a guided reader that ticks
+  off each passage, tracks partial per-day completion (`chapterProgress`), and resumes where left off.
+- **Journal ↔ prayer cross-referencing** — link either side; each references the other.
+- **First-run onboarding** — offer hosted-sync account / skip / self-host + a short walkthrough.
+- **Home sync prompt**, **custom prayer categories**, **prayer pull-to-refresh**.
+- **Study layout** — commentary rail default-open on desktop, **resizable** rail, **collapsible
+  Spotify-style sidebar**, new **References** tab (journal/prayer refs for the chapter).
+- **Mobile swipe gestures** — swipe left/right to change chapter.
+- **Reminders toggle fix**, **Settings shows real app version**.
+- **Fixed Linux AppImage** for rolling distros (strips the bundled ubuntu WebKit → uses system webkit).
+
+Still deferred (tracked below and further down): "Link this device" full backfill, Faithfulness
+review PDF, E2E encryption, the `breadoflife.app` migration, and the Missler commentary corpus/audio.
+
+---
+
 # v0.3 candidate work (captured 2026-07-10 from user feedback)
 
 ## Bugs / polish
