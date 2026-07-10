@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlignLeft, ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Rows3, Search } from "lucide-react";
 import { ChapterPicker } from "@/components/bible/ChapterPicker";
@@ -7,19 +7,14 @@ import { ParallelPicker } from "@/components/bible/ParallelPicker";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
 import { useUI } from "@/store/ui";
-import { loadIndex, type BookIndexEntry } from "@/data/bible";
-import { BOOKS } from "@/lib/osis";
+import { useChapterNav } from "@/lib/useChapterNav";
 import { Button, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function BiblePage() {
-  const { ho, chapter, goTo, railOpen, toggleRail, setRailOpen, readingLayout, setReadingLayout } = useUI();
+  const { railOpen, toggleRail, setRailOpen, readingLayout, setReadingLayout } = useUI();
   const navigate = useNavigate();
-  const [index, setIndex] = useState<BookIndexEntry[]>([]);
-
-  useEffect(() => {
-    loadIndex().then(setIndex);
-  }, []);
+  const { step } = useChapterNav();
 
   // On desktop, surface the study rail (commentary/cross-refs/Strong's) by
   // default when opening the Bible so its richness is discovered — the reader
@@ -31,26 +26,6 @@ export function BiblePage() {
     // run once on mount (each visit to the Bible page re-opens it on desktop)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const chapterCount = index.find((b) => b.id === ho)?.chapters ?? 1;
-
-  function step(delta: number) {
-    const next = chapter + delta;
-    if (next >= 1 && next <= chapterCount) {
-      goTo(ho, next);
-      return;
-    }
-    // cross book boundaries
-    const order = BOOKS.find((b) => b.ho === ho)?.order ?? 1;
-    if (delta > 0 && order < 66) {
-      const nb = BOOKS[order]; // order is 1-based → BOOKS[order] is next
-      goTo(nb.ho, 1);
-    } else if (delta < 0 && order > 1) {
-      const pb = BOOKS[order - 2];
-      const pbCount = index.find((b) => b.id === pb.ho)?.chapters ?? 1;
-      goTo(pb.ho, pbCount);
-    }
-  }
 
   return (
     <div className="flex h-full flex-col">

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Copy, NotebookPen, HandHeart, Sparkles, StickyNote } from "lucide-react";
@@ -7,6 +7,7 @@ import { setHighlight, clearHighlight, saveNote, recordProgress } from "@/db/rep
 import { getChapterFor, translationById, type Chapter } from "@/data/bible";
 import { refLabel, bookByHo } from "@/lib/osis";
 import { useUI } from "@/store/ui";
+import { useChapterNav } from "@/lib/useChapterNav";
 import {
   Button,
   Dialog,
@@ -34,13 +35,47 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
 ) as Record<HighlightColor, string>;
 
 export function Reader() {
-  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed } = useUI();
+  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed, railOpen, setRailOpen } =
+    useUI();
+  const { step } = useChapterNav();
   const navigate = useNavigate();
   const [ch, setCh] = useState<Chapter | null>(null);
   const [ch2, setCh2] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<{ mode: "journal" | "prayer"; verse: number; text: string } | null>(null);
   const [noteVerse, setNoteVerse] = useState<number | null>(null);
+
+  // Touch swipe: left → next chapter, right → previous. Only a quick, clearly
+  // horizontal one-finger flick counts, so vertical scroll, pinch/parallel
+  // gestures, taps, and (slow) text selection are left untouched. A flick that
+  // starts at the right bezel opens the study rail instead of paging.
+  const swipe = useRef<{ x: number; y: number; t: number; w: number } | null>(null);
+  function onTouchStart(e: React.TouchEvent) {
+    if (e.touches.length !== 1) {
+      swipe.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    swipe.current = { x: t.clientX, y: t.clientY, t: Date.now(), w: window.innerWidth };
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    if (e.touches.length > 1) swipe.current = null; // second finger → not a swipe
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    const s = swipe.current;
+    swipe.current = null;
+    const t = e.changedTouches[0];
+    if (!s || !t) return;
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    const adx = Math.abs(dx);
+    if (Date.now() - s.t > 600 || adx < 60 || adx < Math.abs(dy) * 2) return;
+    if (!railOpen && dx < 0 && s.x > s.w - 32) {
+      setRailOpen(true); // edge-swipe in from the right opens commentary
+      return;
+    }
+    step(dx < 0 ? 1 : -1);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -116,6 +151,9 @@ export function Reader() {
       id="reader-scroll"
       className="h-full overflow-y-auto"
       style={{ fontSize: `${fontScale}rem` }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
     >
       <article className={cn("mx-auto px-4 py-6 md:px-8 md:py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
         <div className="mb-6 flex items-center justify-between gap-3">
