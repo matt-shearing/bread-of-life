@@ -207,3 +207,11 @@ chapters one at a time until complete:
 ## Chuck Missler commentary corpus (source located 2026-07-11 — build the parser + pluggable source)
 Matt located the real Missler files: **`/run/media/contra/Infinar/Chuck Missler/The Holy Bible - Chuck Missler -  Line by Line - OT and NT - mp3 with pdf notes`** (note the DOUBLE space before "Line"). Contains `Briefings/`, `NT/`, `OT/` — **157 PDF notes** (+ mp3 audio) of his "Line by Line" study.
 Task (post-compaction): finally set up the **commentary parser + builder** — extract the PDF notes into the app's pluggable commentary format (like the existing public-domain commentaries: Matthew Henry/JFB/Clarke/Gill/K&D/Tyndale via HelloAO, tracked per chapter in `StudyRail`), keyed by OSIS/BBCCCVVV so it slots into the study rail as a selectable source. Reuse/adapt the earlier work in `~/dev/commentary-parser` and the pdf-to-text approach from [[unlimited-ocr-amd-triage]] (born-digital PDFs → `pdf_to_text.py`, fast; OCR only if scanned). COPYRIGHT: Missler's Notes are copyrighted (it's the McGee-adjacent situation) — build it as a **local-only / personal** pluggable source (gitignored data; don't commit or redistribute the notes), OR a build step users run against their own legally-obtained files. The audio (mp3) could also feed the per-chapter audio feature later.
+
+## Missler audio + richer commentary (separate project — brief written 2026-07-11)
+Beyond the PDF-notes parser above: also (a) make Missler's **mp3s available as per-chapter audio** in the
+reader (the app already has per-chapter audio via `AudioPlayer`/HelloAO — add Missler as an option keyed by
+chapter), and (b) **transcribe all ~626 mp3 (~14GB) → transcripts → an even richer, verse-aligned commentary**
+(ASR on the local AMD ROCm box). Full self-contained project brief + app-integration guide for a dedicated
+agent: **`~/dev/missler-commentary/BRIEF.md`**. COPYRIGHT: local-only/personal, gitignored, never redistributed
+(don't bundle 14GB or the copyrighted notes in the public repo/release — use a configurable local library path).
