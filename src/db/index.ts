@@ -28,7 +28,9 @@ export interface Note {
 }
 
 export type PrayerStatus = "active" | "answered" | "archived";
-export type PrayerCategory = "personal" | "family" | "community" | "thanksgiving" | "world";
+/** The five built-in categories, plus any user-defined string (custom categories). */
+export type BuiltinPrayerCategory = "personal" | "family" | "community" | "thanksgiving" | "world";
+export type PrayerCategory = BuiltinPrayerCategory | (string & {});
 
 export interface Prayer {
   id: string;

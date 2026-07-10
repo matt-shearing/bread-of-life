@@ -92,26 +92,53 @@ export function SyncSettings() {
               <ModeButton icon={CloudOff} active={false} onClick={() => void signOut().then(refresh)} label="Local only" hint="Stay offline on this device (default)." />
             </div>
 
-            {mode === "selfhost" && (
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sync.example.org" spellCheck={false} />
-            )}
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" autoComplete="email" spellCheck={false} />
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password (8+ characters)"
-              autoComplete={isSignup ? "new-password" : "current-password"}
-            />
-            {error && <p className="text-xs text-destructive">{error}</p>}
-            <div className="flex items-center gap-2">
-              <Button onClick={() => void submit()} disabled={busy || !email.trim() || password.length < 8}>
-                {busy ? "…" : isSignup ? "Create account" : "Log in"}
-              </Button>
-              <button className="text-xs text-muted-foreground underline" onClick={() => setIsSignup((v) => !v)}>
-                {isSignup ? "I already have an account" : "Create an account"}
-              </button>
-            </div>
+            {/* A real <form> with name/autocomplete hints so password managers offer to
+                save/fill credentials. NOTE: the manager labels the entry by the webview
+                origin, which is fixed at `tauri.localhost` on Android/Windows (Tauri's
+                internal custom-protocol host — not configurable in Tauri v2), so it can't
+                be renamed to "breadoflife.dev" from the app. These hints at least make it
+                recognise the login and fill the right fields. See docs/MOBILE.md. */}
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit();
+              }}
+            >
+              {mode === "selfhost" && (
+                <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sync.example.org" spellCheck={false} />
+              )}
+              <Input
+                type="email"
+                name="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                spellCheck={false}
+              />
+              <Input
+                type="password"
+                name="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password (8+ characters)"
+                autoComplete={isSignup ? "new-password" : "current-password"}
+              />
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              <div className="flex items-center gap-2">
+                <Button type="submit" disabled={busy || !email.trim() || password.length < 8}>
+                  {busy ? "…" : isSignup ? "Create account" : "Log in"}
+                </Button>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={() => setIsSignup((v) => !v)}
+                >
+                  {isSignup ? "I already have an account" : "Create an account"}
+                </button>
+              </div>
+            </form>
           </>
         )}
       </CardContent>

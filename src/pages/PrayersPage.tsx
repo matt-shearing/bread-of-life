@@ -1,15 +1,19 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Archive, Bell, BellRing, CheckCircle2, HandHeart, Plus, RotateCcw, Sparkles } from "lucide-react";
+import { Archive, Bell, BellRing, Check, CheckCircle2, HandHeart, Plus, RotateCcw, Sparkles, X } from "lucide-react";
 import { db, type Prayer, type PrayerCategory } from "@/db";
 import {
+  addCustomPrayerCategory,
   addPrayer,
   archivePrayer,
+  getCustomPrayerCategories,
   markAnswered,
   prayedFor,
+  removeCustomPrayerCategory,
   reopenPrayer,
   toggleRemind,
 } from "@/db/repos";
+import { syncNow } from "@/db/sync";
 import {
   Badge,
   Button,
@@ -23,7 +27,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
-const CATEGORIES: { key: PrayerCategory; label: string }[] = [
+const BUILTIN_CATEGORIES: { key: string; label: string }[] = [
   { key: "personal", label: "Personal" },
   { key: "family", label: "Family" },
   { key: "community", label: "Community" },
@@ -31,7 +35,7 @@ const CATEGORIES: { key: PrayerCategory; label: string }[] = [
   { key: "world", label: "World" },
 ];
 
-const CAT_COLOR: Record<PrayerCategory, string> = {
+const CAT_COLOR: Record<string, string> = {
   personal: "border-primary/40 text-primary-700 dark:text-primary-300",
   family: "border-rose-300 text-rose-600",
   community: "border-sky-300 text-sky-600",
@@ -39,14 +43,63 @@ const CAT_COLOR: Record<PrayerCategory, string> = {
   world: "border-violet-300 text-violet-600",
 };
 
+/** Built-ins get their signature colour; custom categories fall back to a warm neutral. */
+function catColor(category: string): string {
+  return CAT_COLOR[category] ?? "border-amber-300 text-amber-700 dark:text-amber-300";
+}
+
+/** Title-case a raw category key for display (custom ones are stored as typed). */
+function catLabel(category: string): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
 function daysSince(ts: number) {
   return Math.max(1, Math.round((Date.now() - ts) / 86_400_000));
 }
+
+const PULL_THRESHOLD = 64; // px pulled before a release triggers a sync
+const PULL_MAX = 96;
 
 export function PrayersPage() {
   const [tab, setTab] = useState<"active" | "answered">("active");
   const [adding, setAdding] = useState(false);
   const [answering, setAnswering] = useState<Prayer | null>(null);
+
+  // Lightweight touch pull-to-refresh (mobile): pull down at the top to force a sync.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pullStartY = useRef<number | null>(null);
+  const [pull, setPull] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const el = scrollRef.current;
+    if (!el || el.scrollTop > 0 || refreshing) {
+      pullStartY.current = null;
+      return;
+    }
+    pullStartY.current = e.touches[0].clientY;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (pullStartY.current == null) return;
+    const dy = e.touches[0].clientY - pullStartY.current;
+    setPull(dy > 0 ? Math.min(PULL_MAX, dy * 0.5) : 0);
+  };
+  const onTouchEnd = async () => {
+    if (pullStartY.current == null) return;
+    pullStartY.current = null;
+    if (pull >= PULL_THRESHOLD && !refreshing) {
+      setRefreshing(true);
+      setPull(PULL_THRESHOLD);
+      try {
+        await syncNow();
+      } finally {
+        setRefreshing(false);
+        setPull(0);
+      }
+    } else {
+      setPull(0);
+    }
+  };
 
   const prayers = useLiveQuery(() => db.prayers.orderBy("createdAt").reverse().toArray(), [], []);
 
@@ -68,8 +121,32 @@ export function PrayersPage() {
   );
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
+    <div
+      ref={scrollRef}
+      className="relative h-full overflow-y-auto"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={() => void onTouchEnd()}
+    >
+      {/* pull-to-refresh indicator */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center overflow-hidden"
+        style={{ height: pull }}
+      >
+        <div className="flex items-end pb-1 text-muted-foreground">
+          <RotateCcw
+            style={{ width: 18, height: 18, transform: `rotate(${pull * 3}deg)` }}
+            className={cn(refreshing && "animate-spin", pull >= PULL_THRESHOLD && "text-primary")}
+          />
+        </div>
+      </div>
+      <div
+        className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8"
+        style={{
+          transform: pull ? `translateY(${pull}px)` : undefined,
+          transition: refreshing || pull === 0 ? "transform 0.2s ease" : undefined,
+        }}
+      >
         <div className="mb-6 flex items-center gap-3">
           <div>
             <h1 className="font-serif text-3xl font-bold">Prayers</h1>
@@ -167,7 +244,7 @@ function PrayerCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">{p.title}</h3>
-            <Badge className={cn("bg-transparent", CAT_COLOR[p.category])}>{p.category}</Badge>
+            <Badge className={cn("bg-transparent", catColor(p.category))}>{catLabel(p.category)}</Badge>
             {!answered && (
               <button
                 onClick={() => toggleRemind(p.id, !p.remind)}
@@ -251,6 +328,33 @@ function AddPrayerDialog({ onClose }: { onClose: () => void }) {
   const [body, setBody] = useState("");
   const [category, setCategory] = useState<PrayerCategory>("personal");
   const [remind, setRemind] = useState(false);
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCat, setNewCat] = useState("");
+  const newCatRef = useRef<HTMLInputElement>(null);
+
+  const customCategories = useLiveQuery(() => getCustomPrayerCategories(), [], []);
+  const categories: { key: string; label: string; custom: boolean }[] = [
+    ...BUILTIN_CATEGORIES.map((c) => ({ ...c, custom: false })),
+    ...(customCategories ?? []).map((c) => ({ key: c, label: catLabel(c), custom: true })),
+  ];
+
+  useEffect(() => {
+    if (addingCat) newCatRef.current?.focus();
+  }, [addingCat]);
+
+  const commitNewCat = async () => {
+    const name = newCat.trim();
+    if (!name) {
+      setAddingCat(false);
+      return;
+    }
+    const next = await addCustomPrayerCategory(name);
+    const match = next.find((c) => c.toLowerCase() === name.toLowerCase());
+    if (match) setCategory(match);
+    setNewCat("");
+    setAddingCat(false);
+  };
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -258,19 +362,65 @@ function AddPrayerDialog({ onClose }: { onClose: () => void }) {
         <DialogDescription>What would you like to bring before God?</DialogDescription>
         <Input autoFocus placeholder="Prayer title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Textarea placeholder="Details (optional)" value={body} onChange={(e) => setBody(e.target.value)} rows={3} />
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map((c) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {categories.map((c) => (
             <button
               key={c.key}
               onClick={() => setCategory(c.key)}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs",
+                "group inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs",
                 category === c.key ? "border-primary bg-primary/10 text-primary-700 dark:text-primary-300" : "border-border text-muted-foreground",
               )}
             >
               {c.label}
+              {c.custom && (
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={`Remove ${c.label} category`}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    await removeCustomPrayerCategory(c.key);
+                    if (category === c.key) setCategory("personal");
+                  }}
+                  className="rounded-full opacity-50 hover:opacity-100"
+                >
+                  <X style={{ width: 12, height: 12 }} />
+                </span>
+              )}
             </button>
           ))}
+          {addingCat ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary px-2 py-0.5">
+              <input
+                ref={newCatRef}
+                value={newCat}
+                onChange={(e) => setNewCat(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void commitNewCat();
+                  if (e.key === "Escape") {
+                    setNewCat("");
+                    setAddingCat(false);
+                  }
+                }}
+                onBlur={() => void commitNewCat()}
+                placeholder="New category"
+                maxLength={24}
+                className="w-24 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              />
+              <button type="button" aria-label="Add category" onClick={() => void commitNewCat()} className="text-primary">
+                <Check style={{ width: 12, height: 12 }} />
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingCat(true)}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-3 py-1 text-xs text-muted-foreground hover:border-primary hover:text-primary"
+            >
+              <Plus style={{ width: 12, height: 12 }} /> Add
+            </button>
+          )}
         </div>
         <button
           onClick={() => setRemind((r) => !r)}

@@ -8,6 +8,9 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
+**Latest: v0.2.0** — adds optional cross-device sync (prayers, journal, notes, reading progress & plans),
+the *Soul Food* Bible-in-a-year plan, and desktop builds for Windows & macOS.
+
 </div>
 
 ---
@@ -49,7 +52,9 @@ and Strong's word study right beside it._
 - **Answered-prayer log** ⭐ — add prayers, track how often you've prayed, and **mark them answered with a
   note on _how_ God answered**. A dedicated *Answered* view is your record of His faithfulness.
 - **Journal** — entries with tags and verse links; capture a verse straight from the reader.
-- **Reading plans & devotionals** — structured plans plus Spurgeon's *Morning & Evening* (and more).
+- **Reading plans & devotionals** — structured plans (including **Soul Food**, a four-track
+  *Bible-in-a-year*: an Old Testament, New Testament, Psalm and Proverbs portion every day) plus
+  Spurgeon's *Morning & Evening* and more.
 - **Commentary, cross-references & Strong's** — public-domain commentaries that track your chapter,
   OpenBible cross-references, and Greek/Hebrew word study, right beside the text.
 - **AI study companion** — optional, grounded in the passage you're reading; bring your own key
@@ -57,8 +62,22 @@ and Strong's word study right beside it._
 - **Dashboard** — a warm landing: Verse of the Day, Continue Reading, reading streak, prayer counts,
   recent journal, over a cozy countryside scene.
 
-All user data lives locally on your device (offline-first). No accounts, no cloud, no tracking.
-Cross-device sync (end-to-end encrypted) is on the way.
+All user data lives locally on your device (offline-first). No account is needed — the app is fully
+usable with no cloud and no tracking.
+
+## Cross-device sync (optional)
+
+Want your prayers, journal, notes, highlights, reading progress and plans on more than one device?
+Turn on sync in **Settings → Sync & account**. It stays offline-first — your device is always the
+source of truth and sync is purely additive.
+
+- **Hosted** — sign up in-app with an email + password to use the project's hosted sync service.
+- **Self-hosted** — run your own server (your data, your box) and point the app at it under
+  **Settings → Sync → Self-hosted**. The server is open source in [`deploy/sync-server`](deploy/sync-server)
+  (a small Node service with a Docker Compose + Caddy setup); see its README to stand one up.
+
+Local-only remains the default. End-to-end encryption of the synced payload is on the roadmap
+(today the relay stores data server-side); see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Run it from source
 

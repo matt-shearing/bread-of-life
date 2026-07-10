@@ -114,6 +114,40 @@ export async function updatePrayer(id: string, patch: Partial<Prayer>) {
   await db.prayers.update(id, patch);
 }
 
+/* ---------------------------- custom prayer categories ------------------------- */
+
+/** The five built-in categories users can't remove. */
+export const BUILTIN_PRAYER_CATEGORIES = ["personal", "family", "community", "thanksgiving", "world"] as const;
+const CUSTOM_PRAYER_CATEGORIES_KEY = "prayers.customCategories";
+
+/** User-defined prayer categories, kept in the settings table so they sync across devices. */
+export async function getCustomPrayerCategories(): Promise<string[]> {
+  const raw = await getSetting<string[]>(CUSTOM_PRAYER_CATEGORIES_KEY, []);
+  return Array.isArray(raw) ? raw : [];
+}
+
+const builtins = new Set<string>(BUILTIN_PRAYER_CATEGORIES);
+
+/** Add a custom category (deduped against built-ins and existing, case-insensitive). Returns the new list. */
+export async function addCustomPrayerCategory(name: string): Promise<string[]> {
+  const trimmed = name.trim();
+  if (!trimmed) return getCustomPrayerCategories();
+  const existing = await getCustomPrayerCategories();
+  const lower = trimmed.toLowerCase();
+  if (builtins.has(lower) || existing.some((c) => c.toLowerCase() === lower)) return existing;
+  const next = [...existing, trimmed];
+  await setSetting(CUSTOM_PRAYER_CATEGORIES_KEY, next);
+  return next;
+}
+
+/** Remove a custom category (does not touch prayers already tagged with it). Returns the new list. */
+export async function removeCustomPrayerCategory(name: string): Promise<string[]> {
+  const existing = await getCustomPrayerCategories();
+  const next = existing.filter((c) => c.toLowerCase() !== name.trim().toLowerCase());
+  await setSetting(CUSTOM_PRAYER_CATEGORIES_KEY, next);
+  return next;
+}
+
 /* ----------------------------------- journal ----------------------------------- */
 
 export async function addJournalEntry(input: {
