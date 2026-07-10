@@ -51,7 +51,26 @@ export async function getPlans(): Promise<Plan[]> {
   if (cache) return cache;
   const nt = BOOKS.filter((b) => b.testament === "NT").map((b) => b.ho);
   const all = BOOKS.map((b) => b.ho);
-  const [ntCh, allCh] = await Promise.all([chaptersFor(nt), chaptersFor(all)]);
+  // OT minus Psalms & Proverbs — those get their own daily streams in Soul Food.
+  const otStream = BOOKS.filter(
+    (b) => b.testament === "OT" && b.ho !== "PSA" && b.ho !== "PRO",
+  ).map((b) => b.ho);
+  const [ntCh, allCh, otStreamCh] = await Promise.all([
+    chaptersFor(nt),
+    chaptersFor(all),
+    chaptersFor(otStream),
+  ]);
+
+  // Soul Food — four daily streams (OT · NT · a Psalm · a Proverbs chapter).
+  const SOULFOOD_DAYS = 365;
+  const otChunk = chunk(otStreamCh, SOULFOOD_DAYS);
+  const ntChunk = chunk(ntCh, SOULFOOD_DAYS);
+  const soulfoodDays: Reading[][] = range(0, SOULFOOD_DAYS - 1).map((i) => [
+    ...(otChunk[i] ?? []),
+    ...(ntChunk[i] ?? []),
+    { ho: "PSA", chapter: (i % 150) + 1 },
+    { ho: "PRO", chapter: (i % 31) + 1 },
+  ]);
 
   cache = [
     {
@@ -77,6 +96,13 @@ export async function getPlans(): Promise<Plan[]> {
       name: "New Testament in 90 Days",
       description: "Read through the New Testament in three months.",
       days: chunk(ntCh, 90),
+    },
+    {
+      id: "soulfood365",
+      name: "Soul Food — Bible in a Year",
+      description:
+        "Four daily streams — Old Testament · New Testament · a Psalm · a Proverbs chapter — for 365 days.",
+      days: soulfoodDays,
     },
     {
       id: "year365",
