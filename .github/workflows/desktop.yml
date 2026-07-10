@@ -1,9 +1,16 @@
-name: Desktop (Linux)
+name: Desktop
 
-# Builds Linux desktop bundles (AppImage + .deb) and attaches them to the
-# GitHub Release for the tag. Runs alongside the Android workflow.
+# Builds native desktop bundles for Linux, Windows, and macOS and attaches
+# them to the GitHub Release for the tag. Runs alongside the Android workflow.
 #
 # Trigger: push a tag like `v0.1.0`, or run manually.
+#
+# NOTE (beta): Windows and macOS builds are currently UNSIGNED.
+#   - Windows: SmartScreen may warn ("More info" → "Run anyway").
+#   - macOS:   Gatekeeper blocks unsigned apps — right-click → Open, or run
+#              `xattr -dr com.apple.quarantine "/Applications/Bread of Life.app"`.
+# Proper code-signing (Apple Developer ID + notarization, Windows cert) is
+# tracked in docs/ROADMAP.md.
 
 on:
   push:
@@ -14,12 +21,26 @@ permissions:
   contents: write
 
 jobs:
-  linux:
-    runs-on: ubuntu-22.04
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            bundles: "appimage,deb"
+            rust_target: ""
+          - os: windows-latest
+            bundles: "nsis"
+            rust_target: ""
+          - os: macos-latest
+            bundles: "dmg"
+            rust_target: "universal-apple-darwin"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: System deps (Tauri v2 on Linux)
+      - name: System deps (Linux only)
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -38,31 +59,42 @@ jobs:
       - name: Rust
         run: rustup toolchain install stable --profile minimal
 
+      - name: Extra Rust targets (macOS universal)
+        if: matrix.rust_target == 'universal-apple-darwin'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.os }}
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build desktop bundles
-        # extract-and-run lets the AppImage tooling work without FUSE;
-        # NO_STRIP avoids a strip step that can fail on some runners.
+      - name: Build bundles
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: pnpm tauri build --bundles appimage,deb
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.rust_target }}" ]; then
+            pnpm tauri build --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundles }}
+          else
+            pnpm tauri build --bundles ${{ matrix.bundles }}
+          fi
 
       - name: Collect bundles
-        id: bundles
+        shell: bash
         run: |
           mkdir -p out
-          find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) -exec cp {} out/ \;
+          find src-tauri/target -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.dmg' \
+               -o -name '*-setup.exe' -o -name '*.msi' \) \
+            -exec cp {} out/ \; 2>/dev/null || true
           ls -la out
-          echo "dir=out" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bread-of-life-linux
+          name: bread-of-life-${{ matrix.os }}
           path: out/*
 
       - name: Attach to release
