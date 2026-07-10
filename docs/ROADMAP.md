@@ -133,3 +133,50 @@ reading-plan reminder above.
 - Matt's own commentary corpus as a pluggable source (`~/dev/commentary-parser`).
 - Local `sqlite-vec` AI study companion (pairs naturally with the SQLite move in A).
 - Red-letter words-of-Jesus (BSB lacks the markup — needs a data source).
+
+---
+
+# v0.3 candidate work (captured 2026-07-10 from user feedback)
+
+## Bugs / polish
+- **Settings shows "v0.1"** — hardcoded; must read the real app version (import package version). Fix inline.
+- **Reminders toggle**: pressing "Off" doesn't switch back to "On" (Settings → Reminders — the Off/On button state is stuck). Fix the toggle logic.
+- **Commentary/study rail** should default to OPEN ("appear") on the Bible page on desktop/fold. (An open-on-mount effect exists; verify it actually works in v0.2.0 and make it reliably default-open on ≥md.)
+- **Proton Pass / password-manager name is "tauri.localhost"** when creating an account on phone — should be `breadoflife.dev` (or the app name). Driven by the webview origin/hostname; set a proper hostname/identifier (Tauri `app` config / a real origin) so autofill shows the right name.
+
+## Prayers
+- **Custom categories** — let users add their own prayer categories (beyond personal/family/community/thanksgiving/world).
+- **Pull-to-refresh** (mobile) to force a sync.
+- **Journal ↔ prayer cross-referencing** — link prayers to journal entries and vice-versa.
+
+## Journal
+- **Rich Bible-verse linking** — a "tag in the Bible" flow: from the journal editor, jump to the Bible, select verse(s), hit OK → return to the journal with those verses inserted as hyperlinks (tap to open the passage later).
+- **Read-view by default after submit** — submitting an entry shows a read view; an **Edit** button re-opens the editor.
+- **Journal ↔ prayer cross-ref** (see Prayers).
+
+## Bible / study rail (desktop + fold)
+- **Resizable commentary side panel** — drag the divider to make it wider/thinner.
+- **Collapsible left nav** — a minimise button that collapses the sidebar to icons-only and expands back (Spotify-style).
+- **New "References" tab in the study rail** — shows journal/prayer entries that reference the current verse/chapter.
+
+## Sync
+- **"Link this device" full backfill** (HIGH PRIORITY — biggest real sync hole): on first sign-in, explicitly enqueue ALL existing local synced-table rows into the outbox (with a progress UI) so pre-existing data uploads. **Root cause of the reported edge case** (an early prayer created before sync existed never uploaded — only NEW changes go through the outbox/hooks; pre-existing rows are never marked dirty). This makes multi-device onboarding trustworthy.
+- **E2E encryption** — journals/prayers currently sit in PLAINTEXT on the relay until E2E lands. Design: passphrase/recovery-key-derived key, encrypt row payloads client-side before push; server stores ciphertext. Keep it opt-in-transparent. (Was deferred; now a real privacy item.)
+
+## Onboarding
+- **First-run onboarding** — offer to create a hosted-sync account (or skip / self-host) during onboarding, and run a short walkthrough of the main features.
+- **Unobtrusive home prompt** — a subtle prompt at the bottom of the dashboard to create a sync account (or set up self-hosted sync) if not signed in.
+
+## Memory verses (new feature — design + build)
+- A **memory-verse pool**: add verses while reading (a "memorise" action in the reader, like highlight/note), plus a curated starter set.
+- **Spaced repetition** (SM-2-ish, offline) — a short **daily card deck** built from memory-flagged verses + highlights ("Memory Lane"). Uses data people already create in the reader.
+- **Gamification** — rewards/streaks for reviewing; occasional **fill-in-the-blank test** cards. Pair with tasteful notifications ("today's verse to hide in your heart").
+- Rationale in the user's words: memory verses are one of the best weapons (cf. Jesus using Deuteronomy). Grok's framing: a short daily card deck.
+
+## Answered-prayer "Faithfulness review" (new feature)
+- Monthly/yearly **auto-story**: answered prayers + answer notes + linked verses + journal tags, exported as a warm **PDF / share card**. Leans into the emotional core (the answered-prayer log) rather than more study tools.
+
+## Domain / infra
+- **Migrate to `breadoflife.app`** (user owns it; also owns breadoflife.dev). Move the site + `sync.breadoflife.app`; ensure all features/data migrate cleanly (accounts, sync URL, DNS). Keep breadoflife.dev working/redirecting during transition. Put behind a config so the sync URL etc. can be swapped without a rebuild ideally.
+- **Fix the AppImage on Arch/rolling distros** — it bundles an older (ubuntu-built) webkit that clashes with newer system webkit → blank screen. Fix the Linux build to rely on system webkit (don't bundle it) or otherwise resolve the clash. (.deb/AUR already use system webkit and work.)
+- **Docs hygiene** — README + ROADMAP + the in-app version were lagging; keep them updated each release (Grok flagged this).

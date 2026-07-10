@@ -6,6 +6,7 @@ import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
 import { requestFeature, reportBug } from "@/lib/feedback";
 import { SyncSettings } from "@/components/settings/SyncSettings";
+import { version as APP_VERSION } from "../../package.json";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -263,7 +264,7 @@ export function SettingsPage() {
               <CardTitle>About</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              <p>Bread of Life · v0.1 — a warm, offline-first homebase for reading, prayer, and journalling.</p>
+              <p>Bread of Life · v{APP_VERSION} — a warm, offline-first homebase for reading, prayer, and journalling.</p>
             </CardContent>
           </Card>
         </div>
