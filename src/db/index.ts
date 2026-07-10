@@ -44,6 +44,7 @@ export interface Prayer {
   answeredAt: number | null;
   answerNote: string | null;
   linkedOsis: string[];
+  linkedJournalIds?: string[]; // journal entries cross-referenced with this prayer
   remind?: boolean; // surface daily until prayed for
 }
 
@@ -53,6 +54,7 @@ export interface JournalEntry {
   body: string;
   tags: string[];
   linkedOsis: string[];
+  linkedPrayerIds?: string[]; // prayers cross-referenced with this entry
   source: string | null; // e.g. "bible", "prayer", "manual"
   createdAt: number;
   updatedAt: number;
@@ -180,6 +182,14 @@ db.version(6).stores({
 // undefined and is filled in as days are read).
 db.version(7).stores({
   plans: "planId",
+});
+
+// Journal ↔ Prayer cross-referencing. Adds multiEntry indexes for the new link
+// arrays so we can look up either side. Non-indexed fields would work too (Dexie
+// stores arbitrary props), but the indexes make reverse lookups cheap and explicit.
+db.version(8).stores({
+  journal: "id, createdAt, updatedAt, *tags, *linkedOsis, *linkedPrayerIds",
+  prayers: "id, status, category, createdAt, answeredAt, *linkedJournalIds",
 });
 
 export function uid(): string {

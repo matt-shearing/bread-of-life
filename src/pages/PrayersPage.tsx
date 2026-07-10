@@ -1,17 +1,32 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Archive, Bell, BellRing, Check, CheckCircle2, HandHeart, Plus, RotateCcw, Sparkles, X } from "lucide-react";
-import { db, type Prayer, type PrayerCategory } from "@/db";
+import {
+  Archive,
+  Bell,
+  BellRing,
+  Check,
+  CheckCircle2,
+  HandHeart,
+  NotebookPen,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  X,
+} from "lucide-react";
+import { db, type JournalEntry, type Prayer, type PrayerCategory } from "@/db";
 import {
   addCustomPrayerCategory,
   addPrayer,
   archivePrayer,
   getCustomPrayerCategories,
+  linkJournalPrayer,
   markAnswered,
   prayedFor,
   removeCustomPrayerCategory,
   reopenPrayer,
   toggleRemind,
+  unlinkJournalPrayer,
 } from "@/db/repos";
 import { syncNow } from "@/db/sync";
 import {
@@ -64,6 +79,8 @@ export function PrayersPage() {
   const [tab, setTab] = useState<"active" | "answered">("active");
   const [adding, setAdding] = useState(false);
   const [answering, setAnswering] = useState<Prayer | null>(null);
+  const [params, setParams] = useSearchParams();
+  const [focusId, setFocusId] = useState<string | null>(null);
 
   // Lightweight touch pull-to-refresh (mobile): pull down at the top to force a sync.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -102,6 +119,30 @@ export function PrayersPage() {
   };
 
   const prayers = useLiveQuery(() => db.prayers.orderBy("createdAt").reverse().toArray(), [], []);
+
+  // Deep-link: /prayers?focus=<id> scrolls to and highlights that prayer (used by
+  // cross-references from journal entries and the Bible study rail).
+  useEffect(() => {
+    const focus = params.get("focus");
+    if (!focus) return;
+    const target = prayers?.find((p) => p.id === focus);
+    if (!target) return; // wait until prayers load
+    setTab(target.status === "answered" ? "answered" : "active");
+    setFocusId(focus);
+    params.delete("focus");
+    setParams(params, { replace: true });
+    const t = setTimeout(() => {
+      document.getElementById(`prayer-${focus}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [params, prayers, setParams]);
+
+  // Fade the highlight ring a couple of seconds after it appears.
+  useEffect(() => {
+    if (!focusId) return;
+    const clear = setTimeout(() => setFocusId(null), 2400);
+    return () => clearTimeout(clear);
+  }, [focusId]);
 
   const stats = useMemo(() => {
     const all = prayers ?? [];
@@ -185,6 +226,7 @@ export function PrayersPage() {
               <PrayerCard
                 key={p.id}
                 p={p}
+                focused={focusId === p.id}
                 onPrayed={() => prayedFor(p.id)}
                 onAnswer={() => setAnswering(p)}
                 onReopen={() => reopenPrayer(p.id)}
@@ -226,20 +268,40 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 
 function PrayerCard({
   p,
+  focused,
   onPrayed,
   onAnswer,
   onReopen,
   onArchive,
 }: {
   p: Prayer;
+  focused?: boolean;
   onPrayed: () => void;
   onAnswer: () => void;
   onReopen: () => void;
   onArchive: () => void;
 }) {
+  const navigate = useNavigate();
+  const [linking, setLinking] = useState(false);
   const answered = p.status === "answered";
+  const linkedJournals = useLiveQuery(
+    () =>
+      p.linkedJournalIds?.length
+        ? db.journal.where("id").anyOf(p.linkedJournalIds).toArray()
+        : Promise.resolve([] as JournalEntry[]),
+    [p.linkedJournalIds?.join(",")],
+    [] as JournalEntry[],
+  );
+
   return (
-    <Card className={cn("p-4", answered && "border-success/30 bg-success/5")}>
+    <Card
+      id={`prayer-${p.id}`}
+      className={cn(
+        "p-4 transition-shadow",
+        answered && "border-success/30 bg-success/5",
+        focused && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+      )}
+    >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -274,6 +336,26 @@ function PrayerCard({
               {p.lastPrayedAt ? ` · last ${new Date(p.lastPrayedAt).toLocaleDateString()}` : ""}
             </div>
           )}
+
+          {/* journal cross-references */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {(linkedJournals ?? []).map((j: JournalEntry) => (
+              <button
+                key={j.id}
+                onClick={() => navigate(`/journal?open=${j.id}`)}
+                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary-700 hover:bg-primary/10 dark:text-primary-300"
+              >
+                <NotebookPen style={{ width: 11, height: 11 }} />
+                {j.title}
+              </button>
+            ))}
+            <button
+              onClick={() => setLinking(true)}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+            >
+              <Plus style={{ width: 11, height: 11 }} /> Link a journal entry
+            </button>
+          </div>
         </div>
 
         <div className="flex shrink-0 flex-col gap-1.5">
@@ -296,7 +378,66 @@ function PrayerCard({
           )}
         </div>
       </div>
+
+      {linking && (
+        <JournalLinkPicker
+          prayerId={p.id}
+          linkedIds={p.linkedJournalIds ?? []}
+          onClose={() => setLinking(false)}
+        />
+      )}
     </Card>
+  );
+}
+
+function JournalLinkPicker({
+  prayerId,
+  linkedIds,
+  onClose,
+}: {
+  prayerId: string;
+  linkedIds: string[];
+  onClose: () => void;
+}) {
+  const entries = useLiveQuery(() => db.journal.orderBy("updatedAt").reverse().toArray(), [], []);
+  const linked = new Set(linkedIds);
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogTitle>Link a journal entry</DialogTitle>
+        {(entries ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">You have no journal entries yet.</p>
+        ) : (
+          <div className="max-h-[50vh] space-y-1.5 overflow-y-auto">
+            {(entries ?? []).map((j) => {
+              const on = linked.has(j.id);
+              return (
+                <button
+                  key={j.id}
+                  onClick={() =>
+                    on ? unlinkJournalPrayer(j.id, prayerId) : linkJournalPrayer(j.id, prayerId)
+                  }
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md border p-2.5 text-left transition-colors",
+                    on ? "border-primary bg-primary/5" : "border-border hover:bg-accent",
+                  )}
+                >
+                  <NotebookPen
+                    style={{ width: 15, height: 15 }}
+                    className={on ? "text-primary-600" : "text-muted-foreground"}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{j.title}</span>
+                  {on && <span className="text-xs text-primary-600">Linked</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex justify-end">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
