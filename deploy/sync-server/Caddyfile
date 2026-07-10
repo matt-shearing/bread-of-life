@@ -1,0 +1,20 @@
+{
+	email {$ACME_EMAIL}
+	order rate_limit before basic_auth
+}
+{$SYNC_DOMAIN} {
+	rate_limit {
+		zone sync {
+			key {remote_host}
+			events {$RATE_EVENTS}
+			window {$RATE_WINDOW}
+		}
+	}
+	request_body {
+		max_size 8MB
+	}
+	reverse_proxy sync:4000
+	log {
+		output stdout
+	}
+}

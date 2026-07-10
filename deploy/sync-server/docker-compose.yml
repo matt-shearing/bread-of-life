@@ -1,0 +1,54 @@
+# Bread of Life sync server + Caddy edge (auto-TLS + per-IP rate limit).
+# Same bundle serves the app-hosted instance and self-hosters.
+#   cp .env.example .env  # set SYNC_DOMAIN, ACME_EMAIL, TOKEN_SECRET
+#   docker compose up -d
+services:
+  sync:
+    build: .
+    container_name: bol-sync
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - DB_PATH=/app/data/sync.db
+      - TOKEN_SECRET=${TOKEN_SECRET}
+    volumes:
+      - sync-data:/app/data
+    expose:
+      - "4000"
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-512M}
+          cpus: ${CPU_LIMIT:-1.0}
+    networks: [bol-sync]
+
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy.Dockerfile
+    container_name: bol-sync-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SYNC_DOMAIN=${SYNC_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+      - RATE_EVENTS=${RATE_EVENTS:-300}
+      - RATE_WINDOW=${RATE_WINDOW:-1m}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [sync]
+    networks: [bol-sync]
+
+volumes:
+  sync-data:
+    name: bol-sync-data
+  caddy-data:
+  caddy-config:
+
+networks:
+  bol-sync:
+    name: bol-sync-net
