@@ -14,8 +14,13 @@ import { CompanionPage } from "@/pages/CompanionPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { startSync } from "@/db/sync";
 
-// Install sync hooks + kick off cross-device sync (no-op until signed in).
-startSync();
+// Safety net: if something throws before React mounts, show it instead of a
+// blank window (much easier to diagnose than a white screen).
+window.addEventListener("error", (e) => {
+  const el = document.getElementById("root");
+  if (el && !el.childElementCount)
+    el.innerHTML = `<pre style="color:#b00;padding:16px;white-space:pre-wrap;font:12px monospace">Startup error: ${e.message}\n${e.filename}:${e.lineno}\n${e.error?.stack ?? ""}</pre>`;
+});
 
 // HashRouter: works identically under Vite dev and Tauri's file:// asset loading.
 const router = createHashRouter([
@@ -41,3 +46,12 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </React.StrictMode>,
 );
+
+// Kick off sync AFTER render, guarded — it must never block the UI.
+setTimeout(() => {
+  try {
+    startSync();
+  } catch (e) {
+    console.error("sync init failed", e);
+  }
+}, 0);
