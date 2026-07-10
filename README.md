@@ -1,66 +1,80 @@
+<div align="center">
+
 # 🌾 Bread of Life
 
-A warm, **offline-first desktop homebase** for your devotional life — Bible reading, pluggable
-commentary, journalling, and an **answered-prayer log you can look back on to see what God has done**.
+**A warm, offline-first home for your walk with Christ.**
+Read the Word, keep a journal, and tend a prayer life you can look back on —
+built for busy people who long to know God more.
 
-Built from a first-principles rethink of several earlier attempts (see `docs/RESEARCH-NOTES.md`).
-It is small, local-first, and has no accounts, no cloud, and no meta-framework — on purpose.
+### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-## What's in v1 (working)
+</div>
 
-- **Bible reader** — the Berean Standard Bible (public domain / CC0), all 66 books bundled for full
-  offline use. Book/chapter navigation, section headings, and per-verse hover actions: highlight
-  (5 colors), note, copy, → journal, → prayer. Your reading position and streak are remembered.
-- **Prayers** ⭐ — add prayers, track how often you've prayed, and **mark them answered with a note on
-  _how_ God answered**. A dedicated *Answered* view is your record of answered prayer.
+---
+
+## ⬇️ Install now
+
+Free and open source on every platform. Beta desktop builds are unsigned — a quick
+"open anyway" and you're in.
+
+| Platform | Get it |
+|---|---|
+| 🤖 **Android** | **[Install with Obtainium](https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://app/%7B%22id%22%3A%20%22com.breadoflife.app%22%2C%20%22url%22%3A%20%22https%3A%2F%2Fgithub.com%2Fmatt-shearing%2Fbread-of-life%22%2C%20%22author%22%3A%20%22matt-shearing%22%2C%20%22name%22%3A%20%22Bread%20of%20Life%22%2C%20%22additionalSettings%22%3A%20%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22bread-of-life%5C%22%2C%20%5C%22invertAPKFilter%5C%22%3A%20false%7D%22%2C%20%22overrideSource%22%3A%20%22GitHub%22%7D)** (auto-updates) · or [sideload the APK](https://github.com/matt-shearing/bread-of-life/releases/latest) |
+| 🐧 **Linux** | [AppImage or `.deb`](https://github.com/matt-shearing/bread-of-life/releases/latest) · or on Arch: `yay -S bread-of-life-bin` |
+| 🪟 **Windows** | [`.exe` installer](https://github.com/matt-shearing/bread-of-life/releases/latest) |
+| 🍎 **macOS** | [Universal `.dmg`](https://github.com/matt-shearing/bread-of-life/releases/latest) (Apple Silicon + Intel) |
+
+> **Android via Obtainium:** tap the link on your phone (with [Obtainium](https://github.com/ImranR98/Obtainium)
+> installed) and it adds the app and keeps it updated from each GitHub release — no store, no account.
+> See [`docs/MOBILE.md`](docs/MOBILE.md). Desktop details in [`docs/DESKTOP.md`](docs/DESKTOP.md).
+
+<!-- SCREENSHOTS: added below once captured -->
+
+## What's inside
+
+- **The whole Word, offline** — the Berean Standard Bible (CC0), all 66 books bundled for full offline
+  use. Book/chapter nav, section headings, per-verse actions: highlight (5 colors), note, copy,
+  → journal, → prayer. Your reading position and streak are remembered.
+- **Answered-prayer log** ⭐ — add prayers, track how often you've prayed, and **mark them answered with a
+  note on _how_ God answered**. A dedicated *Answered* view is your record of His faithfulness.
 - **Journal** — entries with tags and verse links; capture a verse straight from the reader.
-- **Commentary rail** — public-domain commentaries (Matthew Henry, JFB, Clarke, Gill, K&D, Tyndale)
-  that track the chapter you're reading, cached locally after first fetch. _(Fetched on demand; the
-  first view of a chapter needs a connection, then it's offline.)_
+- **Reading plans & devotionals** — structured plans plus Spurgeon's *Morning & Evening* (and more).
+- **Commentary, cross-references & Strong's** — public-domain commentaries that track your chapter,
+  OpenBible cross-references, and Greek/Hebrew word study, right beside the text.
+- **AI study companion** — optional, grounded in the passage you're reading; bring your own key
+  (Claude, OpenAI, Grok, Gemini, DeepSeek, or local Ollama). Private and entirely your choice.
 - **Dashboard** — a warm landing: Verse of the Day, Continue Reading, reading streak, prayer counts,
-  recent journal.
+  recent journal, over a cozy countryside scene.
 
-All user data lives locally in your browser/app (IndexedDB). Scripture is static JSON.
+All user data lives locally on your device (offline-first). No accounts, no cloud, no tracking.
+Cross-device sync (end-to-end encrypted) is on the way.
 
-## Run it
+## Run it from source
 
 ```bash
 pnpm install
 pnpm fetch:bible     # downloads the BSB into public/bible/bsb/ (already present after first run)
 
 pnpm dev             # run in a browser at http://localhost:1420
-# or
 pnpm tauri:dev       # run as the native desktop app
+pnpm build           # typecheck + production web build → dist/
+pnpm tauri:build     # native installers (AppImage/deb on Linux, etc.)
 ```
 
-Build:
-
-```bash
-pnpm build                      # typecheck + web build → dist/
-pnpm tauri:build                # native installers (AppImage/deb on Linux, etc.)
-```
-
-## Install it
-
-- **Linux desktop** — grab the `.AppImage` (any distro) or `.deb` from the
-  [latest release](https://github.com/matt-shearing/bread-of-life/releases). See `docs/DESKTOP.md`.
-- **Android** — install via [Obtainium](https://github.com/ImranR98/Obtainium) pointed at this repo,
-  or sideload the release APK. See `docs/MOBILE.md`.
-
-## Stack
-
-Tauri 2 · React 18 + Vite + TypeScript · Tailwind + Radix · Zustand (UI state) · Dexie (data).
+**Stack:** Tauri 2 · React + Vite + TypeScript · Tailwind + Radix · Zustand (UI state) · Dexie (data).
 Scripture & commentary come from the [HelloAO Free Use Bible API](https://bible.helloao.org).
-See `docs/TECH-LANDSCAPE-2026.md` for the full rationale and `docs/PROJECT-BRIEF.md` for the plan.
 
-## Docs
+## Requesting features & reporting bugs
 
-- `docs/PROJECT-BRIEF.md` — the brief (vision, principles, scope, architecture, roadmap).
-- `docs/RESEARCH-NOTES.md` — what the earlier attempts taught us (the archaeology).
-- `docs/TECH-LANDSCAPE-2026.md` — technology choices and why.
+Have an idea or hit a snag? Use the **Request a feature** button in the app (Settings), or
+[open an issue](https://github.com/matt-shearing/bread-of-life/issues/new/choose). Feature requests are
+triaged and turned into changes here.
 
-## Credits & licensing
+## Docs & credits
 
-- **Berean Standard Bible** — public domain (CC0), via HelloAO.
-- Commentaries — public domain, via HelloAO.
-- The app itself is a personal project.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — where this is headed.
+- [`docs/MOBILE.md`](docs/MOBILE.md) · [`docs/DESKTOP.md`](docs/DESKTOP.md) — install & packaging.
+- [`CREDITS.md`](CREDITS.md) — scripture & study data are public-domain / CC-BY.
+
+The Berean Standard Bible is public domain (CC0). Bread of Life is free and open source under the
+[MIT License](LICENSE) — made with ♥, offline-first, for the glory of God.
