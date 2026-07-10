@@ -82,6 +82,20 @@ jobs:
             pnpm tauri build --bundles ${{ matrix.bundles }}
           fi
 
+      # The AppImage that Tauri/linuxdeploy produces bundles the ubuntu-22.04
+      # build machine's (old) WebKitGTK, which clashes with the newer system
+      # WebKit on rolling distros (Arch/EndeavourOS) → blank window. Strip the
+      # bundled WebKit/JSC so the AppImage uses the host's system webkit2gtk-4.1
+      # like the .deb/AUR already do. The .deb is left untouched.
+      - name: Unbundle WebKit from AppImage (Linux only)
+        if: matrix.os == 'ubuntu-22.04'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        shell: bash
+        run: |
+          chmod +x scripts/appimage-unbundle-webkit.sh
+          scripts/appimage-unbundle-webkit.sh
+
       - name: Collect bundles
         shell: bash
         run: |
