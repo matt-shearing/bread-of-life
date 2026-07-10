@@ -12,6 +12,10 @@ import { PlansPage } from "@/pages/PlansPage";
 import { DevotionalPage } from "@/pages/DevotionalPage";
 import { CompanionPage } from "@/pages/CompanionPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { startSync } from "@/db/sync";
+
+// Install sync hooks + kick off cross-device sync (no-op until signed in).
+startSync();
 
 // HashRouter: works identically under Vite dev and Tauri's file:// asset loading.
 const router = createHashRouter([

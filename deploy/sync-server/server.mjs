@@ -85,14 +85,23 @@ const readBody = (req) =>
       }
     });
   });
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+};
 const send = (res, code, obj) => {
-  res.writeHead(code, { "Content-Type": "application/json" });
+  res.writeHead(code, { "Content-Type": "application/json", ...CORS });
   res.end(JSON.stringify(obj));
 };
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = req.url || "";
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, CORS);
+      return res.end();
+    }
     if (req.method === "GET" && url === "/health") return send(res, 200, { ok: true });
     if (req.method !== "POST") return send(res, 404, { error: "not found" });
     const body = await readBody(req);

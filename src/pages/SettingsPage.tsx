@@ -5,6 +5,7 @@ import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
 import { requestFeature, reportBug } from "@/lib/feedback";
+import { SyncSettings } from "@/components/settings/SyncSettings";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -220,6 +221,8 @@ export function SettingsPage() {
               </p>
             </CardContent>
           </Card>
+
+          <SyncSettings />
 
           <Card>
             <CardHeader>

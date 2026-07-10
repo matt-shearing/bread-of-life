@@ -100,6 +100,19 @@ export interface CustomPlan {
   createdAt: number;
 }
 
+/** Sync bookkeeping (see src/db/sync.ts). */
+export interface OutboxEntry {
+  key: string; // `${table}:${id}` — dedups repeated edits to one pending change
+  table: string;
+  id: string;
+  op: "upsert" | "delete";
+  at: number;
+}
+export interface SyncStateRow {
+  key: string; // single row "main"
+  value: unknown;
+}
+
 export const db = new Dexie("bread-of-life") as Dexie & {
   highlights: EntityTable<Highlight, "id">;
   notes: EntityTable<Note, "id">;
@@ -112,6 +125,8 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   plans: EntityTable<PlanProgress, "planId">;
   devotions: EntityTable<DevotionDone, "id">;
   customPlans: EntityTable<CustomPlan, "id">;
+  outbox: EntityTable<OutboxEntry, "key">;
+  syncState: EntityTable<SyncStateRow, "key">;
 };
 
 db.version(1).stores({
@@ -138,6 +153,14 @@ db.version(4).stores({
 
 db.version(5).stores({
   customPlans: "id, createdAt",
+});
+
+// Cross-device sync: an outbox of pending local changes + a sync-state row.
+// Synced records also carry a runtime `updatedAt` (ms) stamped by the hooks in
+// src/db/sync.ts — no schema change needed for that (non-indexed field).
+db.version(6).stores({
+  outbox: "key, at",
+  syncState: "key",
 });
 
 export function uid(): string {
