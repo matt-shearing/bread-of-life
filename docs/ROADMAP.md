@@ -76,9 +76,33 @@ UI state can stay in Zustand/IndexedDB).
 4. Stand up the Evolu **relay** on OneQode (mode b) via the `oneqode-deploy` flow; document the
    self-host `docker run` (mode a).
 
-### Decision needed
-Adopt **Evolu** (A) and migrate the synced data layer to SQLite, or keep Dexie and hand-roll a
-minimal E2E sync service (B)? (C is the quick-but-proprietary fallback.) This gates the sync build.
+### Decision (2026-07-10): **Evolu (A)** ✅
+Chosen for the maintenance offload (Evolu owns auth/sync/conflict/security) with a Matt-hosted relay as
+the idiot-proof default and self-host as an optional toggle. E2E is *deferred* as a goal but Evolu
+provides it inherently (bonus); the only UX cost is a save-once recovery phrase to add a device.
+
+**Spike findings (2026-07-10):**
+- **Evolu needs React 19** (`@evolu/react@10` peer `react>=19`; we're on 18.3.1). So step 0 is a
+  React 18→19 bump (Radix/Tiptap/Zustand/react-router/Vite6 all support 19). Branch `spike/evolu-sync`
+  has the Evolu deps installed as a starting point.
+- Current API: `@evolu/common` + `@evolu/react` + `@evolu/react-web`; `createEvolu(evoluReactWebDeps)(
+  Schema, { name, transports:[{type:"WebSocket", url}] })`; schema via `Evolu.id()`/`Evolu.NonEmptyString100`
+  /`Evolu.SqliteBoolean` (auto system cols createdAt/updatedAt/isDeleted/ownerId); `useEvolu().insert/update`,
+  `evolu.createQuery`+`useQuery`. Default public relay `wss://free.evoluhq.com`; self/Matt-host sets a
+  custom `transports` url. Relay self-host via `@evolu/relay-node` (`createNodeJsRelay` + a SQLite driver).
+- OPFS persistence: the `opfs-sahpool` VFS avoids COOP/COEP cross-origin-isolation headers (which we must
+  avoid — the webview loads external images/fonts/HelloAO). **Still must confirm Evolu uses sahpool and
+  persists inside webkit2gtk (Linux/Mac) + Android WebView** — verify empirically once wired.
+
+**Build order:**
+1. **React 19 bump + spike** — upgrade React, wire a minimal Evolu table, verify SQLite-WASM
+   persistence works inside the Tauri webviews (webkit2gtk on Linux/Mac via WKWebView, Android System
+   WebView) with NO cross-origin-isolation headers. Browser (`pnpm dev`) + Android WebView are
+   Chromium-ish (low risk); webkit2gtk/WKWebView need an actual on-device check.
+2. Model synced entities as Evolu tables behind `src/db/`; keep ephemeral UI state in Zustand.
+3. One-time Dexie→Evolu importer on first run.
+4. Account screen: local-only (default) · hosted (Matt relay) · self-host (relay URL).
+5. Deploy the Evolu relay on OneQode ([[oneqode-cloud-deploy-access]]); document self-host `docker run`.
 
 ## Later (unchanged)
 - Matt's own commentary corpus as a pluggable source (`~/dev/commentary-parser`).
