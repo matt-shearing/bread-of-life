@@ -80,6 +80,28 @@ blocker. Steps:
    store listing (reuse the `fastlane/` text and screenshots), and submit for
    review.
 
+## Password managers show "tauri.localhost"
+
+When you create/sign in to a sync account on Android, a password manager (Proton
+Pass, Bitwarden, Google) saves the entry against **`tauri.localhost`** rather
+than `breadoflife.dev` or "Bread of Life".
+
+**Why:** the app runs inside a system WebView whose pages are served from Tauri's
+internal custom protocol. On Android/Windows that origin is fixed at
+`http://tauri.localhost`; on macOS/iOS/Linux it's `tauri://localhost`. Password
+managers key (and label) saved logins by the page **origin**, and Tauri v2
+exposes no config to rename that host — it isn't a real domain the app controls,
+so there is no `productName`/`identifier`/window-title knob that changes it. A
+true fix would require serving the app from an actual `https://breadoflife.dev`
+origin (a hosted webview / Digital Asset Links association), which we don't do —
+the app is offline-first and loads locally.
+
+**What we did do:** the sign-in UI is a real `<form>` with correct
+`autocomplete` hints (`username` / `current-password` / `new-password`) and field
+`name`s, so managers reliably recognise the login form and fill the right fields.
+The saved entry is still labelled `tauri.localhost`; renaming it is a manual step
+in the password manager. (Revisit if we ever move to a hosted-origin webview.)
+
 ## Notes
 
 - App id: `com.breadoflife.app`. Min SDK follows Tauri's default (24).
