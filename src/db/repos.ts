@@ -108,6 +108,13 @@ export async function archivePrayer(id: string) {
 
 export async function deletePrayer(id: string) {
   await db.prayers.delete(id);
+  // drop dangling back-references from any journal entries that pointed here
+  const linked = await db.journal.where("linkedPrayerIds").equals(id).toArray();
+  for (const j of linked) {
+    await updateJournalEntry(j.id, {
+      linkedPrayerIds: (j.linkedPrayerIds ?? []).filter((p) => p !== id),
+    });
+  }
 }
 
 export async function updatePrayer(id: string, patch: Partial<Prayer>) {
@@ -144,6 +151,43 @@ export async function updateJournalEntry(id: string, patch: Partial<JournalEntry
 
 export async function deleteJournalEntry(id: string) {
   await db.journal.delete(id);
+  // drop dangling back-references from any prayers that pointed here
+  const linked = await db.prayers.where("linkedJournalIds").equals(id).toArray();
+  for (const p of linked) {
+    await db.prayers.update(p.id, {
+      linkedJournalIds: (p.linkedJournalIds ?? []).filter((j) => j !== id),
+    });
+  }
+}
+
+/* --------------------------- journal ↔ prayer links ---------------------------- */
+
+/** Cross-reference a journal entry and a prayer, keeping both sides in sync. */
+export async function linkJournalPrayer(journalId: string, prayerId: string) {
+  const j = await db.journal.get(journalId);
+  const p = await db.prayers.get(prayerId);
+  if (!j || !p) return;
+  const jIds = new Set(j.linkedPrayerIds ?? []);
+  const pIds = new Set(p.linkedJournalIds ?? []);
+  jIds.add(prayerId);
+  pIds.add(journalId);
+  await updateJournalEntry(journalId, { linkedPrayerIds: [...jIds] });
+  await db.prayers.update(prayerId, { linkedJournalIds: [...pIds] });
+}
+
+export async function unlinkJournalPrayer(journalId: string, prayerId: string) {
+  const j = await db.journal.get(journalId);
+  const p = await db.prayers.get(prayerId);
+  if (j) {
+    await updateJournalEntry(journalId, {
+      linkedPrayerIds: (j.linkedPrayerIds ?? []).filter((id) => id !== prayerId),
+    });
+  }
+  if (p) {
+    await db.prayers.update(prayerId, {
+      linkedJournalIds: (p.linkedJournalIds ?? []).filter((id) => id !== journalId),
+    });
+  }
 }
 
 /* ---------------------------------- progress ----------------------------------- */

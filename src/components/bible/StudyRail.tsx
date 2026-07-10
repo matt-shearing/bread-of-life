@@ -1,8 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { BookMarked, Languages, Link2, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import { useLiveQuery } from "dexie-react-hooks";
+import { BookMarked, HandHeart, Languages, Link2, NotebookPen, Notebook, X } from "lucide-react";
 import { useUI } from "@/store/ui";
+import { db } from "@/db";
 import { bookByHo, parseOsis, refLabel } from "@/lib/osis";
 import { getChapterFor, verses } from "@/data/bible";
+import { htmlToText } from "@/components/journal/RichEditor";
 import {
   COMMENTARY_SOURCES,
   fetchCommentaryChapter,
@@ -34,6 +38,9 @@ export function StudyRail() {
         <TabButton active={railTab === "strongs"} onClick={() => setRailTab("strongs")} icon={<Languages style={{ width: 15, height: 15 }} />}>
           Strong's
         </TabButton>
+        <TabButton active={railTab === "references"} onClick={() => setRailTab("references")} icon={<Notebook style={{ width: 15, height: 15 }} />}>
+          References
+        </TabButton>
         <button
           onClick={toggleRail}
           aria-label="Close study panel"
@@ -46,6 +53,7 @@ export function StudyRail() {
         {railTab === "commentary" && <CommentaryPanel />}
         {railTab === "xref" && <XrefPanel />}
         {railTab === "strongs" && <StrongsPanel />}
+        {railTab === "references" && <ReferencesPanel />}
       </div>
     </aside>
   );
@@ -231,6 +239,105 @@ function XrefRow({ osis, onOpen }: { osis: string; onOpen: (ho: string, chapter:
       <div className="text-xs font-semibold text-primary-600">{osisLabel(osis)}</div>
       {text && <div className="mt-0.5 line-clamp-2 font-serif text-[13px] text-foreground/90">{text}</div>}
     </button>
+  );
+}
+
+/* -------------------------------- References -------------------------------- */
+
+/** Journal entries and prayers whose linkedOsis fall in the current chapter. If a
+ *  verse is selected, exact-verse matches float to the top. Tappable → the entry. */
+function ReferencesPanel() {
+  const { ho, chapter, selectedVerse } = useUI();
+  const navigate = useNavigate();
+  const journal = useLiveQuery(() => db.journal.toArray(), [], []);
+  const prayers = useLiveQuery(() => db.prayers.toArray(), [], []);
+
+  const refs = useMemo(() => {
+    type Ref = {
+      key: string;
+      kind: "journal" | "prayer";
+      id: string;
+      title: string;
+      snippet: string;
+      osis: string[];
+      exact: boolean;
+    };
+    const inChapter = (osis: string) => {
+      const p = parseOsis(osis);
+      return p != null && p.ho === ho && p.chapter === chapter;
+    };
+    const out: Ref[] = [];
+    for (const j of journal ?? []) {
+      const hits = j.linkedOsis.filter(inChapter);
+      if (!hits.length) continue;
+      out.push({
+        key: `j:${j.id}`,
+        kind: "journal",
+        id: j.id,
+        title: j.title,
+        snippet: htmlToText(j.body).slice(0, 140),
+        osis: hits,
+        exact: selectedVerse != null && hits.some((o) => parseOsis(o)?.verse === selectedVerse),
+      });
+    }
+    for (const p of prayers ?? []) {
+      const hits = p.linkedOsis.filter(inChapter);
+      if (!hits.length) continue;
+      out.push({
+        key: `p:${p.id}`,
+        kind: "prayer",
+        id: p.id,
+        title: p.title,
+        snippet: p.body.slice(0, 140),
+        osis: hits,
+        exact: selectedVerse != null && hits.some((o) => parseOsis(o)?.verse === selectedVerse),
+      });
+    }
+    return out.sort((a, b) => Number(b.exact) - Number(a.exact));
+  }, [journal, prayers, ho, chapter, selectedVerse]);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="mb-3 text-sm">
+        Your references in <span className="font-semibold">{refLabel(ho, chapter)}</span>
+      </div>
+      {refs.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No journal entries or prayers link to this chapter yet. Tag a verse from the journal editor,
+          or use the “J” / pray actions on a verse.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {refs.map((r) => (
+            <button
+              key={r.key}
+              onClick={() =>
+                navigate(r.kind === "journal" ? `/journal?open=${r.id}` : `/prayers?focus=${r.id}`)
+              }
+              className={cn(
+                "block w-full rounded-md border p-2.5 text-left hover:bg-accent/40",
+                r.exact ? "border-primary/50" : "border-border hover:border-primary/40",
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                {r.kind === "journal" ? (
+                  <NotebookPen style={{ width: 13, height: 13 }} className="shrink-0 text-primary-600" />
+                ) : (
+                  <HandHeart style={{ width: 13, height: 13 }} className="shrink-0 text-rose-500" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.title}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {r.osis.map((o) => parseOsis(o)?.verse).filter(Boolean).join(", ") || "ch."}
+                </span>
+              </div>
+              {r.snippet && (
+                <div className="mt-0.5 line-clamp-2 text-[13px] text-muted-foreground">{r.snippet}</div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -43,8 +43,8 @@ interface UIState {
   selectedVerse: number | null;
   selectVerse: (n: number | null) => void;
 
-  railTab: "commentary" | "xref" | "strongs";
-  setRailTab: (t: "commentary" | "xref" | "strongs") => void;
+  railTab: "commentary" | "xref" | "strongs" | "references";
+  setRailTab: (t: "commentary" | "xref" | "strongs" | "references") => void;
 
   activePlanId: string | null;
   setActivePlan: (id: string | null) => void;
