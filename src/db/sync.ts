@@ -21,6 +21,7 @@ const SYNCED = [
   "plans",
   "devotions",
   "customPlans",
+  "memory",
 ] as const;
 type SyncedTable = (typeof SYNCED)[number];
 const KEY_PATH: Record<SyncedTable, string> = {
@@ -33,6 +34,7 @@ const KEY_PATH: Record<SyncedTable, string> = {
   plans: "planId",
   devotions: "id",
   customPlans: "id",
+  memory: "id",
 };
 const isSynced = (t: string): t is SyncedTable => (SYNCED as readonly string[]).includes(t);
 

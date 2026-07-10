@@ -112,6 +112,33 @@ export interface CustomPlan {
   createdAt: number;
 }
 
+/**
+ * A verse the user is memorising, scheduled by a small SM-2 spaced-repetition
+ * engine (see gradeReview in src/db/repos.ts). One card per verse, keyed by OSIS.
+ * We keep a `text` snapshot so the review deck never has to re-open scripture and
+ * so a card survives even if the verse is later re-highlighted/cleared.
+ */
+export interface MemoryCard {
+  id: string; // osis — one card per verse
+  osis: string;
+  bbcccvvv: number;
+  ho: string;
+  chapter: number;
+  verse: number;
+  reference: string; // e.g. "John 3:16"
+  text: string; // snapshot of the verse text
+  translation: string; // where the snapshot came from (e.g. "BSB")
+  source: "reader" | "starter";
+  // SM-2 scheduling state
+  easeFactor: number; // EF, starts at 2.5, floored at 1.3
+  intervalDays: number; // current interval in days (0 = brand new / relearning)
+  repetitions: number; // consecutive successful reviews
+  lapses: number; // times graded "Again" after being learned
+  dueAt: number; // ms timestamp when the card is next due
+  lastReviewedAt: number | null;
+  createdAt: number;
+}
+
 /** Sync bookkeeping (see src/db/sync.ts). */
 export interface OutboxEntry {
   key: string; // `${table}:${id}` — dedups repeated edits to one pending change
@@ -137,6 +164,7 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   plans: EntityTable<PlanProgress, "planId">;
   devotions: EntityTable<DevotionDone, "id">;
   customPlans: EntityTable<CustomPlan, "id">;
+  memory: EntityTable<MemoryCard, "id">;
   outbox: EntityTable<OutboxEntry, "key">;
   syncState: EntityTable<SyncStateRow, "key">;
 };
@@ -190,6 +218,12 @@ db.version(7).stores({
 db.version(8).stores({
   journal: "id, createdAt, updatedAt, *tags, *linkedOsis, *linkedPrayerIds",
   prayers: "id, status, category, createdAt, answeredAt, *linkedJournalIds",
+});
+
+// Memory verses + SM-2 spaced repetition. `dueAt` is indexed so the review deck
+// can cheaply query cards due now.
+db.version(9).stores({
+  memory: "id, osis, bbcccvvv, dueAt, createdAt",
 });
 
 export function uid(): string {

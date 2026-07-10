@@ -3,10 +3,11 @@ import {
   uid,
   type HighlightColor,
   type JournalEntry,
+  type MemoryCard,
   type Prayer,
   type PrayerCategory,
 } from "./index";
-import { toBbcccvvv, toOsis } from "@/lib/osis";
+import { refLabel, toBbcccvvv, toOsis } from "@/lib/osis";
 
 /* ---------------------------------- highlights --------------------------------- */
 
@@ -316,6 +317,110 @@ export async function deleteCustomPlan(id: string) {
 export async function setDevotionDone(id: string, done: boolean) {
   if (done) await db.devotions.put({ id, completedAt: Date.now() });
   else await db.devotions.delete(id);
+}
+
+/* ------------------------------- memory verses -------------------------------- */
+
+const DAY_MS = 86_400_000;
+const START_EASE = 2.5;
+const MIN_EASE = 1.3;
+
+/** The four review buttons. We map them to an SM-2 "quality" (q) score below. */
+export type Grade = "again" | "hard" | "good" | "easy";
+const QUALITY: Record<Grade, number> = { again: 2, hard: 3, good: 4, easy: 5 };
+
+/**
+ * Add a verse to the memory pool (idempotent per verse — re-adding just refreshes
+ * the text snapshot, never resets the schedule). New cards are due immediately so
+ * they appear in today's deck.
+ */
+export async function addMemoryVerse(input: {
+  ho: string;
+  chapter: number;
+  verse: number;
+  text: string;
+  translation?: string;
+  source?: MemoryCard["source"];
+}): Promise<string> {
+  const { ho, chapter, verse } = input;
+  const osis = toOsis(ho, chapter, verse);
+  const existing = await db.memory.get(osis);
+  if (existing) {
+    await db.memory.update(osis, { text: input.text.trim(), translation: input.translation ?? existing.translation });
+    return osis;
+  }
+  const now = Date.now();
+  await db.memory.put({
+    id: osis,
+    osis,
+    bbcccvvv: toBbcccvvv(ho, chapter, verse),
+    ho,
+    chapter,
+    verse,
+    reference: refLabel(ho, chapter, verse),
+    text: input.text.trim(),
+    translation: input.translation ?? "BSB",
+    source: input.source ?? "reader",
+    easeFactor: START_EASE,
+    intervalDays: 0,
+    repetitions: 0,
+    lapses: 0,
+    dueAt: now, // due right away
+    lastReviewedAt: null,
+    createdAt: now,
+  });
+  return osis;
+}
+
+export async function removeMemoryVerse(id: string) {
+  await db.memory.delete(id);
+}
+
+export function isMemorised(card: Pick<MemoryCard, "repetitions" | "intervalDays">): boolean {
+  return card.repetitions >= 2 && card.intervalDays >= 21;
+}
+
+/**
+ * SM-2 (SuperMemo 2) update. Buttons → quality q:
+ *   again=2 (fail) · hard=3 · good=4 · easy=5.
+ * On a pass (q ≥ 3): interval grows 1 → 6 → round(interval × EF); repetitions++.
+ * On a fail  (q < 3): repetitions reset to 0, card relearns from a 1-day interval,
+ *   lapses++. Ease factor is nudged by the classic SM-2 formula and floored at 1.3.
+ * Returns the updated card.
+ */
+export async function gradeReview(id: string, grade: Grade): Promise<MemoryCard | undefined> {
+  const card = await db.memory.get(id);
+  if (!card) return undefined;
+  const q = QUALITY[grade];
+  const now = Date.now();
+
+  // Ease factor update (identical for pass/fail in SM-2).
+  let ef = card.easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+  if (ef < MIN_EASE) ef = MIN_EASE;
+
+  let repetitions = card.repetitions;
+  let intervalDays = card.intervalDays;
+  let lapses = card.lapses;
+
+  if (q < 3) {
+    // Failed — relearn. Keep it due again today so it comes back this session.
+    repetitions = 0;
+    intervalDays = 0;
+    lapses += 1;
+  } else {
+    repetitions += 1;
+    if (repetitions === 1) intervalDays = 1;
+    else if (repetitions === 2) intervalDays = 6;
+    else intervalDays = Math.round(card.intervalDays * ef);
+    // "Hard" earns a shorter step than "Good"/"Easy" without stalling progress.
+    if (grade === "hard" && repetitions > 2) intervalDays = Math.max(1, Math.round(intervalDays * 0.7));
+    if (grade === "easy") intervalDays = Math.round(intervalDays * 1.3);
+  }
+
+  const dueAt = intervalDays === 0 ? now : now + intervalDays * DAY_MS;
+  const patch = { easeFactor: ef, intervalDays, repetitions, lapses, dueAt, lastReviewedAt: now };
+  await db.memory.update(id, patch);
+  return { ...card, ...patch };
 }
 
 /* ---------------------------------- settings ----------------------------------- */

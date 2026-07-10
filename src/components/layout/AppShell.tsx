@@ -5,13 +5,14 @@ import { MobileNav } from "./MobileNav";
 import { useUI } from "@/store/ui";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
-import { maybeNotifyDevotion, maybeNotifyPrayers } from "@/lib/notify";
+import { maybeNotifyDevotion, maybeNotifyMemory, maybeNotifyPrayers } from "@/lib/notify";
 
 export function AppShell() {
   const theme = useUI((s) => s.theme);
   const notifyPrayers = useUI((s) => s.notifyPrayers);
   const notifyDevotion = useUI((s) => s.notifyDevotion);
   const devotionTime = useUI((s) => s.devotionTime);
+  const notifyMemory = useUI((s) => s.notifyMemory);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -21,6 +22,10 @@ export function AppShell() {
   useEffect(() => {
     maybeNotifyPrayers(notifyPrayers);
   }, [notifyPrayers]);
+
+  useEffect(() => {
+    maybeNotifyMemory(notifyMemory);
+  }, [notifyMemory]);
 
   // Devotional reminder: check on mount and once a minute while the app is open.
   useEffect(() => {

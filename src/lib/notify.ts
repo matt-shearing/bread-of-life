@@ -30,6 +30,25 @@ export async function maybeNotifyDevotion(enabled: boolean, timeHHMM: string): P
   new Notification("Bread of Life", { body: "Time for your Morning & Evening devotional." });
 }
 
+let memoryNotifiedThisSession = false;
+
+/** Once per day, nudge to review the memory-verse deck ("hide it in your heart").
+ *  Fires at most once per session and once per calendar day, only when cards are
+ *  actually due. Safe to call on every app open. */
+export async function maybeNotifyMemory(enabled: boolean): Promise<void> {
+  if (memoryNotifiedThisSession || !enabled) return;
+  memoryNotifiedThisSession = true;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (localStorage.getItem("bol-memory-notified") === todayKey) return;
+  const due = await db.memory.where("dueAt").belowOrEqual(Date.now()).count();
+  if (due <= 0) return;
+  localStorage.setItem("bol-memory-notified", todayKey);
+  new Notification("Bread of Life", {
+    body: `${due} verse${due === 1 ? "" : "s"} to hide in your heart today — visit Memory Lane.`,
+  });
+}
+
 /** Once per app launch, if enabled and permitted, nudge about due prayers. */
 export async function maybeNotifyPrayers(enabled: boolean): Promise<void> {
   if (notifiedThisSession || !enabled) return;

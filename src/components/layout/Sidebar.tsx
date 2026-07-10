@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import {
   BookHeart,
   BookOpen,
+  Brain,
   CalendarCheck,
   HandHeart,
   Home,
@@ -28,6 +29,7 @@ const NAV = [
   { to: "/search", label: "Search", icon: Search, end: false },
   { to: "/plans", label: "Plans", icon: CalendarCheck, end: false },
   { to: "/devotional", label: "Devotional", icon: BookHeart, end: false },
+  { to: "/memory", label: "Memory Lane", icon: Brain, end: false },
   { to: "/prayers", label: "Prayers", icon: HandHeart, end: false },
   { to: "/journal", label: "Journal", icon: NotebookPen, end: false },
   { to: "/companion", label: "Companion", icon: Sparkles, end: false },
