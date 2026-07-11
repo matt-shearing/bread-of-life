@@ -14,6 +14,7 @@ import { DevotionalPage } from "@/pages/DevotionalPage";
 import { CompanionPage } from "@/pages/CompanionPage";
 import { MemoryLanePage } from "@/pages/MemoryLanePage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { FaithfulnessPage } from "@/pages/FaithfulnessPage";
 import { startSync } from "@/db/sync";
 
 // Safety net: if something throws before React mounts, show it instead of a
@@ -43,6 +44,8 @@ const router = createHashRouter([
       { path: "settings", element: <SettingsPage /> },
     ],
   },
+  // Standalone (outside the app shell) so it prints cleanly to PDF.
+  { path: "/faithfulness", element: <FaithfulnessPage /> },
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

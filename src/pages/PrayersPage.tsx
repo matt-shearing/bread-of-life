@@ -76,6 +76,7 @@ const PULL_THRESHOLD = 64; // px pulled before a release triggers a sync
 const PULL_MAX = 96;
 
 export function PrayersPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<"active" | "answered">("active");
   const [adding, setAdding] = useState(false);
   const [answering, setAnswering] = useState<Prayer | null>(null);
@@ -223,6 +224,17 @@ export function PrayersPage() {
             <Sparkles style={{ width: 16, height: 16 }} /> Answered ({stats.answered})
           </TabBtn>
         </div>
+
+        {tab === "answered" && stats.answered > 0 && (
+          <button
+            onClick={() => navigate("/faithfulness")}
+            className="mb-4 flex w-full items-center gap-2 rounded-lg border border-success/30 bg-success/5 px-4 py-2.5 text-sm font-medium text-success hover:bg-success/10"
+          >
+            <Sparkles style={{ width: 16, height: 16 }} />
+            Faithfulness review — look back over how God has answered
+            <span className="ml-auto text-xs opacity-70">Save as PDF →</span>
+          </button>
+        )}
 
         {list.length === 0 ? (
           <EmptyState tab={tab} onAdd={() => setAdding(true)} />

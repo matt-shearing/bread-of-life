@@ -72,6 +72,19 @@
   }
 }
 
+/* Print-to-PDF (the Faithfulness review): give pages real margins and let the
+   document flow naturally on a white page regardless of on-screen sizing. */
+@media print {
+  @page {
+    margin: 1.6cm;
+  }
+  html,
+  body {
+    overflow: visible !important;
+    background: #fff !important;
+  }
+}
+
 /* Highlight colors for verses (amber is the signature default). */
 .hl-amber { background-color: #fef3c7; }
 .hl-rose { background-color: #ffe4e6; }
