@@ -8,9 +8,10 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.1** — real OS notifications with scheduled daily reminders (reading plan, devotional,
-memory & prayers) that reach you even when the app is closed, plus Pixel Fold / tablet polish (guided-plan
-references, collapsed-sidebar spacing, and no more crowded auto-opening commentary on touch).
+**Latest: v0.3.2** — a **Faithfulness review** (save your answered-prayer record as a PDF), a dedicated
+**Commentary** section, **optional end-to-end encryption** of your synced journal/prayers/notes (with a
+24-word recovery phrase), the **Missler Inspired** commentary + per-chapter audio (from your own local
+library), and richer, deep-linking notifications. Builds on v0.3.1's scheduled reminders + Fold/tablet polish.
 
 **v0.3.0** — adds **Memory Lane** (memorise verses with spaced-repetition review), an
 **on-rails guided reading-plan mode**, richer journal ↔ prayer cross-linking, a first-run onboarding
