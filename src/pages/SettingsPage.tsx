@@ -28,6 +28,10 @@ export function SettingsPage() {
     setDevotionTime,
     notifyMemory,
     setNotifyMemory,
+    notifyPlan,
+    setNotifyPlan,
+    reminderTime,
+    setReminderTime,
     ai,
     setAI,
   } = useUI();
@@ -177,6 +181,45 @@ export function SettingsPage() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   A gentle daily nudge to review the verses you’re hiding in your heart, whenever cards
                   are due in Memory Lane.
+                </p>
+              </div>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <Row label="Reading plan reminder">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (notifyPlan) {
+                        setNotifyPlan(false);
+                      } else {
+                        await enablePrayerNotifications();
+                        setNotifyPlan(true);
+                      }
+                    }}
+                  >
+                    {notifyPlan ? "On" : "Off"}
+                  </Button>
+                </Row>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  A daily reminder to keep up with your reading plan. Turned on automatically when you
+                  start a plan.
+                </p>
+              </div>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <Row label="Reminder time">
+                  <input
+                    type="time"
+                    value={reminderTime}
+                    onChange={(e) => setReminderTime(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  />
+                </Row>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  When your prayer, memory-verse and reading-plan reminders arrive each day. In the
+                  installed app these are scheduled with your device, so they can reach you even when
+                  Bread of Life isn’t open.
                 </p>
               </div>
             </CardContent>

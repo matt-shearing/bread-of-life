@@ -76,6 +76,13 @@ interface UIState {
   setNotifyDevotion: (v: boolean) => void;
   setDevotionTime: (t: string) => void;
 
+  // reading-plan daily reminder (defaults ON when a plan is enrolled)
+  notifyPlan: boolean;
+  setNotifyPlan: (v: boolean) => void;
+  // shared clock time for the memory / prayers / plan daily reminders
+  reminderTime: string; // "HH:MM"
+  setReminderTime: (t: string) => void;
+
   // memory verses ("Memory Lane")
   notifyMemory: boolean; // opt-in daily "verse to hide in your heart" nudge
   setNotifyMemory: (v: boolean) => void;
@@ -160,7 +167,9 @@ export const useUI = create<UIState>()(
       setRailTab: (t) => set({ railTab: t }),
 
       activePlanId: null,
-      setActivePlan: (id) => set({ activePlanId: id }),
+      // Enrolling in a plan turns its daily reminder on by default (the user can
+      // switch it off in Settings). Un-enrolling leaves the toggle as-is.
+      setActivePlan: (id) => set(id ? { activePlanId: id, notifyPlan: true } : { activePlanId: id }),
 
       notifyPrayers: false,
       setNotifyPrayers: (v) => set({ notifyPrayers: v }),
@@ -172,6 +181,11 @@ export const useUI = create<UIState>()(
       devotionTime: "07:00",
       setNotifyDevotion: (v) => set({ notifyDevotion: v }),
       setDevotionTime: (t) => set({ devotionTime: t }),
+
+      notifyPlan: false,
+      setNotifyPlan: (v) => set({ notifyPlan: v }),
+      reminderTime: "08:00",
+      setReminderTime: (t) => set({ reminderTime: t }),
 
       notifyMemory: false,
       setNotifyMemory: (v) => set({ notifyMemory: v }),
