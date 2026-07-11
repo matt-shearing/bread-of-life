@@ -9,9 +9,12 @@ import { getChapterFor, verses } from "@/data/bible";
 import { htmlToText } from "@/components/journal/RichEditor";
 import {
   COMMENTARY_SOURCES,
+  MISSLER_SOURCE,
   fetchCommentaryChapter,
   type CommentaryChapter,
+  type CommentarySource,
 } from "@/data/commentary";
+import { misslerAvailable } from "@/data/missler";
 import {
   getCrossRefs,
   getHebrewVerse,
@@ -140,10 +143,25 @@ function TabButton({
 
 /* -------------------------------- Commentary -------------------------------- */
 
+/** The public-domain set, plus the local Missler library once its folder is set. */
+function useAvailableCommentarySources(): CommentarySource[] {
+  const [missler, setMissler] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    misslerAvailable().then((ok) => alive && setMissler(ok));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return missler ? [...COMMENTARY_SOURCES, MISSLER_SOURCE] : COMMENTARY_SOURCES;
+}
+
 function CommentaryPanel() {
-  const { ho, chapter, commentarySource, setCommentarySource } = useUI();
+  const { ho, chapter, commentarySource, setCommentarySource, goTo } = useUI();
+  const sources = useAvailableCommentarySources();
   const [data, setData] = useState<CommentaryChapter | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "empty">("loading");
+  const isMissler = commentarySource === MISSLER_SOURCE.id;
 
   useEffect(() => {
     let alive = true;
@@ -164,7 +182,7 @@ function CommentaryPanel() {
   return (
     <div>
       <div className="flex flex-wrap gap-1 border-b border-border px-3 py-2">
-        {COMMENTARY_SOURCES.map((s) => (
+        {sources.map((s) => (
           <button
             key={s.id}
             onClick={() => setCommentarySource(s.id)}
@@ -194,21 +212,47 @@ function CommentaryPanel() {
             )}
             {data.blocks.map((b) => (
               <div key={b.verse}>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary-600">Verse {b.verse}</div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary-600">
+                  {b.endVerse && b.endVerse !== b.verse ? `Verses ${b.verse}–${b.endVerse}` : `Verse ${b.verse}`}
+                </div>
                 {b.paragraphs.map((p, i) => (
                   <p key={i} className="mb-2 text-[13.5px] text-foreground/90">
                     {p}
                   </p>
                 ))}
+                {b.xrefs && b.xrefs.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {b.xrefs.map((x) => (
+                      <XrefChip key={x} osis={x} onOpen={goTo} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             <p className="pt-2 text-center text-[11px] text-muted-foreground">
-              {COMMENTARY_SOURCES.find((s) => s.id === commentarySource)?.name} · Public Domain
+              {isMissler
+                ? "Chuck Missler · Line by Line — personal library, not for redistribution"
+                : `${sources.find((s) => s.id === commentarySource)?.name} · Public Domain`}
             </p>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+/** A small clickable cross-reference chip (Missler blocks). Ranges like
+ *  "Heb.1.1-Heb.1.3" jump to the start ref's chapter, mirroring the Cross-refs tab. */
+function XrefChip({ osis, onOpen }: { osis: string; onOpen: (ho: string, chapter: number) => void }) {
+  const p = parseOsis(osis.split("-")[0]);
+  if (!p) return null;
+  return (
+    <button
+      onClick={() => onOpen(p.ho, p.chapter)}
+      className="rounded-full border border-border px-2 py-0.5 text-[11px] text-primary-600 transition-colors hover:border-primary/40 hover:bg-accent"
+    >
+      {osisLabel(osis)}
+    </button>
   );
 }
 

@@ -20,8 +20,24 @@ import {
   Tooltip,
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { getMisslerAudio } from "@/data/missler";
 import { CaptureDialog } from "./CaptureDialog";
 import { AudioPlayer } from "./AudioPlayer";
+
+/** Missler chapter audio (label → URL) merged alongside the BSB narrators, or `{}`
+ *  when no local library is configured. Keyed off the current chapter. */
+function useMisslerAudio(ho: string, chapter: number): Record<string, string> {
+  const [entries, setEntries] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    setEntries({}); // drop the previous chapter's entries while the new ones load
+    getMisslerAudio(ho, chapter).then((e) => alive && setEntries(e));
+    return () => {
+      alive = false;
+    };
+  }, [ho, chapter]);
+  return entries;
+}
 
 const COLORS: { key: HighlightColor; className: string }[] = [
   { key: "amber", className: "hl-amber" },
@@ -45,6 +61,7 @@ export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } =
     useUI();
   const { step } = useChapterNav();
   const navigate = useNavigate();
+  const misslerAudio = useMisslerAudio(ho, chapter);
   const [ch, setCh] = useState<Chapter | null>(null);
   const [ch2, setCh2] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,6 +134,10 @@ export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } =
     return m;
   }, [ch2]);
 
+  // Stable merged audio set (BSB narrators + Missler) — a fresh object literal each
+  // render would retrigger AudioPlayer's chapter-reset effect and stall playback.
+  const audio = useMemo(() => ({ ...ch?.audio, ...misslerAudio }), [ch, misslerAudio]);
+
   const order = bookByHo(ho)?.order ?? 0;
   const start = order * 1_000_000 + chapter * 1_000;
   const end = start + 999;
@@ -175,7 +196,7 @@ export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } =
       <article className={cn("mx-auto px-4 py-6 md:px-8 md:py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
         <div className="mb-6 flex items-center justify-between gap-3">
           <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
-          <AudioPlayer audio={ch.audio} />
+          <AudioPlayer audio={audio} />
         </div>
         {parallel && (
           <div className="mb-3 grid grid-cols-2 gap-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

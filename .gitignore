@@ -23,3 +23,7 @@ art/image-gen/icons/
 
 # subagent worktrees (isolation:worktree)
 .claude/worktrees/
+
+# Missler personal library — dev symlink to a LOCAL, copyrighted folder.
+# Never commit the library or the link; the app reads it from a user-set path.
+/public/missler-library
