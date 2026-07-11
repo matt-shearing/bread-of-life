@@ -30,6 +30,7 @@ function useMisslerAudio(ho: string, chapter: number): Record<string, string> {
   const [entries, setEntries] = useState<Record<string, string>>({});
   useEffect(() => {
     let alive = true;
+    setEntries({}); // drop the previous chapter's entries while the new ones load
     getMisslerAudio(ho, chapter).then((e) => alive && setEntries(e));
     return () => {
       alive = false;
