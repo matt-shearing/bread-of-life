@@ -6,6 +6,7 @@ import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
 import { requestFeature, reportBug } from "@/lib/feedback";
 import { SyncSettings } from "@/components/settings/SyncSettings";
+import { MisslerSettings } from "@/components/settings/MisslerSettings";
 import { version as APP_VERSION } from "../../package.json";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
@@ -301,6 +302,8 @@ export function SettingsPage() {
               </p>
             </CardContent>
           </Card>
+
+          <MisslerSettings />
 
           <SyncSettings />
 
