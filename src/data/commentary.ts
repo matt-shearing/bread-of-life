@@ -23,9 +23,25 @@ export const COMMENTARY_SOURCES: CommentarySource[] = [
   { id: "tyndale", name: "Tyndale", short: "Tyn" },
 ];
 
+/**
+ * Missler is kept OUT of COMMENTARY_SOURCES (which is the fixed public-domain set)
+ * because it only exists when the user has pointed at their local library. The
+ * commentary panel appends this pill at runtime once `misslerAvailable()` is true.
+ */
+export const MISSLER_SOURCE: CommentarySource = {
+  id: "missler",
+  name: "Missler (Line by Line)",
+  short: "Missler",
+};
+
 export interface CommentaryBlock {
   verse: number;
+  /** Missler groups verses; when present and different from `verse` the block spans
+   *  a range (rendered "Verses 19–28"). Absent for single-verse public-domain blocks. */
+  endVerse?: number;
   paragraphs: string[];
+  /** OSIS refs (Missler only), e.g. "Heb.1.1-Heb.1.3" — rendered as clickable chips. */
+  xrefs?: string[];
 }
 export interface CommentaryChapter {
   intro?: string;
@@ -53,6 +69,12 @@ export async function fetchCommentaryChapter(
   ho: string,
   chapter: number,
 ): Promise<CommentaryChapter | null> {
+  // The local Missler library reads from disk, never HelloAO/Dexie.
+  if (source === MISSLER_SOURCE.id) {
+    const { getMisslerCommentary } = await import("./missler");
+    return getMisslerCommentary(ho, chapter);
+  }
+
   const key = `${source}:${toOsis(ho, chapter)}`;
   const cached = await db.commentary.get(key);
   if (cached) return JSON.parse(cached.html) as CommentaryChapter;
