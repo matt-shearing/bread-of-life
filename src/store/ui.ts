@@ -34,6 +34,13 @@ interface UIState {
   railWidth: number; // desktop study-rail width in px (clamped)
   setRailWidth: (px: number) => void;
 
+  // Discovery: has the study rail EVER been opened, and how many times the Bible
+  // page has been opened — used to coach commentary on touch tablets/folds (where
+  // the rail no longer auto-opens) without nagging people who already found it.
+  railEverOpened: boolean;
+  bibleOpens: number;
+  noteBibleOpen: () => number; // increment + return the new count
+
   // left nav (Spotify-style collapse to icons-only on desktop)
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
@@ -117,11 +124,22 @@ export const useUI = create<UIState>()(
       setParallel: (id) => set({ parallel: id }),
 
       railOpen: false,
-      toggleRail: () => set((s) => ({ railOpen: !s.railOpen })),
-      setRailOpen: (open) => set({ railOpen: open }),
+      toggleRail: () => set((s) => ({ railOpen: !s.railOpen, railEverOpened: s.railEverOpened || !s.railOpen })),
+      setRailOpen: (open) => set((s) => ({ railOpen: open, railEverOpened: s.railEverOpened || open })),
 
       railWidth: 360,
       setRailWidth: (px) => set({ railWidth: Math.min(640, Math.max(280, Math.round(px))) }),
+
+      railEverOpened: false,
+      bibleOpens: 0,
+      noteBibleOpen: () => {
+        let n = 0;
+        set((s) => {
+          n = s.bibleOpens + 1;
+          return { bibleOpens: n };
+        });
+        return n;
+      },
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),

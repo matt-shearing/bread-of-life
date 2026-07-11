@@ -85,15 +85,18 @@ export function Sidebar() {
             <NavLink
               to={to}
               end={end}
-              className={({ isActive }) =>
-                cn(
-                  "relative flex items-center rounded-md text-sm font-medium transition-colors",
-                  collapsed ? "justify-center py-2.5" : "gap-3 px-3 py-2.5",
-                  isActive
-                    ? "bg-primary/15 text-primary-700 dark:text-primary-300"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )
-              }
+              // Plain-STRING className (not a function): when collapsed, MaybeTooltip
+              // wraps this in a Radix Tooltip whose asChild Slot stringifies a function
+              // className (dropping every class → the old "cramped, no-highlight"
+              // collapsed rail). react-router adds an `active` class we hook with
+              // [&.active]: variants instead. Collapsed items keep the SAME 40px row
+              // height + 18px icon as expanded, just centered without a label.
+              className={cn(
+                "relative flex items-center rounded-md text-sm font-medium transition-colors",
+                "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                "[&.active]:bg-primary/15 [&.active]:text-primary-700 dark:[&.active]:text-primary-300",
+                collapsed ? "h-10 justify-center" : "gap-3 px-3 py-2.5",
+              )}
             >
               <Icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
               {!collapsed && <span className="flex-1">{label}</span>}
@@ -120,13 +123,13 @@ export function Sidebar() {
         <MaybeTooltip show={collapsed} label="Settings">
           <NavLink
             to="/settings"
-            className={({ isActive }) =>
-              cn(
-                "flex items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                collapsed ? "h-9 w-9 justify-center" : "gap-2 px-3 py-2",
-                isActive && "text-foreground",
-              )
-            }
+            // Plain-string className (see the nav NavLink above): the collapsed Tooltip
+            // Slot would stringify a function className. `active` class via react-router.
+            className={cn(
+              "flex items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              "[&.active]:text-foreground",
+              collapsed ? "h-10 w-10 justify-center" : "gap-2 px-3 py-2",
+            )}
           >
             <Settings style={{ width: 18, height: 18 }} />
             {!collapsed && "Settings"}

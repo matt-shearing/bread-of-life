@@ -31,7 +31,7 @@ function greeting() {
 
 function TodaysPlan() {
   const navigate = useNavigate();
-  const { goTo, activePlanId } = useUI();
+  const { activePlanId } = useUI();
   const [plan, setPlan] = useState<Plan | null>(null);
 
   useEffect(() => {
@@ -84,10 +84,10 @@ function TodaysPlan() {
           {readings.map((r, i) => (
             <button
               key={i}
-              onClick={() => {
-                goTo(r.ho, r.chapter);
-                navigate("/bible");
-              }}
+              // Clicking a reading in the plan bubble drops into the ON-RAILS guided
+              // reader at that reading (so it ticks off + tracks completion), not the
+              // plain Bible page.
+              onClick={() => navigate(`/guided/${activePlanId}/${today}?reading=${i}`)}
               className="rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent"
             >
               {refLabel(r.ho, r.chapter)}

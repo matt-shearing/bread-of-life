@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlignLeft, ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Rows3, Search } from "lucide-react";
 import { ChapterPicker } from "@/components/bible/ChapterPicker";
@@ -6,26 +6,40 @@ import { TranslationPicker } from "@/components/bible/TranslationPicker";
 import { ParallelPicker } from "@/components/bible/ParallelPicker";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
+import { StudyRailCoach } from "@/components/bible/StudyRailCoach";
 import { useUI } from "@/store/ui";
+import { isDesktopMouse } from "@/lib/device";
 import { useChapterNav } from "@/lib/useChapterNav";
 import { Button, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function BiblePage() {
-  const { railOpen, toggleRail, setRailOpen, readingLayout, setReadingLayout } = useUI();
+  const { railOpen, toggleRail, setRailOpen, readingLayout, setReadingLayout, railEverOpened, noteBibleOpen } = useUI();
   const navigate = useNavigate();
   const { step } = useChapterNav();
+  const [coach, setCoach] = useState<null | "toggle" | "resize">(null);
 
-  // On desktop, surface the study rail (commentary/cross-refs/Strong's) by
-  // default when opening the Bible so its richness is discovered — the reader
-  // can close it. On phones it stays closed (there it's a full-screen overlay).
+  // Only a real DESKTOP (a wide screen with a mouse) auto-opens the study rail —
+  // there it enriches without crowding. On touch tablets/folds (coarse pointer,
+  // same md width) it would squeeze the reader into a sliver, so we leave it
+  // closed and instead, occasionally, coach where to find it (if never opened).
   useEffect(() => {
-    if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) {
+    if (typeof window === "undefined") return;
+    if (isDesktopMouse()) {
       setRailOpen(true);
+      return;
     }
-    // run once on mount (each visit to the Bible page re-opens it on desktop)
+    const n = noteBibleOpen();
+    const wide = window.matchMedia("(min-width: 768px)").matches; // tablet/fold width
+    if (wide && !railEverOpened && n % 5 === 0) setCoach("toggle");
+    // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When they take the hint and open the rail, advance to the resize hint.
+  useEffect(() => {
+    if (coach === "toggle" && railOpen) setCoach("resize");
+  }, [railOpen, coach]);
 
   return (
     <div className="flex h-full flex-col">
@@ -97,6 +111,8 @@ export function BiblePage() {
         </div>
         {railOpen && <StudyRail />}
       </div>
+
+      {coach && <StudyRailCoach step={coach} onDismiss={() => setCoach(null)} />}
     </div>
   );
 }

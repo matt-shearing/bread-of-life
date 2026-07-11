@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useBlocker, type Location } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, useBlocker, type Location } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import { setChapterDone, startPlan } from "@/db/repos";
 import { getAnyPlan, type Plan } from "@/data/plans";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
+import { isDesktopMouse } from "@/lib/device";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
 import { TranslationPicker } from "@/components/bible/TranslationPicker";
@@ -33,6 +34,10 @@ export function GuidedReaderPage() {
   const params = useParams();
   const planId = params.planId ?? "";
   const day = Number(params.day ?? 0);
+  const [searchParams] = useSearchParams();
+  // ?reading=<index> lands directly on a specific reading (e.g. tapping "Genesis 1"
+  // in the dashboard plan bubble) rather than resuming at the first unread one.
+  const requestedReading = searchParams.has("reading") ? Number(searchParams.get("reading")) : null;
   const navigate = useNavigate();
   const { goTo, railOpen, toggleRail, setRailOpen } = useUI();
 
@@ -66,23 +71,28 @@ export function GuidedReaderPage() {
     };
   }, [planId]);
 
-  // Surface the study rail by default on desktop, as on the Bible page.
+  // Surface the study rail by default only on a real desktop (wide + mouse), as on
+  // the Bible page. On touch tablets/folds it would crowd the reader, so leave it closed.
   useEffect(() => {
-    if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) {
-      setRailOpen(true);
-    }
+    if (isDesktopMouse()) setRailOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Once the plan + its saved progress are in, jump to the first unread chapter.
+  // Once the plan + its saved progress are in, position the cursor: an explicit
+  // ?reading= wins (a tapped reference), otherwise resume at the first unread one.
   useEffect(() => {
     if (initialised || !plan || progress === undefined || total === 0) return;
-    const done = new Set(progress?.chapterProgress?.[day] ?? []);
-    const start = Math.min(firstIncomplete(total, done), total - 1);
+    let start: number;
+    if (requestedReading !== null && Number.isInteger(requestedReading) && requestedReading >= 0 && requestedReading < total) {
+      start = requestedReading;
+    } else {
+      const done = new Set(progress?.chapterProgress?.[day] ?? []);
+      start = Math.min(firstIncomplete(total, done), total - 1);
+    }
     setCursor(start);
     setInitialised(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, progress, total, day, initialised]);
+  }, [plan, progress, total, day, initialised, requestedReading]);
 
   // Drive the reused Reader by pointing the shared Bible location at the cursor.
   useEffect(() => {
