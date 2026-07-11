@@ -189,7 +189,14 @@ review PDF, E2E encryption, the `breadoflife.app` migration, and the Missler com
 
 ## Sync
 - **"Link this device" full backfill** (HIGH PRIORITY — biggest real sync hole): on first sign-in, explicitly enqueue ALL existing local synced-table rows into the outbox (with a progress UI) so pre-existing data uploads. **Root cause of the reported edge case** (an early prayer created before sync existed never uploaded — only NEW changes go through the outbox/hooks; pre-existing rows are never marked dirty). This makes multi-device onboarding trustworthy.
-- **E2E encryption** — journals/prayers currently sit in PLAINTEXT on the relay until E2E lands. Design: passphrase/recovery-key-derived key, encrypt row payloads client-side before push; server stores ciphertext. Keep it opt-in-transparent. (Was deferred; now a real privacy item.)
+- **E2E encryption** — BUILT 2026-07-11 (device-test pending). Journal/prayers/notes are AES-256-GCM
+  encrypted client-side before push (`src/db/crypto.ts`, Web Crypto, no deps); the relay stores only
+  ciphertext. Key model = random 256-bit data key ↔ 24-word BIP39 recovery phrase (device-local key,
+  never synced). `enableE2E`/`restoreE2E`/`disableE2E`/`getE2EStatus` in sync.ts + an E2ESettings card.
+  Low-sensitivity metadata (progress/highlights/settings/plans) stays clear. Verified: crypto (14) +
+  transform (8, incl. no-plaintext-leak) + UI enable flow. **STILL TODO (device):** 2-device encrypted
+  round-trip through the relay; the needsKey/restore UX on a fresh device; deciding whether restore
+  should hard-reset the cursor (currently does). Built on branch off main; not yet released.
 
 ## Onboarding
 - **First-run onboarding** — offer to create a hosted-sync account (or skip / self-host) during onboarding, and run a short walkthrough of the main features.
