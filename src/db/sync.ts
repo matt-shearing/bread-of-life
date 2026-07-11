@@ -10,6 +10,28 @@
 //  - pull: fetch changes since a server cursor, merge LWW into Dexie.
 import { db } from "./index";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import {
+  loadDataKey,
+  saveDataKey,
+  clearDataKey,
+  generateDataKey,
+  keyToPhrase,
+  phraseToKey,
+  encryptJSON,
+  decryptJSON,
+} from "./crypto";
+
+/**
+ * Personal content that is END-TO-END ENCRYPTED before it leaves the device when
+ * E2E is on (a data key is present). Only the record payload is encrypted; the
+ * server still keys on the cleartext (table, id, updatedAt) for last-write-wins.
+ * Low-sensitivity sync metadata (progress/highlights/settings/plans/etc.) stays
+ * clear so cross-device features remain simple.
+ */
+const ENCRYPTED_TABLES = new Set<string>(["journal", "prayers", "notes"]);
+
+/** Set true when a pulled record was encrypted but we had no key to read it. */
+export let e2eNeedsKey = false;
 
 const SYNCED = [
   "highlights",
@@ -267,6 +289,7 @@ export async function pushChanges(): Promise<void> {
   const entries = await db.outbox.toArray();
   if (!entries.length) return;
 
+  const key = loadDataKey();
   const changes: unknown[] = [];
   for (const e of entries) {
     if (e.op === "delete") {
@@ -277,12 +300,16 @@ export async function pushChanges(): Promise<void> {
     if (!rec) {
       changes.push({ table: e.table, id: e.id, updatedAt: e.at, deleted: true, data: null });
     } else {
+      // E2E: encrypt the payload of personal-content tables before it leaves the
+      // device. `id`/`updatedAt` stay clear for server-side last-write-wins.
+      const data =
+        key && ENCRYPTED_TABLES.has(e.table) ? { __enc: await encryptJSON(key, rec) } : rec;
       changes.push({
         table: e.table,
         id: e.id,
         updatedAt: (rec as Record<string, unknown>).updatedAt ?? e.at,
         deleted: false,
-        data: rec,
+        data,
       });
     }
   }
@@ -303,22 +330,52 @@ interface RemoteChange {
 }
 
 async function applyRemote(changes: RemoteChange[]): Promise<void> {
+  // Resolve (decrypt) E2E payloads BEFORE opening the Dexie transaction — awaiting a
+  // non-Dexie promise (crypto.subtle) inside a transaction breaks Dexie's zone and can
+  // commit it early. Records we can't decrypt (no key / wrong key) are skipped and flag
+  // e2eNeedsKey so the UI can prompt for the recovery phrase.
+  const key = loadDataKey();
+  type Resolved = { table: string; id: string; updatedAt: number; deleted: boolean; rec: Record<string, unknown> | null };
+  const resolved: Resolved[] = [];
+  for (const c of changes) {
+    if (!isSynced(c.table)) continue;
+    if (c.deleted) {
+      resolved.push({ table: c.table, id: c.id, updatedAt: c.updatedAt, deleted: true, rec: null });
+      continue;
+    }
+    if (!c.data) continue;
+    let rec: Record<string, unknown> | null = c.data;
+    const enc = (c.data as { __enc?: unknown }).__enc;
+    if (typeof enc === "string") {
+      if (!key) {
+        e2eNeedsKey = true;
+        continue; // encrypted, but this device has no key yet
+      }
+      try {
+        rec = await decryptJSON<Record<string, unknown>>(key, enc);
+      } catch {
+        e2eNeedsKey = true;
+        continue; // wrong key / tampered — leave it on the server, don't apply garbage
+      }
+    }
+    resolved.push({ table: c.table, id: c.id, updatedAt: c.updatedAt, deleted: false, rec });
+  }
+
   const tables = SYNCED.map((t) => db.table(t));
   applyingRemote = true;
   try {
     await db.transaction("rw", tables, async () => {
-      for (const c of changes) {
-        if (!isSynced(c.table)) continue;
-        const table = db.table(c.table);
-        if (c.deleted) {
-          await table.delete(c.id);
+      for (const r of resolved) {
+        const table = db.table(r.table);
+        if (r.deleted) {
+          await table.delete(r.id);
           continue;
         }
-        if (!c.data) continue;
-        const local = (await table.get(c.id)) as Record<string, unknown> | undefined;
+        if (!r.rec) continue;
+        const local = (await table.get(r.id)) as Record<string, unknown> | undefined;
         const localUpdated = Number(local?.updatedAt ?? 0);
-        if (!local || c.updatedAt >= localUpdated) {
-          await table.put(c.data);
+        if (!local || r.updatedAt >= localUpdated) {
+          await table.put(r.rec);
         }
       }
     });
@@ -387,4 +444,65 @@ export async function getSyncStatus(): Promise<SyncStatus> {
   const s = await getState();
   const pending = await db.outbox.count();
   return { mode: s.mode, email: s.email, lastSyncAt: s.lastSyncAt, pending };
+}
+
+/* ------------------------------ E2E encryption controls ---------------------- */
+
+export function getE2EStatus(): { enabled: boolean; needsKey: boolean } {
+  return { enabled: loadDataKey() !== null, needsKey: e2eNeedsKey };
+}
+
+/** Re-enqueue every row of the encrypted tables so they re-upload in their new form. */
+async function reencryptedTablesToOutbox(): Promise<void> {
+  for (const t of SYNCED) {
+    if (!ENCRYPTED_TABLES.has(t)) continue;
+    const keyPath = KEY_PATH[t];
+    const rows = await db.table(t).toArray();
+    const now = Date.now();
+    const entries = rows.map((r) => {
+      const id = String((r as Record<string, unknown>)[keyPath]);
+      return { key: `${t}:${id}`, table: t as string, id, op: "upsert" as const, at: now };
+    });
+    if (entries.length) await db.outbox.bulkPut(entries);
+  }
+}
+
+/**
+ * Turn on E2E for this account: generate a data key, keep it device-local, and
+ * re-push all existing personal content encrypted. Returns the 24-word recovery
+ * phrase to show ONCE (the only way to restore on another device).
+ */
+export async function enableE2E(): Promise<string> {
+  const key = generateDataKey();
+  saveDataKey(key);
+  e2eNeedsKey = false;
+  await reencryptedTablesToOutbox();
+  void syncNow();
+  return keyToPhrase(key);
+}
+
+/**
+ * Restore E2E on a device from the recovery phrase, then re-pull everything so the
+ * previously-unreadable encrypted records decrypt. Returns false if the phrase is invalid.
+ */
+export async function restoreE2E(phrase: string): Promise<boolean> {
+  const key = await phraseToKey(phrase);
+  if (!key) return false;
+  saveDataKey(key);
+  e2eNeedsKey = false;
+  await setState({ cursor: 0 }); // force a full re-pull so encrypted rows decrypt now
+  await syncNow();
+  return true;
+}
+
+/** Show the current device's recovery phrase again (E2E must be on). */
+export async function getRecoveryPhrase(): Promise<string | null> {
+  const key = loadDataKey();
+  return key ? keyToPhrase(key) : null;
+}
+
+/** Turn off E2E on THIS device (local plaintext is untouched; server keeps ciphertext). */
+export function disableE2E(): void {
+  clearDataKey();
+  e2eNeedsKey = false;
 }

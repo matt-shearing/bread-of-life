@@ -6,6 +6,7 @@ import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
 import { requestFeature, reportBug } from "@/lib/feedback";
 import { SyncSettings } from "@/components/settings/SyncSettings";
+import { E2ESettings } from "@/components/settings/E2ESettings";
 import { version as APP_VERSION } from "../../package.json";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
@@ -303,6 +304,8 @@ export function SettingsPage() {
           </Card>
 
           <SyncSettings />
+
+          <E2ESettings />
 
           <Card>
             <CardHeader>

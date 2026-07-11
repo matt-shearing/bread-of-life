@@ -22,6 +22,12 @@ function getCrypto(): Crypto {
   return c;
 }
 
+// TS 5.7+ narrowed BufferSource to reject Uint8Array<ArrayBufferLike>; ours are all
+// plain ArrayBuffer-backed, so this cast at the Web Crypto boundary is safe.
+function bs(u: Uint8Array): BufferSource {
+  return u as unknown as BufferSource;
+}
+
 /* ------------------------------- base64 helpers ------------------------------ */
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -47,7 +53,7 @@ export function generateDataKey(): Uint8Array {
 export async function keyToPhrase(key: Uint8Array): Promise<string> {
   if (key.length !== KEY_BYTES) throw new Error("data key must be 32 bytes");
   // BIP39: entropy bits + (entropy/32) checksum bits, split into 11-bit words.
-  const hash = new Uint8Array(await getCrypto().subtle.digest("SHA-256", key));
+  const hash = new Uint8Array(await getCrypto().subtle.digest("SHA-256", bs(key)));
   const checksumBits = KEY_BYTES / 4; // 256/32 = 8 bits
   const bits: number[] = [];
   for (const b of key) for (let i = 7; i >= 0; i--) bits.push((b >> i) & 1);
@@ -76,7 +82,7 @@ export async function phraseToKey(phrase: string): Promise<Uint8Array | null> {
   const key = new Uint8Array(KEY_BYTES);
   for (let i = 0; i < entropyBits; i++) if (bits[i]) key[i >> 3] |= 1 << (7 - (i % 8));
   // verify checksum
-  const hash = new Uint8Array(await getCrypto().subtle.digest("SHA-256", key));
+  const hash = new Uint8Array(await getCrypto().subtle.digest("SHA-256", bs(key)));
   for (let i = 0; i < checksumBits; i++) {
     if (bits[entropyBits + i] !== ((hash[0] >> (7 - i)) & 1)) return null;
   }
@@ -86,7 +92,7 @@ export async function phraseToKey(phrase: string): Promise<Uint8Array | null> {
 /* --------------------------------- encryption -------------------------------- */
 
 async function importKey(raw: Uint8Array): Promise<CryptoKey> {
-  return getCrypto().subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  return getCrypto().subtle.importKey("raw", bs(raw), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 /** Encrypt a JSON-serialisable value → base64(iv ‖ ciphertext). */
@@ -94,7 +100,7 @@ export async function encryptJSON(rawKey: Uint8Array, value: unknown): Promise<s
   const key = await importKey(rawKey);
   const iv = getCrypto().getRandomValues(new Uint8Array(IV_BYTES));
   const plaintext = new TextEncoder().encode(JSON.stringify(value));
-  const ct = new Uint8Array(await getCrypto().subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext));
+  const ct = new Uint8Array(await getCrypto().subtle.encrypt({ name: "AES-GCM", iv: bs(iv) }, key, bs(plaintext)));
   const packed = new Uint8Array(iv.length + ct.length);
   packed.set(iv, 0);
   packed.set(ct, iv.length);
@@ -107,7 +113,7 @@ export async function decryptJSON<T = unknown>(rawKey: Uint8Array, b64: string):
   const packed = base64ToBytes(b64);
   const iv = packed.slice(0, IV_BYTES);
   const ct = packed.slice(IV_BYTES);
-  const pt = await getCrypto().subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  const pt = await getCrypto().subtle.decrypt({ name: "AES-GCM", iv: bs(iv) }, key, bs(ct));
   return JSON.parse(new TextDecoder().decode(pt)) as T;
 }
 
