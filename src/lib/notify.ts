@@ -45,11 +45,72 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 /** Back-compat alias — existing callers use this name. */
 export const enablePrayerNotifications = ensureNotificationPermission;
 
+// Android needs an explicit channel (8+) for notifications to present richly, and an
+// action type for the "Go now" button. Both are registered once at startup.
+const CHANNEL_ID = "bol-reminders";
+const ACTION_TYPE = "bol-open";
+
+let androidReady: Promise<void> | null = null;
+/** Create the notification channel + register the "Go now" action (idempotent, Tauri only). */
+export function setupNativeNotifications(): Promise<void> {
+  if (!isTauri) return Promise.resolve();
+  if (!androidReady) {
+    androidReady = (async () => {
+      const p = await plugin();
+      try {
+        await p.createChannel({
+          id: CHANNEL_ID,
+          name: "Reminders",
+          description: "Daily reading, devotional, prayer and memory-verse reminders",
+          importance: p.Importance.High,
+          visibility: p.Visibility.Public,
+        });
+      } catch {
+        /* desktop / unsupported — non-fatal */
+      }
+      try {
+        await p.registerActionTypes([
+          { id: ACTION_TYPE, actions: [{ id: "open", title: "Go now", foreground: true }] },
+        ]);
+      } catch {
+        /* non-fatal */
+      }
+    })();
+  }
+  return androidReady;
+}
+
+/** Shared native notification options: channel, tappable "Go now", expandable text, deep-link. */
+function nativeOptions(o: {
+  id?: number;
+  title: string;
+  body: string;
+  largeBody?: string;
+  deepLink?: string;
+  schedule?: import("@tauri-apps/plugin-notification").Schedule;
+}) {
+  return {
+    id: o.id,
+    title: o.title,
+    body: o.body,
+    // largeBody drives the EXPANDED (big-text) view on Android — without it, expanding
+    // showed an empty shell. summary is the collapsed detail line.
+    largeBody: o.largeBody ?? o.body,
+    summary: "Bread of Life",
+    channelId: CHANNEL_ID,
+    actionTypeId: ACTION_TYPE, // adds the "Go now" button
+    autoCancel: true, // tapping dismisses it
+    schedule: o.schedule,
+    extra: o.deepLink ? { deepLink: o.deepLink } : undefined,
+  };
+}
+
 /** Fire an OS notification NOW (native or web), optionally deep-linking on tap. */
-async function sendNow(title: string, body: string, deepLink?: string): Promise<void> {
+async function sendNow(title: string, body: string, deepLink?: string, largeBody?: string): Promise<void> {
   if (isTauri) {
     const p = await plugin();
-    p.sendNotification({ title, body, extra: deepLink ? { deepLink } : undefined });
+    await setupNativeNotifications();
+    p.sendNotification(nativeOptions({ title, body, largeBody, deepLink }));
     return;
   }
   if (typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -75,19 +136,24 @@ export async function scheduleDailyReminder(
   title: string,
   body: string,
   deepLink?: string,
+  largeBody?: string,
 ): Promise<void> {
   if (!isTauri) return;
   const p = await plugin();
+  await setupNativeNotifications();
   const id = SCHEDULE_ID[kind];
   await p.cancel([id]).catch(() => {}); // replace any existing schedule for this kind
   if (!(await p.isPermissionGranted())) return;
-  p.sendNotification({
-    id,
-    title,
-    body,
-    schedule: p.Schedule.at(nextAt(timeHHMM), true, true), // repeat daily, allow while idle
-    extra: deepLink ? { deepLink } : undefined,
-  });
+  p.sendNotification(
+    nativeOptions({
+      id,
+      title,
+      body,
+      largeBody,
+      deepLink,
+      schedule: p.Schedule.at(nextAt(timeHHMM), true, true), // repeat daily, allow while idle
+    }),
+  );
 }
 
 export async function cancelDailyReminder(kind: ReminderKind): Promise<void> {
@@ -113,28 +179,59 @@ export async function syncReminderSchedules(s: ReminderSettings): Promise<void> 
   if (!isTauri) return;
   const jobs: Promise<void>[] = [
     s.notifyDevotion
-      ? scheduleDailyReminder("devotion", s.devotionTime, "Bread of Life", "Time for your devotional.", "/devotional")
+      ? scheduleDailyReminder(
+          "devotion",
+          s.devotionTime,
+          "Time for your devotional",
+          "Your Morning & Evening reading is ready.",
+          "/devotional",
+          "A few quiet minutes with Spurgeon’s devotional. Tap “Go now” to read today’s portion and mark it done.",
+        )
       : cancelDailyReminder("devotion"),
     s.notifyMemory
-      ? scheduleDailyReminder("memory", s.reminderTime, "Bread of Life", "A verse to hide in your heart — visit Memory Lane.", "/memory")
+      ? scheduleDailyReminder(
+          "memory",
+          s.reminderTime,
+          "Hide His word in your heart",
+          "Verses are due for review in Memory Lane.",
+          "/memory",
+          "You have memory verses due today. A short review keeps them fresh — tap “Go now” to open Memory Lane.",
+        )
       : cancelDailyReminder("memory"),
     s.notifyPrayers
-      ? scheduleDailyReminder("prayers", s.reminderTime, "Bread of Life", "Lift up your prayers today.", "/prayers")
+      ? scheduleDailyReminder(
+          "prayers",
+          s.reminderTime,
+          "Time to pray",
+          "Lift up today’s prayers.",
+          "/prayers",
+          "Bring your requests before God, and look back on the ones He’s already answered. Tap “Go now” to open your prayers.",
+        )
       : cancelDailyReminder("prayers"),
     s.notifyPlan
-      ? scheduleDailyReminder("plan", s.reminderTime, "Bread of Life", "Today's reading is waiting for you.", "/")
+      ? scheduleDailyReminder(
+          "plan",
+          s.reminderTime,
+          "Today’s reading",
+          "Your reading plan is waiting.",
+          "/read-today",
+          "Pick up today’s portion in the guided reader — right where you left off. Tap “Go now” to begin.",
+        )
       : cancelDailyReminder("plan"),
   ];
   await Promise.all(jobs);
 }
 
-/** Route a tapped notification to its screen. Call once at startup with the router's navigate. */
+/** Route a tapped notification (or its "Go now" action) to its screen. Call once at
+ *  startup with the router's navigate. Also registers the channel + action type. */
 let routingInit = false;
 export async function initNotificationRouting(navigate: (path: string) => void): Promise<void> {
   if (!isTauri || routingInit) return;
   routingInit = true;
   try {
+    await setupNativeNotifications();
     const p = await plugin();
+    // Fires for the "Go now" action button and (on supported platforms) the body tap.
     await p.onAction((n) => {
       const link = (n.extra as Record<string, unknown> | undefined)?.deepLink;
       if (typeof link === "string") navigate(link);
