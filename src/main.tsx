@@ -14,6 +14,7 @@ import { DevotionalPage } from "@/pages/DevotionalPage";
 import { CompanionPage } from "@/pages/CompanionPage";
 import { MemoryLanePage } from "@/pages/MemoryLanePage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { CommentaryPage } from "@/pages/CommentaryPage";
 import { FaithfulnessPage } from "@/pages/FaithfulnessPage";
 import { startSync } from "@/db/sync";
 
@@ -36,6 +37,7 @@ const router = createHashRouter([
       { path: "search", element: <SearchPage /> },
       { path: "plans", element: <PlansPage /> },
       { path: "guided/:planId/:day", element: <GuidedReaderPage /> },
+      { path: "commentary", element: <CommentaryPage /> },
       { path: "devotional", element: <DevotionalPage /> },
       { path: "companion", element: <CompanionPage /> },
       { path: "memory", element: <MemoryLanePage /> },

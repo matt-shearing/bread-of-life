@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   BookHeart,
+  BookMarked,
   BookOpen,
   Brain,
   CalendarCheck,
@@ -27,6 +28,7 @@ const PRIMARY = [
 ];
 
 const MORE = [
+  { to: "/commentary", label: "Commentary", icon: BookMarked },
   { to: "/search", label: "Search", icon: Search },
   { to: "/plans", label: "Plans", icon: CalendarCheck },
   { to: "/memory", label: "Memory", icon: Brain },

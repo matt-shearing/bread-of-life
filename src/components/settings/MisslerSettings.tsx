@@ -34,7 +34,7 @@ export function MisslerSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Missler Library</CardTitle>
+        <CardTitle>Missler Inspired (MI) Library</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">

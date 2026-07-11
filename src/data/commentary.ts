@@ -24,15 +24,24 @@ export const COMMENTARY_SOURCES: CommentarySource[] = [
 ];
 
 /**
- * Missler is kept OUT of COMMENTARY_SOURCES (which is the fixed public-domain set)
- * because it only exists when the user has pointed at their local library. The
- * commentary panel appends this pill at runtime once `misslerAvailable()` is true.
+ * Missler Inspired (MI) is kept OUT of COMMENTARY_SOURCES (the fixed
+ * public-domain set) because it only exists when the user has pointed at their
+ * local library. The commentary panel appends this pill at runtime once
+ * `misslerAvailable()` is true — and makes it the default source (one-time)
+ * when the library first appears.
  */
 export const MISSLER_SOURCE: CommentarySource = {
-  id: "missler",
-  name: "Missler (Line by Line)",
-  short: "Missler",
+  id: "missler", // stable id — do not change (cache keys, saved preferences)
+  name: "Missler Inspired",
+  short: "MI",
 };
+
+/** Shown under MI commentary. Written at Matt's request, in honour of Chuck. */
+export const MISSLER_ACKNOWLEDGMENT =
+  "Missler Inspired (MI) — made in honour of Chuck Missler, who worked " +
+  "tirelessly and led so many people closer to God. This commentary is " +
+  "inspired by his Line by Line teaching after more than a decade of " +
+  "listening. Personal library — not for redistribution.";
 
 export interface CommentaryBlock {
   verse: number;

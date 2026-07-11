@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   BookHeart,
+  BookMarked,
   BookOpen,
   Brain,
   CalendarCheck,
@@ -26,6 +27,7 @@ import { Button, Tooltip } from "@/components/ui";
 const NAV = [
   { to: "/", label: "Dashboard", icon: Home, end: true },
   { to: "/bible", label: "Bible", icon: BookOpen, end: false },
+  { to: "/commentary", label: "Commentary", icon: BookMarked, end: false },
   { to: "/search", label: "Search", icon: Search, end: false },
   { to: "/plans", label: "Plans", icon: CalendarCheck, end: false },
   { to: "/devotional", label: "Devotional", icon: BookHeart, end: false },

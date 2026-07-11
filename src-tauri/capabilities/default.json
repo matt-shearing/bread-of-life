@@ -23,7 +23,7 @@
     },
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "/run/media/**" }]
+      "allow": [{ "path": "$HOME/**" }, { "path": "/run/media/**" }, { "path": "/storage/**" }]
     }
   ]
 }

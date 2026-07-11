@@ -9,6 +9,7 @@ import { getChapterFor, verses } from "@/data/bible";
 import { htmlToText } from "@/components/journal/RichEditor";
 import {
   COMMENTARY_SOURCES,
+  MISSLER_ACKNOWLEDGMENT,
   MISSLER_SOURCE,
   fetchCommentaryChapter,
   type CommentaryChapter,
@@ -143,16 +144,26 @@ function TabButton({
 
 /* -------------------------------- Commentary -------------------------------- */
 
-/** The public-domain set, plus the local Missler library once its folder is set. */
+/** The public-domain set, plus the local MI library once its folder is set.
+ *  The first time the library is detected, MI becomes the selected source —
+ *  once only, so a user who later picks another commentary stays respected. */
 function useAvailableCommentarySources(): CommentarySource[] {
   const [missler, setMissler] = useState(false);
+  const setCommentarySource = useUI((s) => s.setCommentarySource);
   useEffect(() => {
     let alive = true;
-    misslerAvailable().then((ok) => alive && setMissler(ok));
+    misslerAvailable().then((ok) => {
+      if (!alive) return;
+      setMissler(ok);
+      if (ok && !localStorage.getItem("mi-defaulted")) {
+        localStorage.setItem("mi-defaulted", "1");
+        setCommentarySource(MISSLER_SOURCE.id);
+      }
+    });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [setCommentarySource]);
   return missler ? [...COMMENTARY_SOURCES, MISSLER_SOURCE] : COMMENTARY_SOURCES;
 }
 
@@ -231,7 +242,7 @@ function CommentaryPanel() {
             ))}
             <p className="pt-2 text-center text-[11px] text-muted-foreground">
               {isMissler
-                ? "Chuck Missler · Line by Line — personal library, not for redistribution"
+                ? MISSLER_ACKNOWLEDGMENT
                 : `${sources.find((s) => s.id === commentarySource)?.name} · Public Domain`}
             </p>
           </div>
