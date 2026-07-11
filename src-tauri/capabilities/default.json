@@ -20,6 +20,10 @@
         { "url": "http://127.0.0.1:*/*" },
         { "url": "https://*/*" }
       ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$HOME/**" }, { "path": "/run/media/**" }]
     }
   ]
 }

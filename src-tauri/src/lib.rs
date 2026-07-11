@@ -13,6 +13,10 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        // Read-only access to the user's local Missler library folder (see
+        // src/data/missler.ts). Scoped to $HOME and removable media in the
+        // window capability; audio streams via the asset protocol.
+        .plugin(tauri_plugin_fs::init())
         .run(tauri::generate_context!())
         .expect("error while running Bread of Life");
 }
