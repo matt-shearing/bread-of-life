@@ -107,20 +107,24 @@ provides it inherently (bonus); the only UX cost is a save-once recovery phrase 
 4. Account screen: local-only (default) · hosted (the app-hosted relay) · self-host (relay URL).
 5. Deploy the Evolu relay on the app cloud; document self-host `docker run`.
 
-## Notifications — proper, cross-platform (requested 2026-07-10)
+## Notifications — proper, cross-platform (requested 2026-07-10) — BUILT 2026-07-11 (device-test pending)
 
-Today's reminders lean on the web Notification API (in-app scheduler) — they don't fire reliably when
-the app is closed and little is on by default. Rebuild on **real OS notifications** via
-`tauri-plugin-notification` (desktop incl. Linux + Android), with **scheduled** delivery so they fire
-even when the app isn't focused. Each notification **deep-links** to the right screen.
+Rebuilt `src/lib/notify.ts` on **`tauri-plugin-notification`**: real OS notifications, and in the
+installed app **OS-scheduled** daily reminders (`Schedule.at`, repeat daily) so they fire when the app
+isn't focused (and closed on mobile). Tapping deep-links (`onAction` → navigate). Foreground web-Notification
+checks are now browser-only (Tauri uses the OS schedules → no double-notify). `syncReminderSchedules()`
+reconciles schedules with the toggles on every change.
 
-- **Reading-plan reminder** — when enrolled in a plan, a **daily** nudge (default **ON** on enroll) to
-  read today's portion; tap → today's reading. User-set time.
-- **Devotional reminder** — **opt-in**; tap → straight into the devotional, with a check-off action.
-- **Prayer prompts** — an occasional "take a moment to add your prayers" nudge, **default OFF**. Plus
-  any prayer with a per-prayer reminder set fires its own daily notification (→ that prayer).
-- All toggleable in Settings. Verify delivery per platform (Linux notifications; Android channels +
-  scheduled/background delivery — the closed-app case is the real risk). Upgrades `src/lib/notify.ts`.
+- **Reading-plan reminder** — daily nudge, **default ON on enroll** (`setActivePlan` sets `notifyPlan`),
+  tap → dashboard. ✅
+- **Devotional reminder** — opt-in, at its set time, tap → devotional. ✅ (check-off action: TODO — needs
+  `registerActionTypes` + action buttons.)
+- **Memory + prayer reminders** — daily, share a "Reminder time" setting; tap → Memory Lane / Prayers. ✅
+- All toggleable in Settings (added plan toggle + shared reminder-time control). Verified: tsc/build/
+  cargo check clean, plugin v2.3.3 + `notification:default` capability, routes render, toggles work.
+- **STILL TODO (needs a device):** confirm actual OS delivery + scheduled/closed-app delivery on Android
+  and Linux desktop; confirm deep-link taps navigate; per-prayer individual reminders; devotional check-off
+  action button; Android notification channel setup if needed. The closed-app case is the real risk.
 
 ## Reading plans — "Soul Food" Bible-in-a-year (requested 2026-07-10)
 
