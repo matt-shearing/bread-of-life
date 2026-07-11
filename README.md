@@ -8,7 +8,11 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.0** — adds **Memory Lane** (memorise verses with spaced-repetition review), an
+**Latest: v0.3.1** — real OS notifications with scheduled daily reminders (reading plan, devotional,
+memory & prayers) that reach you even when the app is closed, plus Pixel Fold / tablet polish (guided-plan
+references, collapsed-sidebar spacing, and no more crowded auto-opening commentary on touch).
+
+**v0.3.0** — adds **Memory Lane** (memorise verses with spaced-repetition review), an
 **on-rails guided reading-plan mode**, richer journal ↔ prayer cross-linking, a first-run onboarding
 flow, custom prayer categories, mobile swipe-to-turn-chapter, a resizable/collapsible study layout,
 and a fixed Linux AppImage for rolling distros. Builds on v0.2's optional cross-device sync and the

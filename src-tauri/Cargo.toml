@@ -1,6 +1,6 @@
 [package]
 name = "bread-of-life"
-version = "0.3.0"
+version = "0.3.1"
 description = "A warm, offline-first homebase for Bible reading, prayer, and journalling."
 authors = ["Matt Shearing"]
 edition = "2021"
