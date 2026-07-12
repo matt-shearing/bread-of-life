@@ -43,6 +43,30 @@ const listeners = new Set<() => void>();
 // The swappable playback engine (HTML5 today; native Media3 later). The queue,
 // auto-advance, mark-read and Media Session all live here in the controller.
 const engine: AudioEngine = selectEngine();
+
+// Guards a single advance so near-end pre-advance and the "ended" fallback can't both
+// fire for the same track. Reset when a new track loads.
+let advancing = false;
+
+/** Mark the finished track read (if a plan queue) and move to the next track. */
+function advanceQueue() {
+  if (advancing) return;
+  advancing = true;
+  const finished = state.queue[state.index];
+  const idx = state.index;
+  if (finished && onTrackComplete) {
+    try {
+      onTrackComplete(finished, idx); // e.g. mark the plan reading read
+    } catch {
+      /* mark-read failure must never break playback */
+    }
+  }
+  // Advance on a later tick, OUTSIDE any engine state-callback stack (native
+  // re-entrancy safety). loadIndex resets `advancing`; if the queue is done, next()
+  // just stops.
+  setTimeout(() => next(), 60);
+}
+
 engine.handlers = {
   onPlay: () => {
     set({ playing: true });
@@ -55,13 +79,25 @@ engine.handlers = {
   onTime: (t) => {
     set({ currentTime: t });
     syncPositionState();
+    // NATIVE ONLY: pre-advance ~0.5s before the end so a queued track never reaches the
+    // native "ended" state. On Android that avoids restarting the foreground service for
+    // the next track while backgrounded (Android 12+ forbids background FGS starts →
+    // crash). The HTML5 engine plays to the true end and uses onEnded instead (no clip).
+    if (
+      !engine.usesWebMediaSession &&
+      !advancing &&
+      state.duration > 0 &&
+      state.index < state.queue.length - 1 &&
+      t >= state.duration - 0.5
+    ) {
+      advanceQueue();
+    }
   },
   onDuration: (d) => set({ duration: d }),
   onLoading: (b) => set({ loading: b }),
   onEnded: () => {
-    const finished = state.queue[state.index];
-    if (finished && onTrackComplete) onTrackComplete(finished, state.index); // e.g. mark the plan reading read
-    next();
+    set({ playing: false });
+    advanceQueue(); // last track, HTML5, or fallback if pre-advance didn't fire
   },
 };
 
@@ -121,6 +157,7 @@ function setMediaMetadata(t: Track) {
 function loadIndex(index: number, autoplay: boolean) {
   const t = state.queue[index];
   if (!t) return;
+  advancing = false; // new track — allow the next advance
   engine.load({ src: t.src, title: t.title, subtitle: t.subtitle });
   set({ index, currentTime: 0, duration: 0, loading: true });
   setMediaMetadata(t);
@@ -176,6 +213,7 @@ export function stop() {
   const ms = mediaSession();
   if (ms) ms.metadata = null;
   onTrackComplete = null;
+  advancing = false;
   set({ ...EMPTY });
 }
 

@@ -163,7 +163,9 @@ export function GuidedReaderPage() {
     playQueue(q, {
       startIndex: startAt === -1 ? 0 : startAt,
       onComplete: (t) => {
-        if (t.planReadingIndex != null) void setChapterDone(planId, day, t.planReadingIndex, true, total);
+        if (t.planReadingIndex != null) {
+          void setChapterDone(planId, day, t.planReadingIndex, true, total).catch(() => {});
+        }
       },
     });
   }

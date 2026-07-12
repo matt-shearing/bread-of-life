@@ -145,26 +145,33 @@ class NativeEngine implements AudioEngine {
     }
   }
 
-  private run(fn: (api: NonNullable<NativeEngine["api"]>) => void) {
-    void this.ready.then(() => {
-      if (this.api) fn(this.api);
+  // Every plugin call is awaited + caught, so a native error surfaces as "paused"
+  // instead of an unhandled rejection / crash (esp. during track transitions).
+  private run(fn: (api: NonNullable<NativeEngine["api"]>) => Promise<unknown>) {
+    void this.ready.then(async () => {
+      if (!this.api) return;
+      try {
+        await fn(this.api);
+      } catch {
+        this.handlers.onPause?.();
+      }
     });
   }
   load(t: EngineTrack) {
     this.cur = 0;
     this.dur = 0;
     this.ended = false;
-    this.run((api) => void api.setSource({ src: t.src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl }));
+    this.run((api) => api.setSource({ src: t.src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl }));
   }
   play() {
-    this.run((api) => void api.play());
+    this.run((api) => api.play());
   }
   pause() {
-    this.run((api) => void api.pause());
+    this.run((api) => api.pause());
   }
   seekTo(seconds: number) {
     this.cur = seconds;
-    this.run((api) => void api.seekTo(seconds));
+    this.run((api) => api.seekTo(seconds));
   }
   currentTime() {
     return this.cur;
@@ -173,7 +180,7 @@ class NativeEngine implements AudioEngine {
     return this.dur;
   }
   release() {
-    this.run((api) => void api.pause());
+    this.run((api) => api.pause());
   }
 }
 
