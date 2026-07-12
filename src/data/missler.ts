@@ -79,6 +79,26 @@ const ANDROID_AUTO_PATHS = [
 const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 let autoPath: string | undefined; // probe result cache
 
+/** The permission-free Android/media drop folder — writable by file managers,
+ *  MTP and Syncthing without "All files access". This is the zero-permission
+ *  fallback for users who don't grant all-files access (Downloads needs it). */
+export const ANDROID_DROP_PATH = ANDROID_AUTO_PATHS[1];
+
+/** Best-effort: make the Android/media drop folder exist so the user always has a
+ *  file-manager-/MTP-/Syncthing-writable place to put the library — no adb, no
+ *  all-files-access needed. Android/media dirs are writable by the app
+ *  permission-free (unlike the hidden Android/data dir). No-op off Android/Tauri;
+ *  never throws (called at startup). */
+export async function ensureAndroidDropFolder(): Promise<void> {
+  if (!isTauri || !isAndroid) return;
+  try {
+    const { mkdir } = await import("@tauri-apps/plugin-fs");
+    await mkdir(ANDROID_DROP_PATH, { recursive: true });
+  } catch (e) {
+    console.warn("missler: could not create Android drop folder", e);
+  }
+}
+
 /* -------------------------- all-files access (Android) ------------------------- */
 
 /** Whether the app can read files outside its own sandbox (Android "All files

@@ -18,6 +18,7 @@ import { CommentaryPage } from "@/pages/CommentaryPage";
 import { ReadTodayPage } from "@/pages/ReadTodayPage";
 import { FaithfulnessPage } from "@/pages/FaithfulnessPage";
 import { startSync } from "@/db/sync";
+import { ensureAndroidDropFolder } from "@/data/missler";
 
 // Safety net: if something throws before React mounts, show it instead of a
 // blank window (much easier to diagnose than a white screen).
@@ -65,4 +66,8 @@ setTimeout(() => {
   } catch (e) {
     console.error("sync init failed", e);
   }
+  // Best-effort: ensure the permission-free Android/media Missler drop folder exists
+  // so users have a file-manager-writable place to drop the library (no adb, no
+  // all-files-access). Never blocks render.
+  void ensureAndroidDropFolder();
 }, 0);
