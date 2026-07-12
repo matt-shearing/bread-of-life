@@ -32,6 +32,26 @@ interface Progress {
  */
 const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 
+/** Best-effort human-readable string for an unknown thrown value — Tauri invoke
+ *  rejections are often plain objects/strings, not Error instances, so String(e)
+ *  yields a useless "[object Object]". */
+function describeErr(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const anyE = e as Record<string, unknown>;
+    if (typeof anyE.message === "string") return anyE.message;
+    try {
+      const j = JSON.stringify(e);
+      if (j && j !== "{}") return j;
+    } catch {
+      /* fall through */
+    }
+    return `${Object.prototype.toString.call(e)} keys=[${Object.keys(anyE).join(",")}]`;
+  }
+  return String(e);
+}
+
 export function MisslerSettings() {
   const [path, setPath] = useState("");
   const [status, setStatus] = useState<MisslerStatus | null>(null);
@@ -105,7 +125,15 @@ export function MisslerSettings() {
         setBrowseNote("No folder was set — either you cancelled, or that folder's location couldn't be mapped to a path. Try picking it under your phone's internal storage (or type the path).");
       }
     } catch (e) {
-      setBrowseNote(`Browse failed: ${e instanceof Error ? e.message : String(e)}`);
+      // Probe whether the plugin responds at all (is_manager) to localise the fault:
+      // if this ALSO errors, the whole plugin/capability path is broken, not just the picker.
+      let probe: string;
+      try {
+        probe = `all-files check ok (granted=${await hasAllFilesAccess()})`;
+      } catch (pe) {
+        probe = `all-files check ALSO failed: ${describeErr(pe)}`;
+      }
+      setBrowseNote(`Browse failed: ${describeErr(e)} — ${probe}`);
     }
   };
 
