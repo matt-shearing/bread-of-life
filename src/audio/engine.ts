@@ -99,8 +99,88 @@ export class Html5Engine implements AudioEngine {
   }
 }
 
-/** Pick the playback engine for this platform. For now always HTML5; the native engine
- *  slots in here once tauri-plugin-native-audio (or our own Media3 service) is wired. */
+/**
+ * Native mobile engine — plays through `tauri-plugin-native-audio` (Media3 ExoPlayer +
+ * a foreground MediaSessionService on Android), so audio keeps going when the app is
+ * backgrounded/closed and the OS shows lock-screen controls. The plugin owns the OS
+ * controls, so `usesWebMediaSession = false`. The plugin API is DYNAMICALLY imported so
+ * it's a separate chunk that never loads on desktop/browser.
+ */
+class NativeEngine implements AudioEngine {
+  readonly usesWebMediaSession = false;
+  handlers: EngineHandlers = {};
+  private api: typeof import("tauri-plugin-native-audio-api") | null = null;
+  private ready: Promise<void>;
+  private cur = 0;
+  private dur = 0;
+  private wasPlaying = false;
+  private ended = false;
+
+  constructor() {
+    this.ready = (async () => {
+      const api = await import("tauri-plugin-native-audio-api");
+      await api.initialize();
+      await api.addStateListener((s) => this.onState(s));
+      this.api = api;
+    })().catch(() => {
+      /* plugin unavailable — leave api null; calls no-op */
+    });
+  }
+
+  private onState(s: import("tauri-plugin-native-audio-api").NativeAudioState) {
+    this.cur = s.currentTime;
+    if (s.duration) this.dur = s.duration;
+    this.handlers.onTime?.(s.currentTime);
+    if (s.duration) this.handlers.onDuration?.(s.duration);
+    this.handlers.onLoading?.(s.buffering || s.status === "loading");
+    if (s.isPlaying !== this.wasPlaying) {
+      this.wasPlaying = s.isPlaying;
+      (s.isPlaying ? this.handlers.onPlay : this.handlers.onPause)?.();
+    }
+    if (s.status === "ended" && !this.ended) {
+      this.ended = true;
+      this.handlers.onEnded?.();
+    } else if (s.status !== "ended") {
+      this.ended = false;
+    }
+  }
+
+  private run(fn: (api: NonNullable<NativeEngine["api"]>) => void) {
+    void this.ready.then(() => {
+      if (this.api) fn(this.api);
+    });
+  }
+  load(t: EngineTrack) {
+    this.cur = 0;
+    this.dur = 0;
+    this.ended = false;
+    this.run((api) => void api.setSource({ src: t.src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl }));
+  }
+  play() {
+    this.run((api) => void api.play());
+  }
+  pause() {
+    this.run((api) => void api.pause());
+  }
+  seekTo(seconds: number) {
+    this.cur = seconds;
+    this.run((api) => void api.seekTo(seconds));
+  }
+  currentTime() {
+    return this.cur;
+  }
+  duration() {
+    return this.dur;
+  }
+  release() {
+    this.run((api) => void api.pause());
+  }
+}
+
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const isMobile = typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+/** Pick the playback engine: native (background-capable) on mobile Tauri, else HTML5. */
 export function selectEngine(): AudioEngine {
-  return new Html5Engine();
+  return isTauri && isMobile ? new NativeEngine() : new Html5Engine();
 }

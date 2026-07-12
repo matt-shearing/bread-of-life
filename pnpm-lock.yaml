@@ -83,6 +83,9 @@ importers:
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.1
+      tauri-plugin-native-audio-api:
+        specifier: ^1.0.5
+        version: 1.0.5(@tauri-apps/api@2.11.1)
       zustand:
         specifier: ^5.0.2
         version: 5.0.14(@types/react@18.3.31)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -1637,6 +1640,11 @@ packages:
     resolution: {integrity: sha512-3ofp+LL8E+pK/JuPLPggVAIaEuhvIz4qNcf3nA1Xn2o/7fb7s/TYpHhwGDv1ZU3PkBluUVaF8PyCHcm48cKLWQ==}
     engines: {node: '>=14.0.0'}
     hasBin: true
+
+  tauri-plugin-native-audio-api@1.0.5:
+    resolution: {integrity: sha512-G1v9xEhdN0mLbVAIXflhCzqxiqB9gy9Gs1dV/lc2mlZTO0J11PVOhaxPLZgOSvIvXrq0iLT7cvP53dgG6mBGoQ==}
+    peerDependencies:
+      '@tauri-apps/api': '>=2.10.0'
 
   thenify-all@1.6.0:
     resolution: {integrity: sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==}
@@ -3223,6 +3231,10 @@ snapshots:
     transitivePeerDependencies:
       - tsx
       - yaml
+
+  tauri-plugin-native-audio-api@1.0.5(@tauri-apps/api@2.11.1):
+    dependencies:
+      '@tauri-apps/api': 2.11.1
 
   thenify-all@1.6.0:
     dependencies:

@@ -9,14 +9,23 @@ pub fn run() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         // Read-only access to the user's local Missler library folder (see
         // src/data/missler.ts). Scoped to $HOME and removable media in the
         // window capability; audio streams via the asset protocol.
-        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_fs::init());
+
+    // Native background audio (foreground MediaSessionService) — mobile only.
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(tauri_plugin_native_audio::init());
+    }
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running Bread of Life");
 }

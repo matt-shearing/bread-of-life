@@ -1,0 +1,7 @@
+{
+  "identifier": "mobile",
+  "description": "Mobile-only permissions: native background audio (Media3 + foreground MediaSessionService).",
+  "platforms": ["android", "iOS"],
+  "windows": ["main"],
+  "permissions": ["native-audio:default"]
+}
