@@ -25,8 +25,11 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
      *  (`Environment.isExternalStorageManager()`, API 30+). Below API 30 the
      *  concept doesn't exist, so we report `true` (legacy external-storage rules
      *  apply and the app's own dirs are readable regardless). */
+    // NB: Kotlin @Command method names must be camelCase — Tauri's Android bridge
+    // maps the snake_case command (is_manager) to a camelCase method (isManager).
+    // build.rs COMMANDS, the JS invoke strings and the permission ids stay snake_case.
     @Command
-    fun is_manager(invoke: Invoke) {
+    fun isManager(invoke: Invoke) {
         val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             runCatching { Environment.isExternalStorageManager() }.getOrDefault(false)
         } else {
@@ -42,7 +45,7 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
      *  No-op below API 30. Resolves once the intent is launched (the frontend
      *  re-checks `is_manager` when the user returns to the app). */
     @Command
-    fun request_manage(invoke: Invoke) {
+    fun requestManage(invoke: Invoke) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             invoke.resolve()
             return
@@ -75,7 +78,7 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
      *  Resolves `{ path: "/storage/emulated/0/…" }`, or `{ path: null }` if the user
      *  cancels or the pick can't be mapped to a real path (e.g. an exotic provider). */
     @Command
-    fun pick_folder(invoke: Invoke) {
+    fun pickFolder(invoke: Invoke) {
         try {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
