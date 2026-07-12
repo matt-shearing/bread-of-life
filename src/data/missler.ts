@@ -75,13 +75,20 @@ let autoPath: string | undefined; // probe result cache
 
 export async function getMisslerLibraryPath(): Promise<string> {
   const set = (await getSetting<string>(LIBRARY_PATH_KEY, "")).trim();
-  if (set || !isTauri || !isAndroid) return set;
+  if (set || !isTauri) return set;
   if (autoPath === undefined) {
     autoPath = "";
-    const { readTextFile } = await import("@tauri-apps/plugin-fs");
-    for (const cand of ANDROID_AUTO_PATHS) {
+    const [{ readTextFile }, { appDataDir, join }] = await Promise.all([
+      import("@tauri-apps/plugin-fs"),
+      import("@tauri-apps/api/path"),
+    ]);
+    // `appDataDir()/missler-library` is the app's OWN storage — always readable
+    // and writable with no permissions, and the target of the network import.
+    // Probe it first on every platform, then the Android drop folders below.
+    const candidates = [await join(await appDataDir(), "missler-library"), ...(isAndroid ? ANDROID_AUTO_PATHS : [])];
+    for (const cand of candidates) {
       try {
-        await readTextFile(`${cand}/missler-library.json`);
+        await readTextFile(await join(cand, "missler-library.json"));
         autoPath = cand;
         break;
       } catch {
@@ -165,6 +172,122 @@ export function clearMisslerCache(): void {
   audioIndexCache = null;
   autoPath = undefined;
   commentaryCache.clear();
+}
+
+/* ------------------------------ network import ----------------------------- */
+
+/** One-click library import. Raw external-path reads FAIL on Android (scoped
+ *  storage won't attribute files written by adb/other apps), so instead of
+ *  pointing at a folder we DOWNLOAD the library over HTTP into the app's own
+ *  `appDataDir()/missler-library/` — always readable and writable, no grants.
+ *  The user serves the built folder from their PC and pastes the LAN URL. */
+export interface ImportResult {
+  files: number;
+  bytes: number;
+}
+
+/** Fetch used by the importer. Must be plugin-http, not window.fetch: the LAN
+ *  server is plain-HTTP (cleartext) and cross-origin, both of which the webview
+ *  blocks but the Rust HTTP client allows. */
+type HttpFetch = (input: string, init?: { method?: string }) => Promise<Response>;
+
+/** Server-reported byte size (Content-Length via HEAD), or null if unknown. */
+async function remoteSize(httpFetch: HttpFetch, url: string): Promise<number | null> {
+  try {
+    const res = await httpFetch(url, { method: "HEAD" });
+    if (!res.ok) return null;
+    const len = res.headers.get("content-length");
+    return len ? Number(len) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Download the whole library from `baseUrl` into `appDataDir()/missler-library/`.
+ * `onProgress(done, total, currentFile)` fires before each file. Resumable: a
+ * file already on disk whose size matches the server's is skipped. Clears the
+ * in-memory caches on success so the imported library is picked up immediately.
+ */
+export async function importLibrary(
+  baseUrl: string,
+  onProgress: (done: number, total: number, currentFile: string) => void,
+  opts?: { audio?: boolean },
+): Promise<ImportResult> {
+  if (!isTauri) throw new Error("Network import is only available in the desktop and Android app.");
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  if (!base) throw new Error("Enter the URL your library is being served from.");
+
+  const [{ fetch: rawFetch }, { appDataDir, join }, { writeFile, mkdir, exists, stat }] = await Promise.all([
+    import("@tauri-apps/plugin-http"),
+    import("@tauri-apps/api/path"),
+    import("@tauri-apps/plugin-fs"),
+  ]);
+  const httpFetch: HttpFetch = rawFetch;
+  const root = await join(await appDataDir(), "missler-library");
+
+  // 1) The index is the source of truth for the work list — fetch it FIRST so a
+  //    wrong URL or an un-served folder fails immediately with a clear message.
+  let index: Library;
+  try {
+    const res = await httpFetch(`${base}/missler-library.json`);
+    if (!res.ok) throw new Error(`server responded ${res.status}`);
+    index = JSON.parse(await res.text()) as Library;
+  } catch (e) {
+    throw new Error(
+      `Couldn't read missler-library.json from ${base} — check the URL and that the folder is being served. (${String(e)})`,
+    );
+  }
+  if (!index || typeof index.books !== "object") {
+    throw new Error("That URL served a file, but it isn't a valid missler-library.json.");
+  }
+
+  // 2) Build the work list: index + audio-index + per-book commentary + audio.
+  const work: string[] = ["missler-library.json", "audio-index.json"];
+  for (const ho of Object.keys(index.books)) work.push(`commentary/${ho}.json`);
+  if (opts?.audio !== false) {
+    try {
+      const res = await httpFetch(`${base}/audio-index.json`);
+      if (res.ok) {
+        const audio = JSON.parse(await res.text()) as AudioIndex;
+        const paths = new Set<string>();
+        for (const sessions of Object.values(audio)) for (const s of sessions) paths.add(s.path);
+        for (const p of paths) work.push(p);
+      }
+    } catch {
+      /* no audio index → commentary-only import */
+    }
+  }
+
+  // 3) Download sequentially, writing under appDataDir. Skip files already on
+  //    disk whose size matches the server's (resume after an interrupted run).
+  const total = work.length;
+  let done = 0;
+  let bytes = 0;
+  for (const rel of work) {
+    onProgress(done, total, rel);
+    const segs = rel.split("/");
+    const dest = await join(root, ...segs);
+    const url = `${base}/${segs.map(encodeURIComponent).join("/")}`;
+
+    const local = (await exists(dest)) ? (await stat(dest)).size : null;
+    if (local != null && local === (await remoteSize(httpFetch, url))) {
+      done++;
+      continue;
+    }
+
+    const res = await httpFetch(url);
+    if (!res.ok) throw new Error(`Download failed for ${rel} (${res.status}).`);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (segs.length > 1) await mkdir(await join(root, ...segs.slice(0, -1)), { recursive: true });
+    else await mkdir(root, { recursive: true });
+    await writeFile(dest, buf);
+    bytes += buf.byteLength;
+    done++;
+  }
+  onProgress(done, total, "");
+  clearMisslerCache();
+  return { files: done, bytes };
 }
 
 /* ----------------------------------- API ----------------------------------- */
