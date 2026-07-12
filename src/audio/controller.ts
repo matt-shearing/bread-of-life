@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { selectEngine, type AudioEngine } from "./engine";
 
 /**
  * A single, app-wide audio player for scripture narration. It lives OUTSIDE the React
@@ -38,7 +39,31 @@ const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0
 
 let state: AudioState = EMPTY;
 const listeners = new Set<() => void>();
-let el: HTMLAudioElement | null = null;
+
+// The swappable playback engine (HTML5 today; native Media3 later). The queue,
+// auto-advance, mark-read and Media Session all live here in the controller.
+const engine: AudioEngine = selectEngine();
+engine.handlers = {
+  onPlay: () => {
+    set({ playing: true });
+    setMediaPlaybackState("playing");
+  },
+  onPause: () => {
+    set({ playing: false });
+    setMediaPlaybackState("paused");
+  },
+  onTime: (t) => {
+    set({ currentTime: t });
+    syncPositionState();
+  },
+  onDuration: (d) => set({ duration: d }),
+  onLoading: (b) => set({ loading: b }),
+  onEnded: () => {
+    const finished = state.queue[state.index];
+    if (finished && onTrackComplete) onTrackComplete(finished, state.index); // e.g. mark the plan reading read
+    next();
+  },
+};
 
 function emit() {
   listeners.forEach((l) => l());
@@ -48,38 +73,12 @@ function set(patch: Partial<AudioState>) {
   emit();
 }
 
-function audio(): HTMLAudioElement {
-  if (el) return el;
-  el = new Audio();
-  el.preload = "metadata";
-  el.addEventListener("play", () => {
-    set({ playing: true });
-    setMediaPlaybackState("playing");
-  });
-  el.addEventListener("pause", () => {
-    set({ playing: false });
-    setMediaPlaybackState("paused");
-  });
-  el.addEventListener("timeupdate", () => {
-    set({ currentTime: el!.currentTime });
-    syncPositionState();
-  });
-  el.addEventListener("durationchange", () => set({ duration: Number.isFinite(el!.duration) ? el!.duration : 0 }));
-  el.addEventListener("waiting", () => set({ loading: true }));
-  el.addEventListener("playing", () => set({ loading: false }));
-  el.addEventListener("canplay", () => set({ loading: false }));
-  el.addEventListener("ended", () => {
-    const finished = state.queue[state.index];
-    if (finished && onTrackComplete) onTrackComplete(finished, state.index); // e.g. mark the plan reading read
-    next();
-  });
-  el.addEventListener("error", () => set({ loading: false, playing: false }));
-  return el;
-}
-
 /* -------------------------------- media session ------------------------------- */
 
 function mediaSession(): MediaSession | null {
+  // A native engine provides its own OS controls (foreground MediaSessionService), so
+  // skip the web Media Session there to avoid two controllers fighting.
+  if (!engine.usesWebMediaSession) return null;
   return typeof navigator !== "undefined" && "mediaSession" in navigator ? navigator.mediaSession : null;
 }
 function setMediaPlaybackState(s: "playing" | "paused" | "none") {
@@ -88,9 +87,10 @@ function setMediaPlaybackState(s: "playing" | "paused" | "none") {
 }
 function syncPositionState() {
   const ms = mediaSession();
-  if (!ms || !el || !Number.isFinite(el.duration) || el.duration <= 0) return;
+  const dur = engine.duration();
+  if (!ms || !Number.isFinite(dur) || dur <= 0) return;
   try {
-    ms.setPositionState({ duration: el.duration, position: Math.min(el.currentTime, el.duration), playbackRate: el.playbackRate });
+    ms.setPositionState({ duration: dur, position: Math.min(engine.currentTime(), dur), playbackRate: 1 });
   } catch {
     /* Safari/older WebViews may throw on bad values — non-fatal */
   }
@@ -121,11 +121,10 @@ function setMediaMetadata(t: Track) {
 function loadIndex(index: number, autoplay: boolean) {
   const t = state.queue[index];
   if (!t) return;
-  const a = audio();
-  a.src = t.src;
+  engine.load({ src: t.src, title: t.title, subtitle: t.subtitle });
   set({ index, currentTime: 0, duration: 0, loading: true });
   setMediaMetadata(t);
-  if (autoplay) a.play().catch(() => set({ playing: false, loading: false }));
+  if (autoplay) engine.play();
 }
 
 /** Start a fresh queue at `startIndex` and play. `onComplete` fires each time a track
@@ -138,10 +137,10 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
 }
 
 export function play() {
-  audio().play().catch(() => set({ playing: false }));
+  engine.play();
 }
 export function pause() {
-  audio().pause();
+  engine.pause();
 }
 export function toggle() {
   if (state.playing) pause();
@@ -153,7 +152,7 @@ export function next() {
 }
 export function prev() {
   // restart current if we're >3s in, else go to the previous track
-  if (el && el.currentTime > 3) {
+  if (engine.currentTime() > 3) {
     seekTo(0);
   } else if (state.index > 0) {
     loadIndex(state.index - 1, true);
@@ -165,19 +164,14 @@ export function jumpTo(index: number) {
   if (index >= 0 && index < state.queue.length) loadIndex(index, true);
 }
 export function seekTo(sec: number) {
-  const a = audio();
-  a.currentTime = Math.max(0, Math.min(sec, a.duration || sec));
-  set({ currentTime: a.currentTime });
+  engine.seekTo(sec);
+  set({ currentTime: engine.currentTime() });
 }
 export function seekBy(delta: number) {
-  seekTo((el?.currentTime ?? 0) + delta);
+  seekTo(engine.currentTime() + delta);
 }
 export function stop() {
-  if (el) {
-    el.pause();
-    el.removeAttribute("src");
-    el.load();
-  }
+  engine.release();
   setMediaPlaybackState("none");
   const ms = mediaSession();
   if (ms) ms.metadata = null;
