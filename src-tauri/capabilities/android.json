@@ -1,0 +1,7 @@
+{
+  "identifier": "android",
+  "description": "Android-only permissions: the All files access (MANAGE_EXTERNAL_STORAGE) bridge.",
+  "platforms": ["android"],
+  "windows": ["main"],
+  "permissions": ["all-files:default"]
+}

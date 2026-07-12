@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-is-manager"
+description = "Enables the is_manager command without any pre-configured scope."
+commands.allow = ["is_manager"]
+
+[[permission]]
+identifier = "deny-is-manager"
+description = "Denies the is_manager command without any pre-configured scope."
+commands.deny = ["is_manager"]

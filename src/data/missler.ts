@@ -66,7 +66,11 @@ const LIBRARY_PATH_KEY = "misslerLibraryPath";
 // Android/media is the practical drop zone: adb, Syncthing and file managers
 // can write it (Android/data is hidden+blocked since 13), and the app reads
 // its own media dir permission-free. Keep the old files path as a fallback.
+// With "All files access" granted (see hasAllFilesAccess) a library in Downloads
+// is readable in place too, so probe it first; the media/data dirs remain the
+// permission-free fallbacks.
 const ANDROID_AUTO_PATHS = [
+  "/storage/emulated/0/Download/missler-library",
   "/storage/emulated/0/Android/media/com.breadoflife.app/missler-library",
   "/storage/emulated/0/Android/media/com.breadoflife.app/files/missler-library",
   "/storage/emulated/0/Android/data/com.breadoflife.app/files/missler-library",
@@ -76,8 +80,37 @@ let autoPath: string | undefined; // probe result cache
 
 /** The permission-free Android/media drop folder — writable by file managers,
  *  MTP and Syncthing without any storage permission. This is the zero-permission
- *  place users drop a library on Android. */
-export const ANDROID_DROP_PATH = ANDROID_AUTO_PATHS[0];
+ *  place users drop a library on Android (index 1; index 0 is Downloads, which
+ *  needs all-files access). */
+export const ANDROID_DROP_PATH = ANDROID_AUTO_PATHS[1];
+
+/** Whether the app can read files outside its own sandbox (Android "All files
+ *  access" / MANAGE_EXTERNAL_STORAGE), needed to read a library from Downloads or
+ *  any shared-storage folder in place. Backed by the Kotlin `all-files` plugin
+ *  (plugins/all-files) — NOT ndk_context, which panics/crashes under Tauri. Always
+ *  true off Tauri and on desktop, where local file access is unrestricted. */
+export async function hasAllFilesAccess(): Promise<boolean> {
+  if (!isTauri || !isAndroid) return true;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const res = await invoke<{ granted: boolean }>("plugin:all-files|is_manager");
+    return !!res?.granted;
+  } catch {
+    return true; // never block the UI on a bridge failure
+  }
+}
+
+/** Open the system "All files access" toggle for this app so the user can grant
+ *  it. No-op off Android; the caller re-checks hasAllFilesAccess() on return. */
+export async function requestAllFilesAccess(): Promise<void> {
+  if (!isTauri || !isAndroid) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("plugin:all-files|request_manage");
+  } catch {
+    /* best-effort; the UI re-checks on focus */
+  }
+}
 
 /** Best-effort: make the Android/media drop folder exist so the user always has a
  *  file-manager-/MTP-/Syncthing-writable place to put the library — no adb, no

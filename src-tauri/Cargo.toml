@@ -30,6 +30,12 @@ tauri-plugin-dialog = "2.7.1"
 # itself in the background. See src-tauri/plugins/native-audio + docs/NATIVE-AUDIO.md.
 tauri-plugin-native-audio = { path = "plugins/native-audio" }
 
+# Android "All files access" (MANAGE_EXTERNAL_STORAGE) bridge — a proper Kotlin
+# Tauri plugin (see plugins/all-files). Android-only; lets the app read the Missler
+# library in place from Downloads / any shared-storage folder once granted.
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-all-files = { path = "plugins/all-files" }
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

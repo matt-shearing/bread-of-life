@@ -26,6 +26,12 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_native_audio::init());
     }
 
+    // "All files access" (MANAGE_EXTERNAL_STORAGE) bridge — Android only.
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.plugin(tauri_plugin_all_files::init());
+    }
+
     builder
         .run(tauri::generate_context!())
         .expect("error while running Bread of Life");

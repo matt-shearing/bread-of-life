@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- "All files access". Declared here so it merges into the app manifest without
+         patching the generated project. Grantable at runtime on API 30+; the app is
+         sideloaded (Obtainium), so the Play Store MANAGE_EXTERNAL_STORAGE policy
+         doesn't apply. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+</manifest>
