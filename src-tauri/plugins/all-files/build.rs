@@ -1,4 +1,4 @@
-const COMMANDS: &[&str] = &["is_manager", "request_manage"];
+const COMMANDS: &[&str] = &["is_manager", "request_manage", "pick_folder"];
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS)

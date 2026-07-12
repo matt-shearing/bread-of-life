@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the is_manager command without any pre-configured scope."
         },
         {
+          "description": "Enables the pick_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-pick-folder",
+          "markdownDescription": "Enables the pick_folder command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the pick_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-pick-folder",
+          "markdownDescription": "Denies the pick_folder command without any pre-configured scope."
+        },
+        {
           "description": "Enables the request_manage command without any pre-configured scope.",
           "type": "string",
           "const": "allow-request-manage",
@@ -319,10 +331,10 @@
           "markdownDescription": "Denies the request_manage command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-is-manager`\n- `allow-request-manage`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-is-manager`\n- `allow-request-manage`\n- `allow-pick-folder`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-is-manager`\n- `allow-request-manage`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-is-manager`\n- `allow-request-manage`\n- `allow-pick-folder`"
         }
       ]
     }

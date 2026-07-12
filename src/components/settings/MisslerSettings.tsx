@@ -6,6 +6,7 @@ import {
   getMisslerStatus,
   hasAllFilesAccess,
   importLibrary,
+  pickLibraryFolder,
   requestAllFilesAccess,
   setMisslerLibraryPath,
   type MisslerStatus,
@@ -80,9 +81,17 @@ export function MisslerSettings() {
   }, []);
 
   const browse = async () => {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const dir = await open({ directory: true, title: "Choose your Missler library folder" });
-    if (typeof dir === "string" && dir) {
+    // Android uses the native folder picker (SAF → absolute path via the all-files
+    // plugin); desktop uses the plugin-dialog directory picker.
+    let dir: string | null = null;
+    if (isAndroid) {
+      dir = await pickLibraryFolder();
+    } else {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({ directory: true, title: "Choose your Missler library folder" });
+      dir = typeof picked === "string" ? picked : null;
+    }
+    if (dir) {
       setPath(dir);
       setSaving(true);
       await setMisslerLibraryPath(dir);
@@ -123,18 +132,20 @@ export function MisslerSettings() {
           <Input
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="/home/you/missler-commentary/out/library"
+            placeholder={
+              isAndroid
+                ? "/storage/emulated/0/Download/missler-library"
+                : "/home/you/missler-commentary/out/library"
+            }
             spellCheck={false}
           />
-          {!isAndroid && (
-            <Button
-              variant="outline"
-              onClick={() => void browse()}
-              title="Choose the library folder"
-            >
-              Browse…
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={() => void browse()}
+            title="Choose the library folder"
+          >
+            Browse…
+          </Button>
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? "…" : "Save"}
           </Button>

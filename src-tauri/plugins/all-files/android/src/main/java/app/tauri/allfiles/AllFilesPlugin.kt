@@ -5,8 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
+import androidx.activity.result.ActivityResult
+import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
@@ -62,6 +65,61 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
             // Best-effort: don't reject in a way that could surface as an error toast;
             // the UI re-checks is_manager on focus and just keeps showing the prompt.
             invoke.resolve()
+        }
+    }
+
+    /** Open the system folder picker (ACTION_OPEN_DOCUMENT_TREE) and return the
+     *  chosen folder as an ABSOLUTE filesystem path — the form the app's library
+     *  reader uses (with "All files access" granted, it reads the path directly; the
+     *  content-tree URI itself isn't usable for the app's join()+readTextFile reads).
+     *  Resolves `{ path: "/storage/emulated/0/…" }`, or `{ path: null }` if the user
+     *  cancels or the pick can't be mapped to a real path (e.g. an exotic provider). */
+    @Command
+    fun pick_folder(invoke: Invoke) {
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivityForResult(invoke, intent, "folderPickerResult")
+        } catch (e: Exception) {
+            Log.w(TAG, "pick_folder failed to launch", e)
+            val res = JSObject()
+            res.put("path", null as String?)
+            invoke.resolve(res)
+        }
+    }
+
+    @ActivityCallback
+    fun folderPickerResult(invoke: Invoke, result: ActivityResult) {
+        val res = JSObject()
+        val uri = if (result.resultCode == Activity.RESULT_OK) result.data?.data else null
+        if (uri == null) {
+            res.put("path", null as String?) // cancelled
+            invoke.resolve(res)
+            return
+        }
+        res.put("path", treeUriToPath(uri))
+        invoke.resolve(res)
+    }
+
+    /** Map a SAF tree URI (…/tree/primary%3ADownload%2Flib) to an absolute path
+     *  (/storage/emulated/0/Download/lib). Handles the primary shared volume; a
+     *  removable volume is best-effort (/storage/<volumeId>/…). Null if it can't
+     *  be mapped. */
+    private fun treeUriToPath(uri: Uri): String? {
+        return try {
+            val docId = DocumentsContract.getTreeDocumentId(uri) // "primary:Download/lib"
+            val parts = docId.split(":", limit = 2)
+            val volume = parts.getOrNull(0) ?: return null
+            val relative = parts.getOrNull(1).orEmpty()
+            if (volume.equals("primary", ignoreCase = true)) {
+                val base = Environment.getExternalStorageDirectory().absolutePath
+                if (relative.isEmpty()) base else "$base/$relative"
+            } else {
+                if (relative.isEmpty()) "/storage/$volume" else "/storage/$volume/$relative"
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "treeUriToPath failed for $uri", e)
+            null
         }
     }
 }

@@ -112,6 +112,22 @@ export async function requestAllFilesAccess(): Promise<void> {
   }
 }
 
+/** Open the native Android folder picker and return the chosen folder's ABSOLUTE
+ *  path (the app reads it directly, given all-files access). Returns null if the
+ *  user cancels, the pick can't be mapped to a real path, or off Android. Backed by
+ *  the Kotlin all-files plugin (a SAF tree URI isn't usable for the path-based
+ *  reader, so the plugin maps it to a filesystem path). */
+export async function pickLibraryFolder(): Promise<string | null> {
+  if (!isTauri || !isAndroid) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const res = await invoke<{ path: string | null }>("plugin:all-files|pick_folder");
+    return res?.path ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Best-effort: make the Android/media drop folder exist so the user always has a
  *  file-manager-/MTP-/Syncthing-writable place to put the library — no adb, no
  *  all-files-access needed. Android/media dirs are writable by the app
