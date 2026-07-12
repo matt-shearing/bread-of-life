@@ -68,6 +68,11 @@ jobs:
       - name: Init + build Android (unsigned APK)
         run: |
           pnpm tauri android init --ci
+          # tauri-plugin-native-audio (background audio) requires Android 8.0+
+          # (minSdk 26); the Tauri template defaults to 24, which fails the manifest
+          # merger. Bump the freshly-scaffolded app module's minSdk.
+          sed -i -E 's/(minSdk[[:space:]]*=[[:space:]]*)[0-9]+/\126/' src-tauri/gen/android/app/build.gradle.kts
+          grep -n "minSdk" src-tauri/gen/android/app/build.gradle.kts || true
           # android init scaffolds gen/android with the DEFAULT Tauri icon.
           # Regenerate our app icon into the now-existing Android project so
           # the APK ships the real launcher icon (not the default swirl).
