@@ -17,7 +17,8 @@ pub fn run() {
         // Read-only access to the user's local Missler library folder (see
         // src/data/missler.ts). Scoped to $HOME and removable media in the
         // window capability; audio streams via the asset protocol.
-        .plugin(tauri_plugin_fs::init());
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init());
 
     // Native background audio (foreground MediaSessionService) — mobile only.
     #[cfg(mobile)]

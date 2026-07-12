@@ -2,49 +2,101 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability set for the main window.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "opener:default",
     "notification:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://github.com/*" }, { "url": "https://apps.obtainium.imranr.dev/*" }]
+      "allow": [
+        {
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://apps.obtainium.imranr.dev/*"
+        }
+      ]
     },
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://api.anthropic.com/*" },
-        { "url": "https://api.openai.com/*" },
-        { "url": "http://localhost:*/*" },
-        { "url": "http://127.0.0.1:*/*" },
-        { "url": "https://*/*" },
-        { "url": "http://*/*" }
+        {
+          "url": "https://api.anthropic.com/*"
+        },
+        {
+          "url": "https://api.openai.com/*"
+        },
+        {
+          "url": "http://localhost:*/*"
+        },
+        {
+          "url": "http://127.0.0.1:*/*"
+        },
+        {
+          "url": "https://*/*"
+        },
+        {
+          "url": "http://*/*"
+        }
       ]
     },
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "/run/media/**" }, { "path": "/storage/**" }]
+      "allow": [
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "/run/media/**"
+        },
+        {
+          "path": "/storage/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "$APPDATA/**" }]
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "$APPDATA/**" }]
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "$APPDATA/**" }]
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-exists",
-      "allow": [{ "path": "$APPDATA/**" }]
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
     },
     {
       "identifier": "fs:allow-stat",
-      "allow": [{ "path": "$APPDATA/**" }]
-    }
+      "allow": [
+        {
+          "path": "$APPDATA/**"
+        }
+      ]
+    },
+    "dialog:allow-open"
   ]
 }
