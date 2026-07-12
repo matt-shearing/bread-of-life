@@ -17,7 +17,7 @@ import {
 import { db } from "@/db";
 import { setChapterDone, startPlan } from "@/db/repos";
 import { getAnyPlan, type Plan } from "@/data/plans";
-import { refLabel } from "@/lib/osis";
+import { refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
 import { useAudio, playQueue, pause } from "@/audio/controller";
@@ -43,7 +43,7 @@ export function GuidedReaderPage() {
   // in the dashboard plan bubble) rather than resuming at the first unread one.
   const requestedReading = searchParams.has("reading") ? Number(searchParams.get("reading")) : null;
   const navigate = useNavigate();
-  const { goTo, translation, railOpen, toggleRail, setRailOpen } = useUI();
+  const { goTo, goToPortion, translation, railOpen, toggleRail, setRailOpen } = useUI();
   const { playing } = useAudio();
 
   const [plan, setPlan] = useState<Plan | null | undefined>(undefined); // undefined = loading
@@ -100,10 +100,17 @@ export function GuidedReaderPage() {
   }, [plan, progress, total, day, initialised, requestedReading]);
 
   // Drive the reused Reader by pointing the shared Bible location at the cursor.
+  // Verse-portion readings (Soul Food Classic) scope the reader to their range.
   useEffect(() => {
-    if (current) goTo(current.ho, current.chapter);
+    if (current) {
+      if (current.vStart != null) {
+        goToPortion(current.ho, current.chapter, current.vStart, current.vEnd ?? current.vStart);
+      } else {
+        goTo(current.ho, current.chapter);
+      }
+    }
     setAtEnd(false);
-  }, [current, goTo]);
+  }, [current, goTo, goToPortion]);
 
   // "Reaching a chapter's end can also prompt it": watch the Reader's scroll
   // container and flag when the reader nears the bottom of the passage.
@@ -201,7 +208,7 @@ export function GuidedReaderPage() {
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{plan.name}</div>
           <div className="text-xs text-muted-foreground">
-            Day {day + 1} · Chapter {Math.min(cursor + 1, total)} of {total} today
+            Day {day + 1} · Reading {Math.min(cursor + 1, total)} of {total} today
           </div>
         </div>
 
@@ -210,10 +217,10 @@ export function GuidedReaderPage() {
           {readings.map((r, i) => {
             const done = completedSet.has(i);
             return (
-              <Tooltip key={i} label={refLabel(r.ho, r.chapter)}>
+              <Tooltip key={i} label={refRange(r.ho, r.chapter, r.vStart, r.vEnd)}>
                 <button
                   onClick={() => setCursor(i)}
-                  aria-label={`Go to ${refLabel(r.ho, r.chapter)}`}
+                  aria-label={`Go to ${refRange(r.ho, r.chapter, r.vStart, r.vEnd)}`}
                   className={cn(
                     "flex h-6 min-w-6 items-center justify-center rounded-full border px-1.5 text-[11px] font-semibold transition-colors",
                     done
@@ -273,7 +280,7 @@ export function GuidedReaderPage() {
 
       <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <Reader swipeToChapter={false} />
+          <Reader swipeToChapter={false} scopeToPortion />
         </div>
         {railOpen && <StudyRail />}
 
@@ -282,7 +289,7 @@ export function GuidedReaderPage() {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-4 md:pr-[376px]">
             {atEnd && !currentDone && (
               <div className="pointer-events-auto rounded-full border border-primary/30 bg-card/95 px-4 py-1.5 text-xs font-medium text-primary-700 shadow-card backdrop-blur dark:text-primary-300">
-                You've reached the end of {current ? refLabel(current.ho, current.chapter) : "this chapter"} — mark it read?
+                You've reached the end of {current ? refRange(current.ho, current.chapter, current.vStart, current.vEnd) : "this reading"} — mark it read?
               </div>
             )}
             <Button

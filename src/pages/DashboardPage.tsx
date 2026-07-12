@@ -17,7 +17,7 @@ import {
   type DevotionReading,
 } from "@/data/devotional";
 import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
-import { refLabel } from "@/lib/osis";
+import { refLabel, refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
@@ -90,7 +90,7 @@ function TodaysPlan() {
               onClick={() => navigate(`/guided/${activePlanId}/${today}?reading=${i}`)}
               className="rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent"
             >
-              {refLabel(r.ho, r.chapter)}
+              {refRange(r.ho, r.chapter, r.vStart, r.vEnd)}
             </button>
           ))}
           <div className="ml-auto flex items-center gap-2">

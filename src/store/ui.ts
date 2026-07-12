@@ -19,6 +19,11 @@ interface UIState {
   ho: string;
   chapter: number;
   goTo: (ho: string, chapter: number) => void;
+  // The guided reader can scope the reader to a verse range (Soul Food Classic
+  // "part of a psalm"). Only honoured where a portion is explicitly wanted;
+  // any plain goTo clears it.
+  portion: { ho: string; chapter: number; start: number; end: number } | null;
+  goToPortion: (ho: string, chapter: number, start: number, end: number) => void;
 
   translation: string;
   setTranslation: (id: string) => void;
@@ -122,7 +127,10 @@ export const useUI = create<UIState>()(
 
       ho: "JHN",
       chapter: 1,
-      goTo: (ho, chapter) => set({ ho, chapter }),
+      portion: null,
+      goTo: (ho, chapter) => set({ ho, chapter, portion: null }),
+      goToPortion: (ho, chapter, start, end) =>
+        set({ ho, chapter, portion: { ho, chapter, start, end } }),
 
       translation: "BSB",
       setTranslation: (id) => set({ translation: id }),

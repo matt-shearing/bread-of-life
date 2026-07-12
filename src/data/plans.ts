@@ -1,8 +1,11 @@
 /**
- * Reading plans. A plan is a list of days; each day is a list of chapter
- * readings. Small plans are explicit; longer ones are generated from the
- * bundled book/chapter index so they always match BSB's versification.
- * Progress is tracked in Dexie (see db `plans` table) — by chapters completed,
+ * Reading plans. A plan is a list of days; each day is a list of readings.
+ * A reading is a whole chapter, or — for the "verse portion" plans — a verse
+ * *range* within a chapter (e.g. Psalm 7:1-9), so long chapters can be split
+ * across days and no stream ever runs dry. Small plans are explicit; longer
+ * ones are generated from the bundled book/chapter index (and, for portions,
+ * the baked per-chapter verse counts) so they always match BSB's versification.
+ * Progress is tracked in Dexie (see db `plans` table) by readings completed,
  * not the calendar, so you can never "fall behind".
  */
 import { BOOKS } from "@/lib/osis";
@@ -11,6 +14,9 @@ import { loadIndex } from "@/data/bible";
 export interface Reading {
   ho: string;
   chapter: number;
+  /** Optional verse range within the chapter. Omitted → the whole chapter. */
+  vStart?: number;
+  vEnd?: number;
 }
 export interface Plan {
   id: string;
@@ -20,6 +26,7 @@ export interface Plan {
 }
 
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
 async function chaptersFor(hoList: string[]): Promise<Reading[]> {
   const idx = await loadIndex();
@@ -45,6 +52,90 @@ function chunk(arr: Reading[], days: number): Reading[][] {
   return res;
 }
 
+/* ------------------------------ verse portions ------------------------------ */
+
+/** verses-per-chapter for every book, baked by scripts/build-versification.mjs. */
+type Versification = Record<string, number[]>;
+let verseCounts: Versification | null = null;
+async function loadVersification(): Promise<Versification> {
+  if (verseCounts) return verseCounts;
+  const res = await fetch(`${import.meta.env.BASE_URL}bible/bsb/versification.json`);
+  verseCounts = res.ok ? ((await res.json()) as Versification) : {};
+  return verseCounts;
+}
+
+/**
+ * Give each chapter (by verse count) a share of `portions` total, minimum one
+ * each, summing to exactly `portions`. Every chapter gets 1, then the remaining
+ * portions are handed out largest-remainder style in proportion to verse count —
+ * so long chapters get split more, short chapters stay whole. Requires
+ * `portions >= chapters.length`.
+ */
+function allocatePortions(weights: number[], portions: number): number[] {
+  const n = weights.length;
+  if (portions <= n) return weights.map(() => 1);
+  const extra = portions - n;
+  const total = sum(weights) || 1;
+  const quota = weights.map((w) => (w / total) * extra);
+  const base = quota.map(Math.floor);
+  let used = sum(base);
+  const order = quota
+    .map((q, i) => ({ i, r: q - Math.floor(q) }))
+    .sort((a, b) => b.r - a.r);
+  let k = 0;
+  while (used < extra) {
+    base[order[k % n].i]++;
+    used++;
+    k++;
+  }
+  return base.map((b) => b + 1);
+}
+
+/** Split `verses` (1..verses) into `parts` contiguous, roughly-even ranges. */
+function splitRanges(verses: number, parts: number): Array<[number, number]> {
+  const m = Math.max(1, Math.min(parts, verses));
+  const baseLen = Math.floor(verses / m);
+  const rem = verses % m;
+  const out: Array<[number, number]> = [];
+  let s = 1;
+  for (let j = 0; j < m; j++) {
+    const len = baseLen + (j < rem ? 1 : 0);
+    out.push([s, s + len - 1]);
+    s += len;
+  }
+  return out;
+}
+
+/**
+ * Turn a stream of whole chapters into exactly `portions` verse-range readings,
+ * covering every verse once, in order, never crossing a chapter boundary. A part
+ * that spans a whole chapter is emitted as a plain chapter reading (no range).
+ */
+async function versePortions(hoList: string[], portions: number): Promise<Reading[]> {
+  const vc = await loadVersification();
+  const chapters: Array<{ ho: string; chapter: number; verses: number }> = [];
+  for (const ho of hoList) {
+    const counts = vc[ho] ?? [];
+    for (let c = 1; c <= counts.length; c++) {
+      chapters.push({ ho, chapter: c, verses: counts[c - 1] });
+    }
+  }
+  const alloc = allocatePortions(chapters.map((c) => c.verses), portions);
+  const out: Reading[] = [];
+  chapters.forEach((c, i) => {
+    for (const [a, b] of splitRanges(c.verses, alloc[i])) {
+      out.push(
+        a === 1 && b === c.verses
+          ? { ho: c.ho, chapter: c.chapter }
+          : { ho: c.ho, chapter: c.chapter, vStart: a, vEnd: b },
+      );
+    }
+  });
+  return out;
+}
+
+/* ---------------------------------- plans ----------------------------------- */
+
 let cache: Plan[] | null = null;
 
 export async function getPlans(): Promise<Plan[]> {
@@ -61,15 +152,35 @@ export async function getPlans(): Promise<Plan[]> {
     chaptersFor(otStream),
   ]);
 
-  // Soul Food — four daily streams (OT · NT · a Psalm · a Proverbs chapter).
-  const SOULFOOD_DAYS = 365;
-  const otChunk = chunk(otStreamCh, SOULFOOD_DAYS);
-  const ntChunk = chunk(ntCh, SOULFOOD_DAYS);
-  const soulfoodDays: Reading[][] = range(0, SOULFOOD_DAYS - 1).map((i) => [
+  const YEAR = 365;
+  const otChunk = chunk(otStreamCh, YEAR); // ~2 whole OT chapters/day, once through
+
+  // Soul Food Max — four whole-chapter streams every day, all year. OT is read
+  // once (Genesis→Malachi); the New Testament, a Psalm and a Proverbs chapter
+  // cycle so you're fed from every part of Scripture on all 365 days — nothing
+  // ever runs out mid-year.
+  const soulfoodMax: Reading[][] = range(0, YEAR - 1).map((i) => [
     ...(otChunk[i] ?? []),
-    ...(ntChunk[i] ?? []),
+    ntCh[i % ntCh.length],
     { ho: "PSA", chapter: (i % 150) + 1 },
     { ho: "PRO", chapter: (i % 31) + 1 },
+  ]);
+
+  // Soul Food Classic — the whole Bible in a year as four parallel daily
+  // portions. OT in whole chapters; the New Testament, Psalms and Proverbs in
+  // verse portions ("part of a psalm and a proverb") sized so each finishes
+  // exactly on day 365. Long chapters (Psalm 119, the Sermon on the Mount…)
+  // are split across days; short ones stay whole.
+  const [ntPortions, psaPortions, proPortions] = await Promise.all([
+    versePortions(nt, YEAR),
+    versePortions(["PSA"], YEAR),
+    versePortions(["PRO"], YEAR),
+  ]);
+  const soulfoodClassic: Reading[][] = range(0, YEAR - 1).map((i) => [
+    ...(otChunk[i] ?? []),
+    ntPortions[i],
+    psaPortions[i],
+    proPortions[i],
   ]);
 
   cache = [
@@ -99,10 +210,17 @@ export async function getPlans(): Promise<Plan[]> {
     },
     {
       id: "soulfood365",
-      name: "Soul Food — Bible in a Year",
+      name: "Soul Food Max — Bible in a Year",
       description:
-        "Four daily streams — Old Testament · New Testament · a Psalm · a Proverbs chapter — for 365 days.",
-      days: soulfoodDays,
+        "Four streams every single day, all year — Old Testament · New Testament · a Psalm · a Proverbs chapter. Whole chapters; nothing runs out mid-year.",
+      days: soulfoodMax,
+    },
+    {
+      id: "soulfoodClassic",
+      name: "Soul Food Classic — Whole Bible in a Year",
+      description:
+        "The whole Bible in a year as four gentle daily portions — Old Testament, New Testament, and part of a Psalm and a Proverb — finishing together on day 365.",
+      days: soulfoodClassic,
     },
     {
       id: "year365",
