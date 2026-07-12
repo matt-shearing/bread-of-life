@@ -8,10 +8,11 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.3** — a proper **audio Bible player**: background playback that keeps going when you
-leave the app, lock-screen/notification controls, a mini-player, and a "listen to the whole day" queue
-that ticks off each chapter as it finishes. Plus **two Soul Food plans** (Max + a whole-Bible-in-a-year
-Classic that never runs dry) and **network import** of your Missler Inspired library.
+**Latest: v0.3.5** — the **audio Bible** now plays a whole day's readings straight through in the
+**background** (a native ExoPlayer playlist): leave the app and it keeps rolling chapter to chapter,
+ticking each one off, with lock-screen controls and a mini-player. Built on the v0.3.3 audio player,
+**two Soul Food plans** (Max + a whole-Bible-in-a-year Classic), and **network import** of your Missler
+Inspired library.
 
 **v0.3.2** — a **Faithfulness review** (save your answered-prayer record as a PDF), a dedicated
 **Commentary** section, **optional end-to-end encryption** of your synced journal/prayers/notes (with a
