@@ -63,24 +63,33 @@ const LIBRARY_PATH_KEY = "misslerLibraryPath";
 /** On Android the library is dropped into the app's own external-files folder
  *  (readable without extra permissions): push it once with adb/Syncthing and
  *  the app finds it — no path entry needed. */
-const ANDROID_AUTO_PATH =
-  "/storage/emulated/0/Android/data/com.breadoflife.app/files/missler-library";
+// Android/media is the practical drop zone: adb, Syncthing and file managers
+// can write it (Android/data is hidden+blocked since 13), and the app reads
+// its own media dir permission-free. Keep the old files path as a fallback.
+const ANDROID_AUTO_PATHS = [
+  "/storage/emulated/0/Android/media/com.breadoflife.app/missler-library",
+  "/storage/emulated/0/Android/data/com.breadoflife.app/files/missler-library",
+];
 const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
-let autoPathOk: boolean | null = null; // probe result cache
+let autoPath: string | undefined; // probe result cache
 
 export async function getMisslerLibraryPath(): Promise<string> {
   const set = (await getSetting<string>(LIBRARY_PATH_KEY, "")).trim();
   if (set || !isTauri || !isAndroid) return set;
-  if (autoPathOk === null) {
-    try {
-      const { readTextFile } = await import("@tauri-apps/plugin-fs");
-      await readTextFile(`${ANDROID_AUTO_PATH}/missler-library.json`);
-      autoPathOk = true;
-    } catch {
-      autoPathOk = false;
+  if (autoPath === undefined) {
+    autoPath = "";
+    const { readTextFile } = await import("@tauri-apps/plugin-fs");
+    for (const cand of ANDROID_AUTO_PATHS) {
+      try {
+        await readTextFile(`${cand}/missler-library.json`);
+        autoPath = cand;
+        break;
+      } catch {
+        /* try next candidate */
+      }
     }
   }
-  return autoPathOk ? ANDROID_AUTO_PATH : "";
+  return autoPath;
 }
 
 /** Persist the library path and drop the in-memory caches so the next read is fresh. */
@@ -154,7 +163,7 @@ function loadBookCommentary(ho: string): Promise<CommentaryFile | null> {
 export function clearMisslerCache(): void {
   libraryCache = null;
   audioIndexCache = null;
-  autoPathOk = null;
+  autoPath = undefined;
   commentaryCache.clear();
 }
 
