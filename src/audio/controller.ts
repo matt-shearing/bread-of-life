@@ -44,11 +44,27 @@ const listeners = new Set<() => void>();
 // auto-advance, mark-read and Media Session all live here in the controller.
 const engine: AudioEngine = selectEngine();
 
-// Guards a single advance so near-end pre-advance and the "ended" fallback can't both
-// fire for the same track. Reset when a new track loads.
+// HTML5: single-advance guard (a native engine drives its own advancement).
 let advancing = false;
+// Native queue: how far through the queue we've marked read (exclusive index).
+let markedUpTo = 0;
 
-/** Mark the finished track read (if a plan queue) and move to the next track. */
+/** Mark tracks [markedUpTo, upto) read — the native player has advanced past them. */
+function markThrough(upto: number) {
+  for (let k = markedUpTo; k < upto && k < state.queue.length; k++) {
+    const t = state.queue[k];
+    if (onTrackComplete) {
+      try {
+        onTrackComplete(t, k); // e.g. mark the plan reading read
+      } catch {
+        /* mark-read failure must never break playback */
+      }
+    }
+  }
+  if (upto > markedUpTo) markedUpTo = upto;
+}
+
+/** HTML5 only: mark the current track read + step to the next one. */
 function advanceQueue() {
   if (advancing) return;
   advancing = true;
@@ -56,15 +72,12 @@ function advanceQueue() {
   const idx = state.index;
   if (finished && onTrackComplete) {
     try {
-      onTrackComplete(finished, idx); // e.g. mark the plan reading read
+      onTrackComplete(finished, idx);
     } catch {
-      /* mark-read failure must never break playback */
+      /* non-fatal */
     }
   }
-  // Advance on a later tick, OUTSIDE any engine state-callback stack (native
-  // re-entrancy safety). loadIndex resets `advancing`; if the queue is done, next()
-  // just stops.
-  setTimeout(() => next(), 60);
+  setTimeout(() => next(), 60); // out of the state-callback stack; loadIndex resets the guard
 }
 
 engine.handlers = {
@@ -79,25 +92,25 @@ engine.handlers = {
   onTime: (t) => {
     set({ currentTime: t });
     syncPositionState();
-    // NATIVE ONLY: pre-advance ~0.5s before the end so a queued track never reaches the
-    // native "ended" state. On Android that avoids restarting the foreground service for
-    // the next track while backgrounded (Android 12+ forbids background FGS starts →
-    // crash). The HTML5 engine plays to the true end and uses onEnded instead (no clip).
-    if (
-      !engine.usesWebMediaSession &&
-      !advancing &&
-      state.duration > 0 &&
-      state.index < state.queue.length - 1 &&
-      t >= state.duration - 0.5
-    ) {
-      advanceQueue();
-    }
   },
   onDuration: (d) => set({ duration: d }),
   onLoading: (b) => set({ loading: b }),
+  // NATIVE queue: ExoPlayer advanced to the next chapter itself (works in the background;
+  // these events batch and apply when JS resumes if the app was backgrounded). Mark the
+  // chapters we passed read and update the mini-player.
+  onIndexChange: (index) => {
+    markThrough(index);
+    set({ index, currentTime: 0, duration: 0 });
+    const t = state.queue[index];
+    if (t) setMediaMetadata(t);
+  },
   onEnded: () => {
     set({ playing: false });
-    advanceQueue(); // last track, HTML5, or fallback if pre-advance didn't fire
+    if (engine.supportsNativeQueue) {
+      markThrough(state.queue.length); // whole playlist finished — mark the rest read
+    } else {
+      advanceQueue(); // HTML5: one track ended, step forward
+    }
   },
 };
 
@@ -165,12 +178,22 @@ function loadIndex(index: number, autoplay: boolean) {
 }
 
 /** Start a fresh queue at `startIndex` and play. `onComplete` fires each time a track
- *  finishes naturally (used by the plan reader to mark readings done). */
+ *  finishes (used by the plan reader to mark readings done). On a native-queue engine the
+ *  whole playlist is handed to the OS player so it advances itself, even in the background;
+ *  on HTML5 the controller steps through track by track. */
 export function playQueue(tracks: Track[], opts?: { startIndex?: number; onComplete?: TrackCompleteHandler }) {
   if (!tracks.length) return;
   onTrackComplete = opts?.onComplete ?? null;
+  const start = Math.max(0, Math.min(opts?.startIndex ?? 0, tracks.length - 1));
   set({ queue: tracks });
-  loadIndex(Math.max(0, Math.min(opts?.startIndex ?? 0, tracks.length - 1)), true);
+  if (engine.supportsNativeQueue) {
+    markedUpTo = start; // don't mark anything before where we start
+    set({ index: start, currentTime: 0, duration: 0, loading: true });
+    setMediaMetadata(tracks[start]);
+    engine.loadQueue(tracks.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })), start);
+  } else {
+    loadIndex(start, true);
+  }
 }
 
 export function play() {
@@ -184,10 +207,18 @@ export function toggle() {
   else play();
 }
 export function next() {
+  if (engine.supportsNativeQueue) {
+    engine.queueNext(); // native player advances; onIndexChange updates us
+    return;
+  }
   if (state.index < state.queue.length - 1) loadIndex(state.index + 1, true);
   else set({ playing: false }); // end of queue
 }
 export function prev() {
+  if (engine.supportsNativeQueue) {
+    engine.queuePrev();
+    return;
+  }
   // restart current if we're >3s in, else go to the previous track
   if (engine.currentTime() > 3) {
     seekTo(0);
@@ -214,6 +245,7 @@ export function stop() {
   if (ms) ms.metadata = null;
   onTrackComplete = null;
   advancing = false;
+  markedUpTo = 0;
   set({ ...EMPTY });
 }
 

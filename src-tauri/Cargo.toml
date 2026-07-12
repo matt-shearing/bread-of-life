@@ -24,7 +24,10 @@ tauri-plugin-fs = "2"
 # Native background audio (Media3 ExoPlayer + foreground MediaSessionService) — mobile
 # only; desktop keeps the HTML5 audio path. See docs/NATIVE-AUDIO.md.
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-tauri-plugin-native-audio = "1"
+# Vendored fork of tauri-plugin-native-audio (v1.0.5) adding native PLAYLIST support
+# (setQueue/next/previous + index in state) so ExoPlayer advances the day's readings
+# itself in the background. See src-tauri/plugins/native-audio + docs/NATIVE-AUDIO.md.
+tauri-plugin-native-audio = { path = "plugins/native-audio" }
 
 [profile.release]
 panic = "abort"

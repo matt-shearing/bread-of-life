@@ -26,16 +26,27 @@ export interface EngineHandlers {
   onPlay?: () => void;
   onPause?: () => void;
   onLoading?: (loading: boolean) => void;
+  /** Native queue only: the native player advanced to a new playlist index. */
+  onIndexChange?: (index: number) => void;
 }
 
 export interface AudioEngine {
   /** True if OS transport controls come from the web Media Session (Html5) rather than
    *  natively from the engine itself (native plugin). */
   readonly usesWebMediaSession: boolean;
+  /** True if the engine plays a whole PLAYLIST natively (advances itself, even in the
+   *  background). When true the controller hands over the whole queue via loadQueue and
+   *  lets the engine drive next/prev; when false it drives one track at a time. */
+  readonly supportsNativeQueue: boolean;
   handlers: EngineHandlers;
   load(track: EngineTrack): void;
+  /** Native-queue engines only: load a whole playlist and start at startIndex. */
+  loadQueue(tracks: EngineTrack[], startIndex: number): void;
   play(): void;
   pause(): void;
+  /** Native-queue engines only: advance/rewind within the native playlist. */
+  queueNext(): void;
+  queuePrev(): void;
   seekTo(seconds: number): void;
   currentTime(): number;
   duration(): number;
@@ -46,8 +57,14 @@ export interface AudioEngine {
  *  engine is wired). Created lazily so nothing is instantiated at import time. */
 export class Html5Engine implements AudioEngine {
   readonly usesWebMediaSession = true;
+  readonly supportsNativeQueue = false;
   handlers: EngineHandlers = {};
   private el: HTMLAudioElement | null = null;
+
+  // Html5 plays one track at a time; the controller drives the queue, so these are no-ops.
+  loadQueue() {}
+  queueNext() {}
+  queuePrev() {}
 
   private audio(): HTMLAudioElement {
     if (this.el) return this.el;
@@ -108,19 +125,26 @@ export class Html5Engine implements AudioEngine {
  */
 class NativeEngine implements AudioEngine {
   readonly usesWebMediaSession = false;
+  readonly supportsNativeQueue = true;
   handlers: EngineHandlers = {};
   private api: typeof import("tauri-plugin-native-audio-api") | null = null;
+  private invoke: typeof import("@tauri-apps/api/core").invoke | null = null;
   private ready: Promise<void>;
   private cur = 0;
   private dur = 0;
+  private idx = 0;
   private wasPlaying = false;
   private ended = false;
 
   constructor() {
     this.ready = (async () => {
-      const api = await import("tauri-plugin-native-audio-api");
+      const [api, core] = await Promise.all([
+        import("tauri-plugin-native-audio-api"),
+        import("@tauri-apps/api/core"),
+      ]);
       await api.initialize();
       await api.addStateListener((s) => this.onState(s));
+      this.invoke = core.invoke;
       this.api = api;
     })().catch(() => {
       /* plugin unavailable — leave api null; calls no-op */
@@ -137,12 +161,43 @@ class NativeEngine implements AudioEngine {
       this.wasPlaying = s.isPlaying;
       (s.isPlaying ? this.handlers.onPlay : this.handlers.onPause)?.();
     }
+    // The native player advanced to a new playlist item on its own (background-safe).
+    const index = (s as { index?: number }).index;
+    if (typeof index === "number" && index !== this.idx) {
+      this.idx = index;
+      this.handlers.onIndexChange?.(index);
+    }
     if (s.status === "ended" && !this.ended) {
       this.ended = true;
       this.handlers.onEnded?.();
     } else if (s.status !== "ended") {
       this.ended = false;
     }
+  }
+
+  loadQueue(tracks: EngineTrack[], startIndex: number) {
+    this.cur = 0;
+    this.dur = 0;
+    this.ended = false;
+    this.idx = startIndex;
+    void this.ready.then(async () => {
+      if (!this.invoke) return;
+      try {
+        await this.invoke("plugin:native-audio|set_queue", {
+          items: tracks.map((t) => ({ src: t.src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl })),
+          startIndex,
+        });
+        await this.api?.play();
+      } catch {
+        this.handlers.onPause?.();
+      }
+    });
+  }
+  queueNext() {
+    void this.ready.then(() => this.invoke?.("plugin:native-audio|next").catch(() => {}));
+  }
+  queuePrev() {
+    void this.ready.then(() => this.invoke?.("plugin:native-audio|previous").catch(() => {}));
   }
 
   // Every plugin call is awaited + caught, so a native error surfaces as "paused"

@@ -1,0 +1,24 @@
+const COMMANDS: &[&str] = &[
+    "initialize",
+    "register_listener",
+    "remove_listener",
+    "set_source",
+    "set_queue",
+    "next",
+    "previous",
+    "play",
+    "pause",
+    "seek_to",
+    "set_rate",
+    "get_state",
+    "get_progress_checkpoint",
+    "clear_progress_checkpoint",
+    "dispose",
+];
+
+fn main() {
+    tauri_plugin::Builder::new(COMMANDS)
+        .android_path("android")
+        .ios_path("ios")
+        .build();
+}
