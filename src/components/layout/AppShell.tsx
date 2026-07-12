@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
+import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { useUI } from "@/store/ui";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
@@ -59,8 +60,12 @@ export function AppShell() {
     <TooltipProvider>
       <div className="flex h-[100dvh] w-full overflow-hidden pt-[env(safe-area-inset-top)]">
         <Sidebar />
-        <main className="flex-1 overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
-          <Outlet />
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <Outlet />
+          </div>
+          {/* Persistent audio bar — shows only while narration is queued; sits above the mobile nav. */}
+          <MiniPlayer />
         </main>
         <MobileNav />
       </div>

@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Headphones,
+  Pause,
   PanelRightClose,
   PanelRightOpen,
   Sparkles,
@@ -18,6 +20,8 @@ import { getAnyPlan, type Plan } from "@/data/plans";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
+import { useAudio, playQueue, pause } from "@/audio/controller";
+import { buildReadingQueue } from "@/audio/queue";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
 import { TranslationPicker } from "@/components/bible/TranslationPicker";
@@ -39,7 +43,8 @@ export function GuidedReaderPage() {
   // in the dashboard plan bubble) rather than resuming at the first unread one.
   const requestedReading = searchParams.has("reading") ? Number(searchParams.get("reading")) : null;
   const navigate = useNavigate();
-  const { goTo, railOpen, toggleRail, setRailOpen } = useUI();
+  const { goTo, translation, railOpen, toggleRail, setRailOpen } = useUI();
+  const { playing } = useAudio();
 
   const [plan, setPlan] = useState<Plan | null | undefined>(undefined); // undefined = loading
   const [cursor, setCursor] = useState(0);
@@ -138,6 +143,24 @@ export function GuidedReaderPage() {
     ),
   );
 
+  // Listen to the whole day: queue every reading's narration and play straight through,
+  // starting at the current reading. As each chapter's audio FINISHES it's marked read.
+  async function listenToDay() {
+    if (playing) {
+      pause();
+      return;
+    }
+    const q = await buildReadingQueue(translation, readings);
+    if (!q.length) return;
+    const startAt = Math.max(0, q.findIndex((t) => (t.planReadingIndex ?? 0) >= cursor));
+    playQueue(q, {
+      startIndex: startAt === -1 ? 0 : startAt,
+      onComplete: (t) => {
+        if (t.planReadingIndex != null) void setChapterDone(planId, day, t.planReadingIndex, true, total);
+      },
+    });
+  }
+
   function markReadAndNext() {
     if (!current) return;
     void setChapterDone(planId, day, cursor, true, total);
@@ -208,6 +231,11 @@ export function GuidedReaderPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
+          <Tooltip label={playing ? "Pause listening" : "Listen to today’s readings"}>
+            <Button variant="ghost" size="icon" onClick={listenToDay} aria-label="Listen to today's readings">
+              {playing ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+            </Button>
+          </Tooltip>
           <Tooltip label="Previous chapter">
             <Button
               variant="ghost"
