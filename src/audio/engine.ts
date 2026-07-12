@@ -184,10 +184,17 @@ class NativeEngine implements AudioEngine {
       if (!this.invoke) return;
       try {
         await this.invoke("plugin:native-audio|set_queue", {
-          items: tracks.map((t) => ({ src: t.src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl })),
+          items: tracks.map((t) => {
+            const { src } = splitOffset(t.src);
+            return { src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl };
+          }),
           startIndex,
         });
         await this.api?.play();
+        // Missler chapters can start mid-file (#t= hint) — ExoPlayer ignores the
+        // fragment, so seek the start track ourselves.
+        const off = splitOffset(tracks[startIndex]?.src ?? "").startSec;
+        if (off > 0) await this.api?.seekTo(off);
       } catch {
         this.handlers.onPause?.();
       }
@@ -216,7 +223,11 @@ class NativeEngine implements AudioEngine {
     this.cur = 0;
     this.dur = 0;
     this.ended = false;
-    this.run((api) => api.setSource({ src: t.src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl }));
+    const { src, startSec } = splitOffset(t.src);
+    this.run(async (api) => {
+      await api.setSource({ src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl });
+      if (startSec > 0) await api.seekTo(startSec);
+    });
   }
   play() {
     this.run((api) => api.play());
@@ -241,6 +252,14 @@ class NativeEngine implements AudioEngine {
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 const isMobile = typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+/** Split a trailing "#t=<seconds>" media-fragment start hint off a URI. The native
+ *  ExoPlayer takes the URI literally (unlike the HTML5 <audio> element, which honors
+ *  the fragment), so the offset must be applied as a seek instead. */
+function splitOffset(src: string): { src: string; startSec: number } {
+  const m = /#t=(\d+(?:\.\d+)?)$/.exec(src);
+  return m ? { src: src.slice(0, m.index), startSec: parseFloat(m[1]) } : { src, startSec: 0 };
+}
 
 /** Pick the playback engine: native (background-capable) on mobile Tauri, else HTML5. */
 export function selectEngine(): AudioEngine {

@@ -202,11 +202,17 @@ async function assetUrl(rel: string, startSec: number): Promise<string> {
   const frag = startSec > 0 ? `#t=${Math.round(startSec)}` : "";
   if (isTauri) {
     const libPath = await getMisslerLibraryPath();
-    const [{ convertFileSrc }, { join }] = await Promise.all([
-      import("@tauri-apps/api/core"),
-      import("@tauri-apps/api/path"),
-    ]);
-    return convertFileSrc(await join(libPath, rel)) + frag;
+    const { join } = await import("@tauri-apps/api/path");
+    const abs = await join(libPath, rel);
+    // Android plays via the native ExoPlayer, which CANNOT read Tauri's asset://
+    // scheme (that only resolves inside the webview) — hand it a file:// URI it can
+    // open directly (all-files access covers the /storage path). The #t= start hint
+    // is split off and applied as a seek by the native engine (ExoPlayer takes the
+    // URI literally). Desktop plays via the HTML5 <audio> element, where asset:// +
+    // the media fragment are correct.
+    if (isAndroid) return `file://${encodeURI(abs)}${frag}`;
+    const { convertFileSrc } = await import("@tauri-apps/api/core");
+    return convertFileSrc(abs) + frag;
   }
   return encodeURI(`${import.meta.env.BASE_URL}missler-library/${rel}`) + frag;
 }
