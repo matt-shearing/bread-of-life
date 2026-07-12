@@ -27,7 +27,8 @@
         "scope": [
           "$HOME/**",
           "/run/media/**",
-          "/storage/**"
+          "/storage/**",
+          "$APPDATA/**"
         ]
       }
     }
