@@ -1,3 +1,5 @@
+mod allfiles;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Work around a webkit2gtk blank-screen seen on some Linux GPU/driver combos
@@ -27,6 +29,12 @@ pub fn run() {
     }
 
     builder
+        // "All files access" bridge (Android MANAGE_EXTERNAL_STORAGE) so the
+        // Missler library can be read in place from any shared-storage folder.
+        .invoke_handler(tauri::generate_handler![
+            allfiles::has_all_files_access,
+            allfiles::request_all_files_access
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Bread of Life");
 }

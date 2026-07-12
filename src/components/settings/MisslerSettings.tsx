@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { BookAudio, Download } from "lucide-react";
+import { BookAudio, Download, FolderKey, TriangleAlert } from "lucide-react";
 import {
+  clearMisslerCache,
   getMisslerLibraryPath,
   getMisslerStatus,
+  hasAllFilesAccess,
   importLibrary,
+  requestAllFilesAccess,
   setMisslerLibraryPath,
   type MisslerStatus,
 } from "@/data/missler";
@@ -39,6 +42,9 @@ export function MisslerSettings() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
+  // Android "All files access": null = unknown/checking, false = show the prompt.
+  const [allFiles, setAllFiles] = useState<boolean | null>(null);
+
   useEffect(() => {
     getMisslerLibraryPath().then(setPath);
     getMisslerStatus().then(setStatus);
@@ -55,6 +61,35 @@ export function MisslerSettings() {
       setSaving(false);
     }
   };
+
+  // Track the "All files access" grant on Android. Re-check whenever the user
+  // returns to the app (they leave to flip the system toggle), and if it just
+  // flipped to granted, drop the caches and re-probe the auto-paths so a library
+  // sitting in Downloads / shared storage is picked up without a manual save.
+  useEffect(() => {
+    if (!isAndroid) return;
+    let granted = false;
+    const recheck = async () => {
+      const now = await hasAllFilesAccess();
+      if (now && !granted) {
+        clearMisslerCache();
+        setStatus(await getMisslerStatus());
+        getMisslerLibraryPath().then(setPath);
+      }
+      granted = now;
+      setAllFiles(now);
+    };
+    void recheck();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void recheck();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", recheck);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", recheck);
+    };
+  }, []);
 
   const save = async () => {
     setSaving(true);
@@ -118,6 +153,21 @@ export function MisslerSettings() {
                 {status.error ?? "No library set yet. Paste the path to your built library folder above."}
               </span>
             )}
+          </div>
+        )}
+
+        {isAndroid && allFiles === false && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+            <TriangleAlert style={{ width: 16, height: 16 }} className="mt-0.5 shrink-0 text-amber-600" />
+            <div className="space-y-2">
+              <p>
+                To read a library folder from Downloads or shared storage, the app needs "All files access."
+              </p>
+              <Button variant="outline" size="sm" onClick={() => void requestAllFilesAccess()}>
+                <FolderKey className="mr-1 h-4 w-4" />
+                Allow file access…
+              </Button>
+            </div>
           </div>
         )}
 
