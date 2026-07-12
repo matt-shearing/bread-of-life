@@ -93,14 +93,10 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
 
     @ActivityCallback
     fun folderPickerResult(invoke: Invoke, result: ActivityResult) {
+        val uri: Uri? = if (result.resultCode == Activity.RESULT_OK) result.data?.data else null
+        val path: String? = if (uri != null) treeUriToPath(uri) else null // null = cancelled/unmapped
         val res = JSObject()
-        val uri = if (result.resultCode == Activity.RESULT_OK) result.data?.data else null
-        if (uri == null) {
-            res.put("path", null as String?) // cancelled
-            invoke.resolve(res)
-            return
-        }
-        res.put("path", treeUriToPath(uri))
+        res.put("path", path)
         invoke.resolve(res)
     }
 

@@ -34,10 +34,11 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
-    // androidx.activity.result.ActivityResult (folder-picker callback) comes
-    // transitively via :tauri-android — do NOT pin a version here; a hard pin can
-    // skew androidx.activity against media3/tauri-android and crash at runtime
-    // (the native-audio service dies → no audio). The dialog plugin relies on the
-    // transitive version the same way.
+    // androidx.activity.result.ActivityResult (folder-picker callback). Match
+    // Tauri's own dialog plugin, which does the identical activity-result picking:
+    // appcompat pulls in a COMPATIBLE androidx.activity transitively. Do NOT hard-pin
+    // androidx.activity — a forced version can skew against media3/tauri-android and
+    // crash at runtime.
+    implementation("androidx.appcompat:appcompat:1.6.0")
     implementation(project(":tauri-android"))
 }
