@@ -8,7 +8,13 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.6** — press play on any chapter and the **audio Bible keeps rolling** — through the rest
+**Latest: v0.3.7** — a smoother **Missler library** on every platform: a **Browse…** folder picker on
+desktop, **"All files access"** on Android so the app reads your library **in place** from Downloads or
+any shared-storage folder (with a permission-free `Android/media` drop folder auto-created for you), and
+a fix so the **network import** works across a Tailscale-style host:port. Builds on v0.3.6's continuous
+background audio.
+
+**v0.3.6** — press play on any chapter and the **audio Bible keeps rolling** — through the rest
 of the book, then book after book to Revelation — straight through in the **background** (native
 ExoPlayer playlist), with lock-screen controls and a mini-player. Reading plans do the same for the
 day's readings. Built on the v0.3.3 audio player, **two Soul Food plans**, and Missler network import.
