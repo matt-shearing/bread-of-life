@@ -3,12 +3,14 @@ import { Headphones, Pause, Play } from "lucide-react";
 import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip } from "@/components/ui";
 import { useUI } from "@/store/ui";
 import { useAudio, playQueue, toggle, isCurrentChapter } from "@/audio/controller";
-import { trackFromAudio } from "@/audio/queue";
+import { trackFromAudio, buildContinuousQueue } from "@/audio/queue";
+import { recordProgress } from "@/db/repos";
 import { cn } from "@/lib/cn";
 
 /** Compact chapter-audio button in the reader. Playback runs through the app-wide audio
  *  controller, so it appears in the mini-player + OS media controls and keeps going as you
- *  navigate. BSB ships narration per chapter (david / hays / souer); Missler merges in. */
+ *  navigate. Starting narration (BSB david/hays/souer) queues the whole rest of the Bible so
+ *  it rolls chapter→book→book continuously in the background. Missler audio is per-chapter. */
 export function AudioPlayer({ audio }: { audio?: Record<string, string> }) {
   const { ho, chapter, translation } = useUI();
   const { playing } = useAudio();
@@ -25,9 +27,21 @@ export function AudioPlayer({ audio }: { audio?: Record<string, string> }) {
   const isThis = isCurrentChapter(ho, chapter);
   const showPause = isThis && playing;
 
-  function start(label: string) {
-    const t = trackFromAudio(ho, chapter, audio!, label, translation);
-    if (t) playQueue([t]);
+  async function start(label: string) {
+    const url = audio![label];
+    if (!url) return;
+    // Missler chapter audio = local per-chapter files (not templatable) — play just this one.
+    if (label.toLowerCase().startsWith("missler")) {
+      const t = trackFromAudio(ho, chapter, audio!, label, translation);
+      if (t) playQueue([t]);
+      return;
+    }
+    // Narration: queue this chapter onward through the whole Bible; keep reading progress
+    // in step as it advances (marks fire live in-app, or batch when you reopen the app).
+    const q = await buildContinuousQueue(ho, chapter, url, label, translation);
+    if (q.length) {
+      playQueue(q, { startIndex: 0, onComplete: (t) => void recordProgress(t.ho, t.chapter).catch(() => {}) });
+    }
   }
 
   return (
@@ -36,7 +50,7 @@ export function AudioPlayer({ audio }: { audio?: Record<string, string> }) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => (isThis ? toggle() : start(narrator))}
+          onClick={() => (isThis ? toggle() : void start(narrator))}
           aria-label="Play chapter audio"
         >
           {showPause ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
@@ -55,7 +69,7 @@ export function AudioPlayer({ audio }: { audio?: Record<string, string> }) {
                 key={n}
                 onClick={() => {
                   setNarrator(n);
-                  start(n);
+                  void start(n);
                 }}
                 className={cn(
                   "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm capitalize hover:bg-accent",

@@ -1,6 +1,6 @@
-import { getChapterFor, translationById } from "@/data/bible";
+import { getChapterFor, loadIndex, translationById } from "@/data/bible";
 import { getMisslerAudio } from "@/data/missler";
-import { refLabel } from "@/lib/osis";
+import { BOOKS, refLabel } from "@/lib/osis";
 import type { Track } from "./controller";
 
 function subtitleFor(translation: string, label: string): string {
@@ -52,4 +52,39 @@ export async function buildReadingQueue(
     }),
   );
   return tracks.filter((t): t is Track => t !== null);
+}
+
+/**
+ * A continuous queue for the general Bible reader: the given chapter, then the rest of
+ * its book, then every following book to the end of the canon. Audio URLs are TEMPLATED
+ * from the current chapter's real URL (so it works for any translation/host that has
+ * narration) — no per-chapter fetch, so a ~1000-chapter playlist is built instantly and
+ * handed to the native player to roll through in the background.
+ */
+export async function buildContinuousQueue(
+  fromHo: string,
+  fromChapter: number,
+  sampleUrl: string,
+  narratorLabel: string,
+  translation: string,
+): Promise<Track[]> {
+  const index = await loadIndex();
+  const chapterCount = (ho: string) => index.find((b) => b.id === ho)?.chapters ?? 0;
+  const subtitle = subtitleFor(translation, narratorLabel);
+  const ordered = [...BOOKS].sort((a, b) => a.order - b.order);
+
+  const tracks: Track[] = [];
+  let started = false;
+  for (const book of ordered) {
+    if (book.ho === fromHo) started = true;
+    if (!started) continue;
+    const total = chapterCount(book.ho);
+    const start = book.ho === fromHo ? fromChapter : 1;
+    for (let c = start; c <= total; c++) {
+      // "…/BSB/JHN/1/audio/david.mp3" → swap the "/<book>/<ch>/audio/" segment.
+      const src = sampleUrl.replace(/\/[A-Za-z0-9]+\/\d+\/audio\//, `/${book.ho}/${c}/audio/`);
+      tracks.push({ ho: book.ho, chapter: c, src, title: refLabel(book.ho, c), subtitle });
+    }
+  }
+  return tracks;
 }
