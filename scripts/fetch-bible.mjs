@@ -48,6 +48,7 @@ async function main() {
   // complete.json shape: { translation, books: [{ ...book, chapters: [{ number, content:[...] }] }] }
   const books = complete.books ?? complete;
   const index = [];
+  const versification = {}; // { ho: [verses per chapter] } for reading-plan portions
 
   for (const book of books) {
     const order = book.order ?? book.book?.order ?? index.length + 1;
@@ -73,6 +74,9 @@ async function main() {
     const id = book.id ?? book.book?.id;
     const name = book.commonName ?? book.name ?? book.title ?? id;
     const outBook = { id, name, order, testament, chapters };
+    versification[id] = chapters.map((c) =>
+      c.items.reduce((max, i) => (i.t === "v" && i.n > max ? i.n : max), 0),
+    );
     await writeFile(join(OUT, `${id}.json`), JSON.stringify(outBook));
     index.push({
       id,
@@ -87,6 +91,7 @@ async function main() {
 
   index.sort((a, b) => a.order - b.order);
   await writeFile(join(OUT, "index.json"), JSON.stringify(index, null, 2));
+  await writeFile(join(OUT, "versification.json"), JSON.stringify(versification));
   console.log(`\nDone. ${index.length} books -> public/bible/bsb/`);
 }
 

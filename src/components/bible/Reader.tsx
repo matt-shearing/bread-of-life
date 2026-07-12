@@ -5,7 +5,7 @@ import { Brain, Copy, NotebookPen, HandHeart, Sparkles, StickyNote } from "lucid
 import { db, type HighlightColor } from "@/db";
 import { setHighlight, clearHighlight, saveNote, recordProgress, addMemoryVerse } from "@/db/repos";
 import { getChapterFor, translationById, type Chapter } from "@/data/bible";
-import { refLabel, bookByHo } from "@/lib/osis";
+import { refLabel, refRange, bookByHo } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { useChapterNav } from "@/lib/useChapterNav";
 import {
@@ -55,10 +55,20 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
  * the GLOBAL ho/chapter. The guided-plan reader drives chapters itself (by plan
  * cursor), so it passes `false` — otherwise a swipe would move the global chapter
  * off-plan while the guided header/cursor stayed put (a desync).
+ *
+ * `scopeToPortion` (guided reader only) honours a store `portion` verse range:
+ * the day's verses stay bright and are scrolled into view, the rest of the
+ * chapter is dimmed for context. The Bible page leaves it off.
  */
-export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } = {}) {
-  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed, railOpen, setRailOpen } =
+export function Reader({
+  swipeToChapter = true,
+  scopeToPortion = false,
+}: { swipeToChapter?: boolean; scopeToPortion?: boolean } = {}) {
+  const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed, railOpen, setRailOpen, portion } =
     useUI();
+  const active =
+    scopeToPortion && portion && portion.ho === ho && portion.chapter === chapter ? portion : null;
+  const activeKey = active ? `${active.ho}.${active.chapter}.${active.start}.${active.end}` : "";
   const { step } = useChapterNav();
   const navigate = useNavigate();
   const misslerAudio = useMisslerAudio(ho, chapter);
@@ -115,6 +125,17 @@ export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } =
       alive = false;
     };
   }, [translation, ho, chapter]);
+
+  // When scoped to a verse portion, bring the day's verses into view once the
+  // chapter has rendered (the load effect above resets scroll to the top first).
+  useEffect(() => {
+    if (!active || loading) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(`rv-${active.start}`)?.scrollIntoView({ block: "center" });
+    }, 60);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey, loading]);
 
   useEffect(() => {
     if (!parallel) {
@@ -198,6 +219,12 @@ export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } =
           <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
           <AudioPlayer audio={audio} />
         </div>
+        {active && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary-700 dark:text-primary-300">
+            Today's portion: <span className="font-semibold">{refRange(ho, chapter, active.start, active.end)}</span>
+            <span className="text-muted-foreground"> · the rest of the chapter is dimmed for context</span>
+          </div>
+        )}
         {parallel && (
           <div className="mb-3 grid grid-cols-2 gap-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <div>{translationById(translation)?.short ?? translation}</div>
@@ -212,12 +239,15 @@ export function Reader({ swipeToChapter = true }: { swipeToChapter?: boolean } =
               </h3>
             );
           }
+          const dim = !!active && (item.n < active.start || item.n > active.end);
           const verse = (
             <Verse
               ho={ho}
               chapter={chapter}
               n={item.n}
               text={item.text}
+              anchorId={`rv-${item.n}`}
+              dim={dim}
               color={hlByVerse.get(item.n)}
               hasNote={noteByVerse.has(item.n)}
               memorised={memByVerse.has(item.n)}
@@ -289,6 +319,8 @@ interface VerseProps {
   chapter: number;
   n: number;
   text: string;
+  anchorId?: string;
+  dim?: boolean;
   color?: HighlightColor;
   hasNote: boolean;
   memorised: boolean;
@@ -299,7 +331,7 @@ interface VerseProps {
   onAsk: () => void;
 }
 
-function Verse({ ho, chapter, n, text, color, hasNote, memorised, onSelect, onNote, onMemorise, onCapture, onAsk }: VerseProps) {
+function Verse({ ho, chapter, n, text, anchorId, dim, color, hasNote, memorised, onSelect, onNote, onMemorise, onCapture, onAsk }: VerseProps) {
   const [open, setOpen] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const toggleColor = (c: HighlightColor) => {
@@ -321,6 +353,7 @@ function Verse({ ho, chapter, n, text, color, hasNote, memorised, onSelect, onNo
     >
       <PopoverTrigger asChild>
         <span
+          id={anchorId}
           onClick={onSelect}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -330,6 +363,7 @@ function Verse({ ho, chapter, n, text, color, hasNote, memorised, onSelect, onNo
             "cursor-pointer rounded-sm font-serif leading-[2] transition-colors hover:bg-accent/60",
             color && CLASS_BY_COLOR[color],
             color && "px-0.5",
+            dim && "opacity-40",
             open && "bg-accent ring-1 ring-primary/40",
           )}
         >

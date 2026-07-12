@@ -5,7 +5,7 @@ import { ArrowLeft, BookOpen, Check, CheckCircle2, Play, Plus, RotateCcw, Star, 
 import { db } from "@/db";
 import { addCustomPlan, deleteCustomPlan, setDayDone, startPlan, resetPlan } from "@/db/repos";
 import { buildReadingRange, getPlans, type Plan } from "@/data/plans";
-import { BOOKS, refLabel } from "@/lib/osis";
+import { BOOKS, refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -217,7 +217,7 @@ function PlanDetail({
                       }}
                       className="rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent"
                     >
-                      {refLabel(r.ho, r.chapter)}
+                      {refRange(r.ho, r.chapter, r.vStart, r.vEnd)}
                     </button>
                   ))}
                 </div>

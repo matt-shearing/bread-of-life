@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fetch:bible": "node scripts/fetch-bible.mjs",
+    "build:versification": "node scripts/build-versification.mjs",
+    "verify:plans": "node scripts/verify-plans.mjs",
     "build:crossrefs": "node scripts/build-crossrefs.mjs",
     "build:strongs": "node scripts/build-strongs.mjs",
     "build:devotional": "node scripts/build-devotional.mjs",

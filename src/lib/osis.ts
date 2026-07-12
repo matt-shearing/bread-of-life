@@ -80,6 +80,14 @@ export function refLabel(ho: string, chapter: number, verse?: number): string {
   return verse == null ? `${name} ${chapter}` : `${name} ${chapter}:${verse}`;
 }
 
+/** Human label for an optional verse range, e.g. "Psalm 7:1-9", "Psalm 7:5",
+ *  or "Psalm 7" when no range is given (a whole chapter). */
+export function refRange(ho: string, chapter: number, vStart?: number, vEnd?: number): string {
+  if (vStart == null) return refLabel(ho, chapter);
+  if (vEnd == null || vEnd === vStart) return refLabel(ho, chapter, vStart);
+  return `${refLabel(ho, chapter, vStart)}-${vEnd}`;
+}
+
 /** Parse an OSIS chapter/verse string back to parts (best-effort). */
 export function parseOsis(osis: string): { ho: string; chapter: number; verse?: number } | null {
   const parts = osis.split(".");
