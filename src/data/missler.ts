@@ -66,12 +66,7 @@ const LIBRARY_PATH_KEY = "misslerLibraryPath";
 // Android/media is the practical drop zone: adb, Syncthing and file managers
 // can write it (Android/data is hidden+blocked since 13), and the app reads
 // its own media dir permission-free. Keep the old files path as a fallback.
-// With "All files access" granted (see hasAllFilesAccess below) the library can
-// live ANYWHERE on shared storage and be read in place. Downloads is the folder
-// users will actually drop it in, so probe it FIRST; the app's own media/data
-// dirs remain as permission-free fallbacks for adb/Syncthing pushes.
 const ANDROID_AUTO_PATHS = [
-  "/storage/emulated/0/Download/missler-library",
   "/storage/emulated/0/Android/media/com.breadoflife.app/missler-library",
   "/storage/emulated/0/Android/media/com.breadoflife.app/files/missler-library",
   "/storage/emulated/0/Android/data/com.breadoflife.app/files/missler-library",
@@ -80,9 +75,9 @@ const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.
 let autoPath: string | undefined; // probe result cache
 
 /** The permission-free Android/media drop folder — writable by file managers,
- *  MTP and Syncthing without "All files access". This is the zero-permission
- *  fallback for users who don't grant all-files access (Downloads needs it). */
-export const ANDROID_DROP_PATH = ANDROID_AUTO_PATHS[1];
+ *  MTP and Syncthing without any storage permission. This is the zero-permission
+ *  place users drop a library on Android. */
+export const ANDROID_DROP_PATH = ANDROID_AUTO_PATHS[0];
 
 /** Best-effort: make the Android/media drop folder exist so the user always has a
  *  file-manager-/MTP-/Syncthing-writable place to put the library — no adb, no
@@ -96,34 +91,6 @@ export async function ensureAndroidDropFolder(): Promise<void> {
     await mkdir(ANDROID_DROP_PATH, { recursive: true });
   } catch (e) {
     console.warn("missler: could not create Android drop folder", e);
-  }
-}
-
-/* -------------------------- all-files access (Android) ------------------------- */
-
-/** Whether the app can read files outside its own sandbox (Android "All files
- *  access" / MANAGE_EXTERNAL_STORAGE). Needed to read a library that lives in
- *  Downloads or any other shared-storage folder in place. Always true off Tauri
- *  (browser dev) and on desktop, where local file access is unrestricted. */
-export async function hasAllFilesAccess(): Promise<boolean> {
-  if (!isTauri) return true;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<boolean>("has_all_files_access");
-  } catch {
-    return true; // never block the UI on a bridge failure
-  }
-}
-
-/** Open the system "All files access" toggle for this app so the user can grant
- *  it. No-op off Tauri; the caller re-checks hasAllFilesAccess() on return. */
-export async function requestAllFilesAccess(): Promise<void> {
-  if (!isTauri) return;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("request_all_files_access");
-  } catch {
-    /* best-effort; the UI re-checks on focus */
   }
 }
 
