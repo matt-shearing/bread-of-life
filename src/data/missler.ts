@@ -73,6 +73,23 @@ const ANDROID_AUTO_PATHS = [
 const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 let autoPath: string | undefined; // probe result cache
 
+/** Absolute Android/media drop folder (the first, preferred auto-path). */
+export const ANDROID_DROP_PATH = ANDROID_AUTO_PATHS[0];
+
+/** Best-effort: make the Android/media drop folder exist so the user always has a
+ *  file-manager-/MTP-/Syncthing-writable place to put the library — no adb needed.
+ *  Android/media dirs are writable by the app permission-free (unlike the hidden
+ *  Android/data dir). No-op off Android/Tauri; never throws (called at startup). */
+export async function ensureAndroidDropFolder(): Promise<void> {
+  if (!isTauri || !isAndroid) return;
+  try {
+    const { mkdir } = await import("@tauri-apps/plugin-fs");
+    await mkdir(ANDROID_DROP_PATH, { recursive: true });
+  } catch (e) {
+    console.warn("missler: could not create Android drop folder", e);
+  }
+}
+
 export async function getMisslerLibraryPath(): Promise<string> {
   const set = (await getSetting<string>(LIBRARY_PATH_KEY, "")).trim();
   if (set || !isTauri || !isAndroid) return set;

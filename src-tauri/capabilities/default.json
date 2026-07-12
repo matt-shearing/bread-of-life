@@ -24,6 +24,10 @@
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "$HOME/**" }, { "path": "/run/media/**" }, { "path": "/storage/**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "/storage/emulated/0/Android/media/com.breadoflife.app/**" }]
     }
   ]
 }

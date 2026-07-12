@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { BookAudio } from "lucide-react";
 import {
+  ANDROID_DROP_PATH,
   getMisslerLibraryPath,
   getMisslerStatus,
   setMisslerLibraryPath,
   type MisslerStatus,
 } from "@/data/missler";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
+
+const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 
 /**
  * Points the app at a local Missler (Line by Line) library folder. The library is
@@ -63,6 +66,14 @@ export function MisslerSettings() {
               </span>
             )}
           </div>
+        )}
+
+        {isAndroid && (
+          <p className="text-xs text-muted-foreground">
+            On Android, leave the path blank and drop your library folder into{" "}
+            <code className="break-all rounded bg-muted px-1 py-0.5">{ANDROID_DROP_PATH}</code> (created
+            automatically; visible to your file manager, MTP and Syncthing) — the app finds it there.
+          </p>
         )}
 
         <p className="text-xs text-muted-foreground">
