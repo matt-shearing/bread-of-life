@@ -20,6 +20,7 @@ tauri-plugin-http = "2.5.9"
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-notification = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2.7.1"
 
 # Native background audio (Media3 ExoPlayer + foreground MediaSessionService) — mobile
 # only; desktop keeps the HTML5 audio path. See docs/NATIVE-AUDIO.md.

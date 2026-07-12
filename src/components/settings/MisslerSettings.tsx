@@ -26,6 +26,8 @@ interface Progress {
  * downloads the whole library over HTTP into the app's own storage — always
  * readable, no permissions. Serve the built folder from your PC and paste the URL.
  */
+const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+
 export function MisslerSettings() {
   const [path, setPath] = useState("");
   const [status, setStatus] = useState<MisslerStatus | null>(null);
@@ -41,6 +43,18 @@ export function MisslerSettings() {
     getMisslerLibraryPath().then(setPath);
     getMisslerStatus().then(setStatus);
   }, []);
+
+  const browse = async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const dir = await open({ directory: true, title: "Choose your Missler library folder" });
+    if (typeof dir === "string" && dir) {
+      setPath(dir);
+      setSaving(true);
+      await setMisslerLibraryPath(dir);
+      setStatus(await getMisslerStatus());
+      setSaving(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -77,6 +91,15 @@ export function MisslerSettings() {
             placeholder="/home/you/missler-commentary/out/library"
             spellCheck={false}
           />
+          {!isAndroid && (
+            <Button
+              variant="outline"
+              onClick={() => void browse()}
+              title="Choose the library folder"
+            >
+              Browse…
+            </Button>
+          )}
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? "…" : "Save"}
           </Button>

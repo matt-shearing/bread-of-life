@@ -40,6 +40,9 @@
         },
         {
           "url": "http://*:*/*"
+        },
+        {
+          "url": "http://*/*"
         }
       ]
     },
@@ -96,6 +99,7 @@
           "path": "$APPDATA/**"
         }
       ]
-    }
+    },
+    "dialog:allow-open"
   ]
 }
