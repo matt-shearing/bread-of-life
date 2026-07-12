@@ -81,10 +81,10 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             startActivityForResult(invoke, intent, "folderPickerResult")
         } catch (e: Exception) {
+            // Reject (not resolve-null) so the UI shows a real error instead of a
+            // silent "no folder" — a failure to LAUNCH is different from a cancel.
             Log.w(TAG, "pick_folder failed to launch", e)
-            val res = JSObject()
-            res.put("path", null as String?)
-            invoke.resolve(res)
+            invoke.reject(e.message ?: "could not open the folder picker")
         }
     }
 
@@ -107,15 +107,25 @@ class AllFilesPlugin(private val activity: Activity) : Plugin(activity) {
      *  be mapped. */
     private fun treeUriToPath(uri: Uri): String? {
         return try {
-            val docId = DocumentsContract.getTreeDocumentId(uri) // "primary:Download/lib"
+            val docId = DocumentsContract.getTreeDocumentId(uri) // e.g. "primary:Download/lib"
+            // Some providers (notably Downloads) hand back an absolute path directly.
+            if (docId.startsWith("raw:")) return docId.removePrefix("raw:")
             val parts = docId.split(":", limit = 2)
             val volume = parts.getOrNull(0) ?: return null
             val relative = parts.getOrNull(1).orEmpty()
-            if (volume.equals("primary", ignoreCase = true)) {
-                val base = Environment.getExternalStorageDirectory().absolutePath
-                if (relative.isEmpty()) base else "$base/$relative"
-            } else {
-                if (relative.isEmpty()) "/storage/$volume" else "/storage/$volume/$relative"
+            when {
+                volume.equals("primary", ignoreCase = true) -> {
+                    val base = Environment.getExternalStorageDirectory().absolutePath
+                    if (relative.isEmpty()) base else "$base/$relative"
+                }
+                // "home:" is the Documents dir on some OEM document providers.
+                volume.equals("home", ignoreCase = true) -> {
+                    val docs = Environment
+                        .getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).absolutePath
+                    if (relative.isEmpty()) docs else "$docs/$relative"
+                }
+                // A removable volume (SD card / USB): best-effort.
+                else -> if (relative.isEmpty()) "/storage/$volume" else "/storage/$volume/$relative"
             }
         } catch (e: Exception) {
             Log.w(TAG, "treeUriToPath failed for $uri", e)

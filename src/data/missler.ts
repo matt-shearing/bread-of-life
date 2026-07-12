@@ -119,13 +119,11 @@ export async function requestAllFilesAccess(): Promise<void> {
  *  reader, so the plugin maps it to a filesystem path). */
 export async function pickLibraryFolder(): Promise<string | null> {
   if (!isTauri || !isAndroid) return null;
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const res = await invoke<{ path: string | null }>("plugin:all-files|pick_folder");
-    return res?.path ?? null;
-  } catch {
-    return null;
-  }
+  // NB: errors propagate so the caller can surface them — a silent catch here made
+  // a failing picker look like a dead button.
+  const { invoke } = await import("@tauri-apps/api/core");
+  const res = await invoke<{ path: string | null }>("plugin:all-files|pick_folder");
+  return res?.path ?? null;
 }
 
 /** Best-effort: make the Android/media drop folder exist so the user always has a

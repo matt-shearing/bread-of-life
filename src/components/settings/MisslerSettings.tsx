@@ -45,6 +45,8 @@ export function MisslerSettings() {
 
   // Android "All files access": null = unknown/checking, false = show the prompt.
   const [allFiles, setAllFiles] = useState<boolean | null>(null);
+  // Inline feedback for the Browse… folder picker (surfaces errors / no-op picks).
+  const [browseNote, setBrowseNote] = useState<string | null>(null);
 
   useEffect(() => {
     getMisslerLibraryPath().then(setPath);
@@ -83,20 +85,27 @@ export function MisslerSettings() {
   const browse = async () => {
     // Android uses the native folder picker (SAF → absolute path via the all-files
     // plugin); desktop uses the plugin-dialog directory picker.
-    let dir: string | null = null;
-    if (isAndroid) {
-      dir = await pickLibraryFolder();
-    } else {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const picked = await open({ directory: true, title: "Choose your Missler library folder" });
-      dir = typeof picked === "string" ? picked : null;
-    }
-    if (dir) {
-      setPath(dir);
-      setSaving(true);
-      await setMisslerLibraryPath(dir);
-      setStatus(await getMisslerStatus());
-      setSaving(false);
+    setBrowseNote(null);
+    try {
+      let dir: string | null = null;
+      if (isAndroid) {
+        dir = await pickLibraryFolder();
+      } else {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const picked = await open({ directory: true, title: "Choose your Missler library folder" });
+        dir = typeof picked === "string" ? picked : null;
+      }
+      if (dir) {
+        setPath(dir);
+        setSaving(true);
+        await setMisslerLibraryPath(dir);
+        setStatus(await getMisslerStatus());
+        setSaving(false);
+      } else if (isAndroid) {
+        setBrowseNote("No folder was set — either you cancelled, or that folder's location couldn't be mapped to a path. Try picking it under your phone's internal storage (or type the path).");
+      }
+    } catch (e) {
+      setBrowseNote(`Browse failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -150,6 +159,8 @@ export function MisslerSettings() {
             {saving ? "…" : "Save"}
           </Button>
         </div>
+
+        {browseNote && <p className="text-xs text-amber-700 dark:text-amber-500">{browseNote}</p>}
 
         {status && (
           <div className="flex items-start gap-2 text-sm">
