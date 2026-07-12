@@ -73,6 +73,15 @@ jobs:
           # merger. Bump the freshly-scaffolded app module's minSdk.
           sed -i -E 's/(minSdk[[:space:]]*=[[:space:]]*)[0-9]+/\126/' src-tauri/gen/android/app/build.gradle.kts
           grep -n "minSdk" src-tauri/gen/android/app/build.gradle.kts || true
+          # "All files access" (MANAGE_EXTERNAL_STORAGE): lets the app read the
+          # Missler library IN PLACE from any shared-storage folder (Downloads, a
+          # USB-copied folder, another app's Android/media dir) instead of only its
+          # own sandbox. gen/android isn't in the repo, so patch the freshly-init'd
+          # manifest — insert the permission before <application>. Sideloaded via
+          # Obtainium, so the Play Store MANAGE_EXTERNAL_STORAGE policy doesn't apply.
+          MANIFEST=src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />' "$MANIFEST"
+          grep -n "MANAGE_EXTERNAL_STORAGE" "$MANIFEST" || true
           # android init scaffolds gen/android with the DEFAULT Tauri icon.
           # Regenerate our app icon into the now-existing Android project so
           # the APK ships the real launcher icon (not the default swirl).

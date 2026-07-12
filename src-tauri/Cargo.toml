@@ -29,6 +29,13 @@ tauri-plugin-fs = "2"
 # itself in the background. See src-tauri/plugins/native-audio + docs/NATIVE-AUDIO.md.
 tauri-plugin-native-audio = { path = "plugins/native-audio" }
 
+# "All files access" bridge (src/allfiles.rs): raw JNI to Environment
+# .isExternalStorageManager() and the MANAGE_EXTERNAL_STORAGE settings intent.
+# Android-only; desktop compiles the JNI out entirely (cargo check has no NDK).
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
+
 [profile.release]
 panic = "abort"
 codegen-units = 1
