@@ -8,7 +8,12 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.8** — fixes an Android crash when opening **Settings**. Keeps the v0.3.7 **Missler library**
+**Latest: v0.3.9** — **"All files access"** on Android done right: point the app at your **Missler library
+anywhere** on your phone with a real **Browse…** folder picker, read it in place, and **play its
+commentary audio** (now streamed through the native player). Reimplemented as a proper Kotlin plugin
+after v0.3.7's approach crashed — plus the v0.3.8 Settings-crash fix and the desktop Browse picker.
+
+**v0.3.8** — fixes an Android crash when opening **Settings**. Keeps the v0.3.7 **Missler library**
 improvements: a **Browse…** folder picker on desktop, a permission-free `Android/media` **drop folder**
 auto-created for you, and a fix so the **network import** works across a Tailscale-style host:port.
 

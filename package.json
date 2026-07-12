@@ -1,7 +1,7 @@
 {
   "name": "bread-of-life",
   "private": true,
-  "version": "0.3.8",
+  "version": "0.3.9",
   "type": "module",
   "description": "A warm, offline-first homebase for Bible reading, prayer, and journalling.",
   "scripts": {
