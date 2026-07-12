@@ -106,7 +106,10 @@ jobs:
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > release.jks
           BT="$ANDROID_SDK_ROOT/build-tools/34.0.0"
-          OUT=bread-of-life-${GITHUB_REF_NAME:-dev}.apk
+          # Tags (v1.2.3) have no slash, but a workflow_dispatch on a branch does
+          # (feat/x) — sanitise it so the output filename isn't a nonexistent dir.
+          OUT=bread-of-life-${GITHUB_REF_NAME//\//-}.apk
+          OUT=${OUT:-bread-of-life-dev.apk}
           "$BT/zipalign" -p -f 4 "${{ steps.apk.outputs.path }}" aligned.apk
           "$BT/apksigner" sign --ks release.jks \
             --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
