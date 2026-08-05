@@ -11,7 +11,7 @@ type Theme = "light" | "dark";
 export type ReadingLayout = "lines" | "flowing";
 export type DashboardBg = "plain" | "still" | "animated";
 
-interface UIState {
+export interface UIState {
   theme: Theme;
   toggleTheme: () => void;
 

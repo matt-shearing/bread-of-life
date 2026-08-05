@@ -396,6 +396,22 @@ export async function pullChanges(): Promise<void> {
   }
 }
 
+const roundListeners = new Set<() => void>();
+
+/**
+ * Observe completed push/pull rounds. Only ever fires when an account is connected,
+ * which is what makes it the right moment for callers to publish state this device
+ * has so far held only locally: by then the account's own values have already been
+ * pulled, so a fresh device adopts them instead of overwriting them with its
+ * defaults (see src/store/syncedPrefs.ts). Returns an unsubscribe function.
+ */
+export function onSyncRound(cb: () => void): () => void {
+  roundListeners.add(cb);
+  return () => {
+    roundListeners.delete(cb);
+  };
+}
+
 let syncing = false;
 let resyncQueued = false;
 export async function syncNow(): Promise<void> {
@@ -411,6 +427,13 @@ export async function syncNow(): Promise<void> {
     await pullChanges();
   } finally {
     syncing = false;
+    for (const cb of roundListeners) {
+      try {
+        cb();
+      } catch (e) {
+        console.error("sync round listener failed", e);
+      }
+    }
   }
   if (resyncQueued) {
     resyncQueued = false;
