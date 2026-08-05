@@ -11,7 +11,19 @@ import { cn } from "@/lib/cn";
  *  controller, so it appears in the mini-player + OS media controls and keeps going as you
  *  navigate. Starting narration (BSB david/hays/souer) queues the whole rest of the Bible so
  *  it rolls chapter→book→book continuously in the background. Missler audio is per-chapter. */
-export function AudioPlayer({ audio }: { audio?: Record<string, string> }) {
+export function AudioPlayer({
+  audio,
+  onStart,
+}: {
+  audio?: Record<string, string>;
+  /**
+   * Override what "play" queues, given the chosen narrator label. The guided reader
+   * passes its own day queue: without this the button here built a continuous
+   * whole-Bible queue whose completion handler records plain reading progress, which
+   * silently replaced the plan's mark-read handler and stopped the day ticking off.
+   */
+  onStart?: (label: string) => void;
+}) {
   const { ho, chapter, translation } = useUI();
   const { playing } = useAudio();
   const narrators = audio ? Object.keys(audio) : [];
@@ -28,6 +40,10 @@ export function AudioPlayer({ audio }: { audio?: Record<string, string> }) {
   const showPause = isThis && playing;
 
   async function start(label: string) {
+    if (onStart) {
+      onStart(label);
+      return;
+    }
     const url = audio![label];
     if (!url) return;
     // Missler chapter audio = local per-chapter files (not templatable) — play just this one.

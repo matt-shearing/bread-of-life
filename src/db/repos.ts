@@ -245,15 +245,19 @@ export async function startPlan(planId: string) {
 }
 
 export async function setDayDone(planId: string, day: number, done: boolean) {
-  const p = await db.plans.get(planId);
-  if (!p) {
-    if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day] });
-    return;
-  }
-  const set = new Set(p.completedDays);
-  if (done) set.add(day);
-  else set.delete(day);
-  await db.plans.update(planId, { completedDays: [...set].sort((a, b) => a - b) });
+  // Transactional for the same reason as setChapterDone below: this races the
+  // narration's own mark-read writes.
+  await db.transaction("rw", db.plans, async () => {
+    const p = await db.plans.get(planId);
+    if (!p) {
+      if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day] });
+      return;
+    }
+    const set = new Set(p.completedDays);
+    if (done) set.add(day);
+    else set.delete(day);
+    await db.plans.update(planId, { completedDays: [...set].sort((a, b) => a - b) });
+  });
 }
 
 /**
@@ -269,30 +273,38 @@ export async function setChapterDone(
   done: boolean,
   totalChapters: number,
 ) {
-  const existing = await db.plans.get(planId);
-  const base =
-    existing ?? { planId, startedAt: Date.now(), completedDays: [] as number[], chapterProgress: {} };
+  // Read-modify-write INSIDE a transaction. Narration marks readings done as the
+  // queue advances while the reader may be ticking one by hand at the same moment;
+  // two overlapping non-transactional round trips both read the same row and the
+  // later write silently dropped the other's tick. That is what made "Mark read &
+  // next" look dead while audio was playing — and why only restarting the app (no
+  // more concurrent writer) appeared to fix it.
+  await db.transaction("rw", db.plans, async () => {
+    const existing = await db.plans.get(planId);
+    const base =
+      existing ?? { planId, startedAt: Date.now(), completedDays: [] as number[], chapterProgress: {} };
 
-  const chapterProgress: Record<number, number[]> = { ...(base.chapterProgress ?? {}) };
-  const chapters = new Set(chapterProgress[day] ?? []);
-  if (done) chapters.add(chapterIndex);
-  else chapters.delete(chapterIndex);
-  chapterProgress[day] = [...chapters].sort((a, b) => a - b);
+    const chapterProgress: Record<number, number[]> = { ...(base.chapterProgress ?? {}) };
+    const chapters = new Set(chapterProgress[day] ?? []);
+    if (done) chapters.add(chapterIndex);
+    else chapters.delete(chapterIndex);
+    chapterProgress[day] = [...chapters].sort((a, b) => a - b);
 
-  const days = new Set(base.completedDays);
-  if (chapters.size >= totalChapters && totalChapters > 0) days.add(day);
-  else if (!done) days.delete(day); // only *un-ticking* re-opens the day — ticking a
-  // single chapter must never clear a day that was marked done elsewhere (e.g. the
-  // dashboard "Mark done"), which writes completedDays without chapterProgress.
+    const days = new Set(base.completedDays);
+    if (chapters.size >= totalChapters && totalChapters > 0) days.add(day);
+    else if (!done) days.delete(day); // only *un-ticking* re-opens the day — ticking a
+    // single chapter must never clear a day that was marked done elsewhere (e.g. the
+    // dashboard "Mark done"), which writes completedDays without chapterProgress.
 
-  const next = {
-    planId,
-    startedAt: base.startedAt,
-    completedDays: [...days].sort((a, b) => a - b),
-    chapterProgress,
-  };
-  if (existing) await db.plans.update(planId, next);
-  else await db.plans.add(next);
+    const next = {
+      planId,
+      startedAt: base.startedAt,
+      completedDays: [...days].sort((a, b) => a - b),
+      chapterProgress,
+    };
+    if (existing) await db.plans.update(planId, next);
+    else await db.plans.add(next);
+  });
 }
 
 export async function resetPlan(planId: string) {

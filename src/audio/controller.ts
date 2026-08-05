@@ -19,6 +19,11 @@ export interface Track {
   subtitle: string; // e.g. "BSB · David"
   /** When this queue is a plan day, the reading's index in that day (for auto-marking read). */
   planReadingIndex?: number;
+  /** Which plan day this queue belongs to. Lets the guided reader tell "my day's
+   *  narration is playing" from "some other audio is playing" — the two need very
+   *  different answers from the Listen button and from the follow-the-audio cursor. */
+  planId?: string;
+  planDay?: number;
 }
 
 /** Fires when a track finishes NATURALLY (not on manual skip) — used to mark a plan
@@ -212,7 +217,13 @@ export function next() {
     return;
   }
   if (state.index < state.queue.length - 1) loadIndex(state.index + 1, true);
-  else set({ playing: false }); // end of queue
+  else {
+    // End of queue. Clear the advance guard here too — only loadIndex used to do it,
+    // so a queue that ran to its end left `advancing` stuck true and the NEXT track
+    // to finish was never marked read or advanced past.
+    advancing = false;
+    set({ playing: false });
+  }
 }
 export function prev() {
   if (engine.supportsNativeQueue) {

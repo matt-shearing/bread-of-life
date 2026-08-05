@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams, useBlocker, type Location } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
@@ -44,19 +44,43 @@ export function GuidedReaderPage() {
   const requestedReading = searchParams.has("reading") ? Number(searchParams.get("reading")) : null;
   const navigate = useNavigate();
   const { goTo, goToPortion, translation, railOpen, toggleRail, setRailOpen } = useUI();
-  const { playing } = useAudio();
+  const { queue, index: audioIndex, playing } = useAudio();
 
   const [plan, setPlan] = useState<Plan | null | undefined>(undefined); // undefined = loading
   const [cursor, setCursor] = useState(0);
   const [initialised, setInitialised] = useState(false);
   const [atEnd, setAtEnd] = useState(false);
 
+  // Is the audio player working through THIS day's readings (rather than, say, the
+  // continuous whole-Bible queue the Bible page starts)? Everything below that reacts
+  // to playback is gated on this — a global `playing` made the Listen button claim to
+  // be playing this plan whenever anything at all was.
+  const audioTrack = queue[audioIndex];
+  const dayTrack =
+    audioTrack && audioTrack.planId === planId && audioTrack.planDay === day ? audioTrack : null;
+  const listening = !!dayTrack && playing;
+
   // Live per-day chapter progress so ticks persist and resume across visits.
   const progress = useLiveQuery(() => db.plans.get(planId), [planId]);
-  const completedSet = useMemo(
-    () => new Set(progress?.chapterProgress?.[day] ?? []),
-    [progress, day],
-  );
+
+  /**
+   * Readings ticked in this session, held in React alongside Dexie. The live query is
+   * the durable record but reports back asynchronously, and while narration is running
+   * it is writing to the same row. Deriving the next reading from the live query alone
+   * meant a tap could compute its next chapter from a stale set, land on the reading
+   * already showing, and look completely dead. Merging the optimistic set makes the
+   * button answer immediately; Dexie still owns what survives the session.
+   */
+  const [ticked, setTicked] = useState<Set<number>>(() => new Set());
+  useEffect(() => {
+    setTicked(new Set()); // a different plan/day is a different set of readings
+  }, [planId, day]);
+
+  const completedSet = useMemo(() => {
+    const s = new Set(progress?.chapterProgress?.[day] ?? []);
+    for (const i of ticked) s.add(i);
+    return s;
+  }, [progress, day, ticked]);
 
   const readings = plan?.days[day] ?? [];
   const total = readings.length;
@@ -150,20 +174,53 @@ export function GuidedReaderPage() {
     ),
   );
 
+  // A router only tracks one blocker, and one left sitting in "blocked" swallows every
+  // later navigation — the app looks frozen until it is restarted. Always hand the
+  // pending navigation back on the way out.
+  const blockerRef = useRef(blocker);
+  blockerRef.current = blocker;
+  useEffect(
+    () => () => {
+      if (blockerRef.current?.state === "blocked") blockerRef.current.reset?.();
+    },
+    [],
+  );
+
+  /**
+   * Follow the narration. The player walks the day's readings on its own (on Android
+   * the native queue does it in the background), but the page used to sit wherever the
+   * cursor was left — so you could listen through three chapters, stop, and still be
+   * looking at the first one, with nothing on screen having moved. Only reacts when the
+   * audio index actually CHANGES, so tapping a dot mid-listen isn't yanked back.
+   */
+  const followedIndex = useRef<number | null>(null);
+  useEffect(() => {
+    const i = dayTrack?.planReadingIndex ?? null;
+    if (i === null || i === followedIndex.current) return;
+    followedIndex.current = i;
+    if (i >= 0 && i < total) setCursor(i);
+  }, [dayTrack, total]);
+
   // Listen to the whole day: queue every reading's narration and play straight through,
   // starting at the current reading. As each chapter's audio FINISHES it's marked read.
-  async function listenToDay() {
-    if (playing) {
+  async function listenToDay(narratorPref?: string) {
+    // Only pause when it is THIS day playing. If something else holds the player,
+    // tapping Listen should start today's readings, not stop the other thing.
+    if (listening) {
       pause();
       return;
     }
-    const q = await buildReadingQueue(translation, readings);
+    const q = await buildReadingQueue(translation, readings, narratorPref);
     if (!q.length) return;
-    const startAt = Math.max(0, q.findIndex((t) => (t.planReadingIndex ?? 0) >= cursor));
-    playQueue(q, {
-      startIndex: startAt === -1 ? 0 : startAt,
+    // Stamp the day onto every track so the page can recognise its own queue later.
+    const dayQueue = q.map((t) => ({ ...t, planId, planDay: day }));
+    const found = dayQueue.findIndex((t) => (t.planReadingIndex ?? 0) >= cursor);
+    followedIndex.current = null; // re-follow from wherever the queue starts
+    playQueue(dayQueue, {
+      startIndex: found === -1 ? 0 : found,
       onComplete: (t) => {
         if (t.planReadingIndex != null) {
+          setTicked((prev) => new Set(prev).add(t.planReadingIndex!));
           void setChapterDone(planId, day, t.planReadingIndex, true, total).catch(() => {});
         }
       },
@@ -173,6 +230,7 @@ export function GuidedReaderPage() {
   function markReadAndNext() {
     if (!current) return;
     void setChapterDone(planId, day, cursor, true, total);
+    setTicked((prev) => new Set(prev).add(cursor));
     const nextDone = new Set(completedSet);
     nextDone.add(cursor);
     const next = firstIncomplete(total, nextDone);
@@ -240,9 +298,14 @@ export function GuidedReaderPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
-          <Tooltip label={playing ? "Pause listening" : "Listen to today’s readings"}>
-            <Button variant="ghost" size="icon" onClick={listenToDay} aria-label="Listen to today's readings">
-              {playing ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+          <Tooltip label={listening ? "Pause listening" : "Listen to today’s readings"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void listenToDay()}
+              aria-label={listening ? "Pause today's readings" : "Listen to today's readings"}
+            >
+              {listening ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
             </Button>
           </Tooltip>
           <Tooltip label="Previous chapter">
@@ -282,7 +345,13 @@ export function GuidedReaderPage() {
 
       <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1">
-          <Reader swipeToChapter={false} scopeToPortion />
+          <Reader
+            swipeToChapter={false}
+            scopeToPortion
+            // The reader's own headphones button plays TODAY'S readings, not the
+            // continuous whole-Bible queue — that one dropped the plan's mark-read.
+            onListen={(label) => void listenToDay(label)}
+          />
         </div>
         {railOpen && <StudyRail />}
 

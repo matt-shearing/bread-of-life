@@ -63,7 +63,13 @@ const CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
 export function Reader({
   swipeToChapter = true,
   scopeToPortion = false,
-}: { swipeToChapter?: boolean; scopeToPortion?: boolean } = {}) {
+  onListen,
+}: {
+  swipeToChapter?: boolean;
+  scopeToPortion?: boolean;
+  /** Override what the chapter audio button queues — see AudioPlayer's `onStart`. */
+  onListen?: (label: string) => void;
+} = {}) {
   const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed, railOpen, setRailOpen, portion } =
     useUI();
   const active =
@@ -217,7 +223,7 @@ export function Reader({
       <article className={cn("mx-auto px-4 py-6 md:px-8 md:py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
         <div className="mb-6 flex items-center justify-between gap-3">
           <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
-          <AudioPlayer audio={audio} />
+          <AudioPlayer audio={audio} onStart={onListen} />
         </div>
         {active && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary-700 dark:text-primary-300">
