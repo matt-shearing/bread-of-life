@@ -58,3 +58,37 @@ xattr -dr com.apple.quarantine "/Applications/Bread of Life.app"
 ```
 
 Proper Developer-ID signing + notarization is on the roadmap (see `ROADMAP.md`).
+
+## Releasing to the AUR
+
+Arch users install `bread-of-life-bin`, which lives in its own AUR repo
+(`ssh://aur@aur.archlinux.org/bread-of-life-bin.git`) holding just a PKGBUILD and
+`.SRCINFO`. It compiles nothing — it repackages the `.deb` attached to the GitHub
+release — so a bump is only the new `pkgver`, fresh checksums, and a regenerated
+`.SRCINFO`.
+
+That used to be a manual step, and the AUR drifted a release behind more than once.
+It now happens automatically: the `aur` job in `.github/workflows/desktop.yml` runs
+after the release bundles are attached and pushes the bump. It no-ops cleanly if the
+`AUR_SSH_PRIVATE_KEY` secret is missing (forks), and if the AUR is already at that
+version — so re-running a release is safe.
+
+**One-off setup.** Add an `AUR_SSH_PRIVATE_KEY` repo secret holding a private key
+whose public half is registered on the AUR account (Settings → SSH public key). The
+AUR host key is *pinned* in the workflow rather than trusted on first use — a release
+that pushes itself should not accept whatever key answers on the day. Verify it
+against the fingerprints the AUR publishes before ever changing that line:
+
+```
+SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4   (ed25519)
+```
+
+**By hand**, if CI is unavailable (needs Arch — `makepkg`, `pacman-contrib`):
+
+```bash
+scripts/bump-aur.sh 0.3.10 ~/dev/aur-bread-of-life   # bumps, checksums, builds, commits
+git -C ~/dev/aur-bread-of-life show                  # review
+git -C ~/dev/aur-bread-of-life push origin master
+```
+
+CI runs that same script, so the two paths can't drift.
