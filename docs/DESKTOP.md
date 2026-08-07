@@ -73,15 +73,31 @@ after the release bundles are attached and pushes the bump. It no-ops cleanly if
 `AUR_SSH_PRIVATE_KEY` secret is missing (forks), and if the AUR is already at that
 version — so re-running a release is safe.
 
-**One-off setup.** Add an `AUR_SSH_PRIVATE_KEY` repo secret holding a private key
-whose public half is registered on the AUR account (Settings → SSH public key). The
-AUR host key is *pinned* in the workflow rather than trusted on first use — a release
-that pushes itself should not accept whatever key answers on the day. Verify it
-against the fingerprints the AUR publishes before ever changing that line:
+**One-off setup.** The deploy key lives in a GitHub *environment* named `aur`, not
+in plain repo secrets, and that environment allows only `v*` tags — so a branch push
+or a pull request cannot read it even by editing the workflow, because the rule is
+enforced on GitHub's side. Add `AUR_SSH_PRIVATE_KEY` there (`gh secret set
+AUR_SSH_PRIVATE_KEY --env aur`), holding a key dedicated to CI whose public half is
+registered on the AUR account — not a personal key.
+
+Because this is the one job in the repo holding a credential that can publish to a
+package registry, it is deliberately the narrowest thing in the workflows:
+
+- **No marketplace actions at all**, not even `actions/checkout` — it clones the tag
+  with the container's own git. So the job runs no JavaScript action and installs
+  nothing from npm; its whole dependency surface is pacman, git and bash.
+- `permissions: {}` — it talks to the AUR over SSH and wants nothing from GitHub's token.
+- Guarded on `github.repository`, so it can never run on a fork.
+- The AUR host key is **pinned**, not trusted on first use — a release that pushes
+  itself must not accept whatever key answers on the day. Verify against the
+  fingerprints the AUR publishes before ever changing that line:
 
 ```
 SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4   (ed25519)
 ```
+
+Third-party actions in the other jobs are pinned to full commit SHAs rather than
+mutable tags, since those jobs hold the Android signing secrets.
 
 **By hand**, if CI is unavailable (needs Arch — `makepkg`, `pacman-contrib`):
 
