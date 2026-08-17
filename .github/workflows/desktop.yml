@@ -21,7 +21,33 @@ permissions:
   contents: write
 
 jobs:
+  # A release commit is a version bump and nothing else. v0.3.10's also deleted the
+  # reading-plan sync it was announcing, and shipped that way to every desktop — so
+  # the tag is checked before anything is built or published from it.
+  # See scripts/check-release-commit.sh; run it by hand before tagging.
+  release-guard:
+    name: Release commit is a version bump only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the release commit and its parent — enough to diff
+
+      - name: Check the tagged commit
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "Not a tag build — nothing to check."
+            exit 0
+          fi
+          scripts/check-release-commit.sh "$GITHUB_SHA"
+
   build:
+    # The guard runs unconditionally and no-ops (exit 0) when the ref is not a tag,
+    # so a plain `needs:` is safe here — on a manual run it succeeds and the build
+    # proceeds, and only a real refusal blocks it. A job-level `if:` on the guard
+    # would instead mark it *skipped*, which would silently skip the build too.
+    needs: release-guard
     strategy:
       fail-fast: false
       matrix:
