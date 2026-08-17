@@ -178,9 +178,24 @@ jobs:
             echo "::notice::AUR_SSH_PRIVATE_KEY is not set — skipping the AUR publish."
           fi
 
+      # Retried: this reaches out to the Arch mirrors, and a single mirror failing to
+      # serve one package is enough to fail the step (it took out the v0.3.11 publish
+      # on zlib-ng + libedit). Nothing downstream is retried, so a transient fetch
+      # here silently leaves the AUR a release behind while the GitHub release looks
+      # perfectly green — which is how the AUR sat on 0.3.9 through v0.3.10.
       - name: Install tools
         if: steps.gate.outputs.enabled == 'true'
-        run: pacman -Syu --noconfirm --needed git openssh pacman-contrib
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if pacman -Syu --noconfirm --needed git openssh pacman-contrib; then
+              exit 0
+            fi
+            echo "::warning::pacman attempt $attempt failed (mirror hiccup) — retrying"
+            sleep $((attempt * 15))
+          done
+          echo "::error::pacman failed three times — not a transient mirror problem." >&2
+          exit 1
 
       # Deliberately NOT actions/checkout. That is a JavaScript action, and this is the
       # one job in the repo holding a key that can publish to a package registry — so it
