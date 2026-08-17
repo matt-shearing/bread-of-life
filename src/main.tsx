@@ -18,6 +18,7 @@ import { CommentaryPage } from "@/pages/CommentaryPage";
 import { ReadTodayPage } from "@/pages/ReadTodayPage";
 import { FaithfulnessPage } from "@/pages/FaithfulnessPage";
 import { startSync } from "@/db/sync";
+import { startPrefSync } from "@/store/syncedPrefs";
 import { ensureAndroidDropFolder } from "@/data/missler";
 
 // Safety net: if something throws before React mounts, show it instead of a
@@ -63,6 +64,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 setTimeout(() => {
   try {
     startSync();
+    // Mirror account-level prefs (the active reading plan & friends) into the
+    // synced `settings` table so they follow you between devices.
+    startPrefSync();
   } catch (e) {
     console.error("sync init failed", e);
   }
