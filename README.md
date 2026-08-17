@@ -8,7 +8,14 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.9** — **"All files access"** on Android done right: point the app at your **Missler library
+**Latest: v0.3.11** — your **reading plan now follows your account**, so the plan you start on your
+phone is waiting on your desktop, with the progress it already had. This is what v0.3.10 announced
+and, through a packaging mistake, did not actually ship — if you are on v0.3.10, this is the release
+that delivers it. Also brings v0.3.10's **reading-plan audio** fixes to everyone: marking readings
+done no longer races the narration, the guided reader follows the audio queue, and the Listen button
+plays *today's* readings rather than a whole-Bible queue.
+
+**v0.3.9** — **"All files access"** on Android done right: point the app at your **Missler library
 anywhere** on your phone with a real **Browse…** folder picker, read it in place, and **play its
 commentary audio** (now streamed through the native player). Reimplemented as a proper Kotlin plugin
 after v0.3.7's approach crashed — plus the v0.3.8 Settings-crash fix and the desktop Browse picker.
