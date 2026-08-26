@@ -82,11 +82,18 @@ impl DesktopAudio {
         if guard.is_none() {
             let (tx, rx) = mpsc::channel();
             let shared = self.shared.clone();
-            std::thread::Builder::new()
+            match std::thread::Builder::new()
                 .name("bol-audio".into())
                 .spawn(move || audio_thread(rx, shared))
-                .expect("spawn audio thread");
-            *guard = Some(tx);
+            {
+                Ok(_) => *guard = Some(tx),
+                // The build has panic = "abort", so an unwrap here would take the whole
+                // app down over a track that will not play. Report it and stay up.
+                Err(e) => {
+                    self.shared.set_error(format!("cannot start the audio thread: {e}"));
+                    return;
+                }
+            }
         }
         if let Some(tx) = guard.as_ref() {
             let _ = tx.send(cmd);
