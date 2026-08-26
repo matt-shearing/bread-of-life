@@ -1,0 +1,21 @@
+# Playback commands for the Rust-side desktop audio player (src/desktop_audio.rs).
+#
+# The webview cannot be trusted to play <audio> on Linux: WebKitGTK routes it through
+# GStreamer and aborts the whole web process on a host without gst-plugins-good, so the
+# reader drives these commands instead. They touch the sound device and read the track
+# the app itself resolved — nothing the webview could not already reach.
+#
+# Note that having this directory at all switches on the application ACL, so from here on
+# every app-defined command must be listed in a capability to be callable.
+
+[[permission]]
+identifier = "allow-desktop-audio"
+description = "Load, play, pause, seek, stop and poll the Rust desktop audio player."
+commands.allow = [
+  "desktop_audio_load",
+  "desktop_audio_play",
+  "desktop_audio_pause",
+  "desktop_audio_seek",
+  "desktop_audio_stop",
+  "desktop_audio_state",
+]

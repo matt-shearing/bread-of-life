@@ -2,8 +2,12 @@
  * The playback ENGINE seam. The audio controller owns the queue, auto-advance, mark-read
  * and mini-player state; the engine only knows how to play ONE track and report progress.
  *
- * - `Html5Engine` (this file) plays via an `Audio()` element — used on desktop/browser and
- *   as the default. OS transport controls come from the web Media Session (in the controller).
+ * - `Html5Engine` (this file) plays via an `Audio()` element — the default for the browser
+ *   and for macOS/Windows Tauri. OS transport controls come from the web Media Session
+ *   (in the controller).
+ * - `TauriDesktopEngine` plays through Rust instead, on Linux Tauri: WebKitGTK routes
+ *   `<audio>` through GStreamer and aborts the whole web process on a host without
+ *   `gst-plugins-good`. See `src-tauri/src/desktop_audio.rs` and `docs/DESKTOP.md`.
  * - A future `NativeEngine` (Android/iOS) will implement this SAME interface on top of a
  *   native Media3 ExoPlayer + foreground MediaSessionService (e.g. tauri-plugin-native-audio),
  *   so true background playback + lock-screen controls come from the OS. It sets
@@ -53,8 +57,8 @@ export interface AudioEngine {
   release(): void;
 }
 
-/** HTML5 `<audio>` engine — the default (desktop, browser, and mobile until the native
- *  engine is wired). Created lazily so nothing is instantiated at import time. */
+/** HTML5 `<audio>` engine — the default (browser, and macOS/Windows Tauri, whose webviews
+ *  play media in-process). Created lazily so nothing is instantiated at import time. */
 export class Html5Engine implements AudioEngine {
   readonly usesWebMediaSession = true;
   readonly supportsNativeQueue = false;
@@ -250,18 +254,194 @@ class NativeEngine implements AudioEngine {
   }
 }
 
+/** What `desktop_audio_state` reports (see `src-tauri/src/desktop_audio.rs`). */
+interface DesktopAudioState {
+  position: number;
+  duration: number;
+  playing: boolean;
+  loading: boolean;
+  ended: boolean;
+  error: string | null;
+  /** Bumped by every load — lets us tell a fresh "ended" from a stale poll. */
+  generation: number;
+}
+
+type Invoke = typeof import("@tauri-apps/api/core").invoke;
+
+/**
+ * Linux desktop engine — playback happens in Rust (rodio → cpal → ALSA), never in the
+ * webview. WebKitGTK plays an `<audio>` element through GStreamer, and a host without
+ * `gst-plugins-good` has no HTTP source, no MP3 parser and no audio sink; rather than
+ * failing the element, WebKit aborts its own web process, so pressing Listen turns the
+ * window white. Playing in Rust drops the app's dependency on the host's GStreamer.
+ *
+ * Rust holds one track at a time, so `supportsNativeQueue = false` and the controller
+ * keeps driving the queue exactly as it does for HTML5. There is no state event to
+ * subscribe to, so this polls `desktop_audio_state` every 250 ms — the rate an `<audio>`
+ * element fires `timeupdate` at — and turns the diffs into `EngineHandlers` calls.
+ *
+ * `usesWebMediaSession` stays true. What aborts is WebKit's *media pipeline*; the Media
+ * Session API is plain JavaScript and goes nowhere near GStreamer, so leaving it on keeps
+ * whatever OS transport controls the host offers and keeps the controller on one code
+ * path with HTML5. It is already behind feature checks and try/catch there.
+ */
+class TauriDesktopEngine implements AudioEngine {
+  readonly usesWebMediaSession = true;
+  readonly supportsNativeQueue = false;
+  handlers: EngineHandlers = {};
+
+  private invoke: Invoke | null = null;
+  private ready: Promise<void>;
+  /** Commands run strictly in order: `load` may go to the network, and a `play` that
+   *  overtook it would land on the track we just replaced. */
+  private chain: Promise<void> = Promise.resolve();
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private polling = false;
+  private cur = 0;
+  private dur = 0;
+  private wasPlaying = false;
+  private wasLoading = false;
+  private endedGeneration = -1;
+  private errorGeneration = -1;
+
+  // One track at a time; the controller drives the queue, so these are no-ops.
+  loadQueue() {}
+  queueNext() {}
+  queuePrev() {}
+
+  constructor() {
+    this.ready = import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        this.invoke = invoke;
+      })
+      .catch(() => {
+        /* not in Tauri after all — every call no-ops */
+      });
+  }
+
+  private run(fn: (invoke: Invoke) => Promise<unknown>) {
+    this.chain = this.chain.then(async () => {
+      await this.ready;
+      if (!this.invoke) return;
+      try {
+        await fn(this.invoke);
+      } catch {
+        // A failed command surfaces as "paused", like an <audio> error event.
+        this.handlers.onLoading?.(false);
+        this.handlers.onPause?.();
+      }
+    });
+  }
+
+  private startPolling() {
+    if (this.timer !== null) return;
+    this.timer = setInterval(() => void this.poll(), 250);
+  }
+
+  /** Deliberately NOT on `chain` — a long download must not starve progress updates. */
+  private async poll() {
+    if (this.polling) return; // a slow reply must not let two polls answer out of order
+    await this.ready;
+    if (!this.invoke) return;
+    let s: DesktopAudioState;
+    this.polling = true;
+    try {
+      s = await this.invoke<DesktopAudioState>("desktop_audio_state");
+    } catch {
+      return;
+    } finally {
+      this.polling = false;
+    }
+
+    this.cur = s.position;
+    this.handlers.onTime?.(s.position);
+    if (s.duration > 0 && s.duration !== this.dur) {
+      this.dur = s.duration;
+      this.handlers.onDuration?.(s.duration);
+    }
+    if (s.loading !== this.wasLoading) {
+      this.wasLoading = s.loading;
+      this.handlers.onLoading?.(s.loading);
+    }
+    if (s.playing !== this.wasPlaying) {
+      this.wasPlaying = s.playing;
+      (s.playing ? this.handlers.onPlay : this.handlers.onPause)?.();
+    }
+    if (s.error && s.generation !== this.errorGeneration) {
+      this.errorGeneration = s.generation;
+      this.handlers.onLoading?.(false);
+      this.handlers.onPause?.();
+    }
+    if (s.ended && s.generation !== this.endedGeneration) {
+      this.endedGeneration = s.generation;
+      this.handlers.onEnded?.();
+    }
+  }
+
+  load(track: EngineTrack) {
+    // Rust takes the URL literally, so the "#t=" start hint travels as a seek target —
+    // the same split the native mobile engine does.
+    const { src, startSec } = splitOffset(track.src);
+    this.cur = startSec;
+    this.dur = 0;
+    this.wasPlaying = false;
+    this.wasLoading = true;
+    this.handlers.onLoading?.(true);
+    this.startPolling();
+    this.run((invoke) => invoke("desktop_audio_load", { url: src, startSec }));
+  }
+  play() {
+    this.run((invoke) => invoke("desktop_audio_play"));
+  }
+  pause() {
+    this.run((invoke) => invoke("desktop_audio_pause"));
+  }
+  seekTo(seconds: number) {
+    const position = Math.max(0, this.dur > 0 ? Math.min(seconds, this.dur) : seconds);
+    this.cur = position;
+    this.run((invoke) => invoke("desktop_audio_seek", { position }));
+  }
+  currentTime() {
+    return this.cur;
+  }
+  duration() {
+    return this.dur;
+  }
+  release() {
+    if (this.timer !== null) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.cur = 0;
+    this.dur = 0;
+    this.wasPlaying = false;
+    this.wasLoading = false;
+    this.run((invoke) => invoke("desktop_audio_stop"));
+  }
+}
+
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 const isMobile = typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+/** Linux desktop, i.e. a WebKitGTK webview. Android reports "Linux" too, hence !isMobile. */
+const isLinux = typeof navigator !== "undefined" && /linux/i.test(navigator.userAgent) && !isMobile;
 
 /** Split a trailing "#t=<seconds>" media-fragment start hint off a URI. The native
- *  ExoPlayer takes the URI literally (unlike the HTML5 <audio> element, which honors
- *  the fragment), so the offset must be applied as a seek instead. */
+ *  ExoPlayer and the Rust desktop player both take the URI literally (unlike the HTML5
+ *  <audio> element, which honors the fragment), so the offset is applied as a seek. */
 function splitOffset(src: string): { src: string; startSec: number } {
   const m = /#t=(\d+(?:\.\d+)?)$/.exec(src);
   return m ? { src: src.slice(0, m.index), startSec: parseFloat(m[1]) } : { src, startSec: 0 };
 }
 
-/** Pick the playback engine: native (background-capable) on mobile Tauri, else HTML5. */
+/**
+ * Pick the playback engine:
+ * - mobile Tauri → `NativeEngine` (background playback, OS-owned transport controls);
+ * - Linux Tauri → `TauriDesktopEngine`, because WebKitGTK's `<audio>` can kill the webview;
+ * - everything else (browser, macOS/Windows Tauri) → `Html5Engine`. WKWebView and WebView2
+ *   play media in-process, with nothing to work around.
+ */
 export function selectEngine(): AudioEngine {
-  return isTauri && isMobile ? new NativeEngine() : new Html5Engine();
+  if (isTauri && isMobile) return new NativeEngine();
+  if (isTauri && isLinux) return new TauriDesktopEngine();
+  return new Html5Engine();
 }
