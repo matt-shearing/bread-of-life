@@ -43,7 +43,7 @@ function MaybeTooltip({ show, label, children }: { show: boolean; label: string;
 }
 
 export function Sidebar() {
-  const { theme, toggleTheme, sidebarCollapsed, toggleSidebar } = useUI();
+  const { resolvedTheme, toggleTheme, sidebarCollapsed, toggleSidebar } = useUI();
   const activePrayers = useLiveQuery(() => db.prayers.where("status").equals("active").count(), [], 0);
   const collapsed = sidebarCollapsed;
 
@@ -137,9 +137,11 @@ export function Sidebar() {
             {!collapsed && "Settings"}
           </NavLink>
         </MaybeTooltip>
-        <Tooltip label={theme === "light" ? "Dark mode" : "Light mode"}>
+        {/* A quick Light<->Dark PIN, keyed off what is on screen rather than the
+            stored mode — see toggleTheme in src/store/ui.ts. Auto lives in Settings. */}
+        <Tooltip label={resolvedTheme === "light" ? "Dark mode" : "Light mode"}>
           <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "light" ? (
+            {resolvedTheme === "light" ? (
               <Moon style={{ width: 18, height: 18 }} />
             ) : (
               <Sun style={{ width: 18, height: 18 }} />

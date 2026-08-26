@@ -40,7 +40,7 @@ const MORE = [
 /** Bottom navigation for phone-width screens. Hidden at md+ (the sidebar takes
  *  over on tablets and the unfolded fold). */
 export function MobileNav() {
-  const { theme, toggleTheme } = useUI();
+  const { resolvedTheme, toggleTheme } = useUI();
   const [more, setMore] = useState(false);
 
   return (
@@ -91,6 +91,8 @@ export function MobileNav() {
                 {label}
               </NavLink>
             ))}
+            {/* Same quick Light<->Dark pin as the sidebar: it flips whatever is on
+                screen and drops out of auto. Auto modes are set in Settings. */}
             <button
               onClick={() => {
                 toggleTheme();
@@ -98,8 +100,8 @@ export function MobileNav() {
               }}
               className="flex flex-col items-center gap-1.5 rounded-lg border border-border p-3 text-xs hover:bg-accent"
             >
-              {theme === "light" ? <Moon style={{ width: 20, height: 20 }} /> : <Sun style={{ width: 20, height: 20 }} />}
-              {theme === "light" ? "Dark" : "Light"}
+              {resolvedTheme === "light" ? <Moon style={{ width: 20, height: 20 }} /> : <Sun style={{ width: 20, height: 20 }} />}
+              {resolvedTheme === "light" ? "Dark" : "Light"}
             </button>
           </div>
         </DialogContent>

@@ -1,19 +1,41 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { localDayKey, yesterdayKey } from "@/lib/day";
+import { normalizeThemeMode, resolveTheme } from "@/lib/theme";
+import type { ResolvedTheme, ThemeLocation, ThemeMode } from "@/lib/theme";
 
 /**
  * The ONE UI-state store. Everything transient/navigational lives here; all
  * durable data lives in Dexie. This deliberate split is the antidote to the
  * "five competing state systems" that sank the prior attempt.
  */
-type Theme = "light" | "dark";
 export type ReadingLayout = "lines" | "flowing";
 export type DashboardBg = "plain" | "still" | "animated";
+// The theme types are defined in @/lib/theme (the store imports the resolver, so
+// they cannot live here without a cycle) and re-exported so `@/store/ui` stays the
+// one place to look for UI-state types, as it already is for AIProvider.
+export type { ResolvedTheme, ThemeLocation, ThemeMode } from "@/lib/theme";
 
 export interface UIState {
-  theme: Theme;
+  /**
+   * How the theme is CHOSEN — a manual pin ("light"/"dark") or one of the two auto
+   * modes ("system"/"sun"). Persisted under the `theme` key it has always used, so
+   * an install that was on dark yesterday is still on dark today.
+   */
+  theme: ThemeMode;
+  /**
+   * What is actually PAINTED right now. The auto modes collapse to this. Anything
+   * that wants to know "is the app dark?" — the `html.dark` class, the dashboard
+   * art, the quick toggle's icon — must read this, never `theme`.
+   */
+  resolvedTheme: ResolvedTheme;
+  setTheme: (mode: ThemeMode) => void;
   toggleTheme: () => void;
+  /** Written only by `useAutoTheme()`. */
+  setResolvedTheme: (t: ResolvedTheme) => void;
+  /** Coordinate for auto-sun, if the user pinned one. Device-local; never synced. */
+  themeLocation: ThemeLocation | null;
+  setThemeLocation: (loc: ThemeLocation | null) => void;
 
   // current Bible location
   ho: string;
@@ -123,7 +145,41 @@ export const useUI = create<UIState>()(
   persist(
     (set) => ({
       theme: "light",
-      toggleTheme: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+      resolvedTheme: "light",
+      themeLocation: null,
+
+      setTheme: (mode) =>
+        set((s) => ({
+          theme: mode,
+          // A pin is its own answer, so settle it here and skip a frame of the old
+          // theme. The auto modes are worked out by useAutoTheme() on the next tick.
+          resolvedTheme: mode === "light" || mode === "dark" ? mode : s.resolvedTheme,
+        })),
+
+      /**
+       * The quick toggle in the sidebar and the phone's "More" sheet.
+       *
+       * DECISION: it stays a two-state Light↔Dark PIN, and it pins the opposite of
+       * what is ON SCREEN — not the opposite of the stored mode. So from auto-sun
+       * after dusk, tapping it gives you light and drops out of auto, which is
+       * exactly what a sun-and-moon icon looks like it will do. Cycling all four
+       * modes from one unlabelled icon was the alternative and was rejected: a
+       * toggle that sometimes doesn't change the colour (dark -> system, when the
+       * OS is also dark) reads as broken. Auto belongs in Settings, where it has
+       * room to explain itself and show you the sunrise it is using.
+       */
+      toggleTheme: () =>
+        set((s) => {
+          const next: ResolvedTheme = s.resolvedTheme === "dark" ? "light" : "dark";
+          return { theme: next, resolvedTheme: next };
+        }),
+
+      // Returning the untouched state when nothing changed matters: useAutoTheme
+      // re-checks on focus and every half hour, and components that subscribe to
+      // the whole store would re-render on each of those no-op writes.
+      setResolvedTheme: (t) => set((s) => (s.resolvedTheme === t ? s : { resolvedTheme: t })),
+
+      setThemeLocation: (loc) => set({ themeLocation: loc }),
 
       ho: "JHN",
       chapter: 1,
@@ -220,6 +276,25 @@ export const useUI = create<UIState>()(
       companionSeed: null,
       setCompanionSeed: (q) => set({ companionSeed: q }),
     }),
-    { name: "bol-ui" },
+    {
+      name: "bol-ui",
+      /**
+       * `resolvedTheme` is derived, but it is also the first thing painted, so we
+       * seed it here — synchronously, while localStorage is being read — rather
+       * than waiting for useAutoTheme's effect. Without this a dark-mode user gets
+       * a white flash on every launch.
+       *
+       * `normalizeThemeMode` is the other half of the widening: blobs written
+       * before auto mode existed hold "light"/"dark", which are still valid modes
+       * and rehydrate as pins; anything unrecognised (a hand-edited or
+       * newer-than-us blob) falls back to light instead of resolving to NaN.
+       */
+      merge: (persisted, current) => {
+        const next = { ...current, ...(persisted as Partial<UIState> | undefined) };
+        next.theme = normalizeThemeMode(next.theme);
+        next.resolvedTheme = resolveTheme(next.theme, next.themeLocation);
+        return next;
+      },
+    },
   ),
 );

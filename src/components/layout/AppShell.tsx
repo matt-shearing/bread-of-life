@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { useUI } from "@/store/ui";
+import { useAutoTheme } from "@/lib/useAutoTheme";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import {
@@ -16,7 +17,7 @@ import {
 
 export function AppShell() {
   const navigate = useNavigate();
-  const theme = useUI((s) => s.theme);
+  const resolvedTheme = useUI((s) => s.resolvedTheme);
   const notifyPrayers = useUI((s) => s.notifyPrayers);
   const notifyDevotion = useUI((s) => s.notifyDevotion);
   const devotionTime = useUI((s) => s.devotionTime);
@@ -24,10 +25,16 @@ export function AppShell() {
   const notifyPlan = useUI((s) => s.notifyPlan);
   const reminderTime = useUI((s) => s.reminderTime);
 
+  // The single writer of `resolvedTheme`: watches prefers-color-scheme in system
+  // mode and the clock in sun mode. Mounted here so it lives as long as the app.
+  useAutoTheme();
+
+  // Paint from the RESOLVED theme, not the chosen mode — "system" and "sun" are
+  // not colours.
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("dark", theme === "dark");
-  }, [theme]);
+    root.classList.toggle("dark", resolvedTheme === "dark");
+  }, [resolvedTheme]);
 
   // Native app: a tapped notification deep-links to its screen.
   useEffect(() => {

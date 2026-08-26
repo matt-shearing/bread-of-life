@@ -6,12 +6,13 @@ import { cn } from "@/lib/cn";
  *  behind the greeting + Verse of the Day (where it feels like home) while
  *  everything lower stays fully legible. Modes: plain (none), still (image),
  *  animated (image with a slow ken-burns drift + clearly drifting clouds).
- *  Day/dusk art follows the theme. */
+ *  Day/dusk art follows the RESOLVED theme, so the dusk scene turns up when auto-sun
+ *  (or the OS) has gone dark, not only when dark was pinned by hand. */
 export function DashboardBackground() {
-  const { dashboardBg, theme } = useUI();
+  const { dashboardBg, resolvedTheme } = useUI();
   if (dashboardBg === "plain") return null;
 
-  const img = theme === "dark" ? "countryside-dusk" : "countryside-day";
+  const img = resolvedTheme === "dark" ? "countryside-dusk" : "countryside-day";
   const animated = dashboardBg === "animated";
 
   return (
