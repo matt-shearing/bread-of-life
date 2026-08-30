@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "allow-desktop-audio",
     "notification:default",
     {
       "identifier": "opener:allow-open-url",

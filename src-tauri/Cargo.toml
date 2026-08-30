@@ -22,8 +22,22 @@ tauri-plugin-notification = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2.7.1"
 
+# Desktop audio playback OUTSIDE the webview. WebKitGTK plays <audio> through GStreamer,
+# and a host missing gst-plugins-good aborts the whole web process instead of failing the
+# element — see src/desktop_audio.rs and docs/DESKTOP.md. rodio drives cpal, which talks
+# to ALSA / CoreAudio / WASAPI directly. Scoped to non-mobile targets so nothing new
+# reaches the Android/iOS dependency graph.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+rodio = { version = "0.22.2", default-features = false, features = [
+    "playback",
+    "symphonia-mp3",
+    "symphonia-wav",
+    "symphonia-pcm",
+] }
+percent-encoding = "2"
+
 # Native background audio (Media3 ExoPlayer + foreground MediaSessionService) — mobile
-# only; desktop keeps the HTML5 audio path. See docs/NATIVE-AUDIO.md.
+# only; desktop keeps its own Rust player. See docs/NATIVE-AUDIO.md.
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 # Vendored fork of tauri-plugin-native-audio (v1.0.5) adding native PLAYLIST support
 # (setQueue/next/previous + index in state) so ExoPlayer advances the day's readings
