@@ -13,9 +13,12 @@
  * reads.
  *
  * Deliberately NOT synced — things that describe this device, not the account:
- * theme, font scale, reading layout, rail open/width, sidebar state, dashboard
- * background, onboarding flags, the current Bible location, and the AI config
- * (it holds an API key, which must never leave the device in the clear).
+ * the theme MODE and its saved sunrise/sunset coordinate (`theme`, `themeLocation`:
+ * "dark after sunset" means a different hour on a phone in Brisbane than on a desk
+ * in London, and a coordinate is not ours to push at a server), font scale, reading
+ * layout, rail open/width, sidebar state, dashboard background, onboarding flags,
+ * the current Bible location, and the AI config (it holds an API key, which must
+ * never leave the device in the clear).
  */
 import { liveQuery, type Subscription } from "dexie";
 import { db } from "@/db";
