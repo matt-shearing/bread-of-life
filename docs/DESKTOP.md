@@ -83,9 +83,18 @@ What is affected where:
 Building on Linux now needs ALSA headers (`libasound2-dev` on Debian/Ubuntu,
 `alsa-lib` on Arch — already a dependency of a desktop install).
 
-The AUR package (`bread-of-life-bin`) should still depend on `gst-plugins-good`.
-Narration no longer needs it, but anything else that plays media through the
-webview does, and webkit2gtk-4.1 will not pull it in on its own.
+Packaging declares both. `scripts/bump-aur.sh` writes the AUR package's
+`depends` on every bump — `webkit2gtk-4.1`, `gtk3`, `alsa-lib`, and
+`gst-plugins-good` — and the `.deb` lists `libasound2` via
+`src-tauri/tauri.conf.json`. The list lives in this repo rather than in the AUR
+repo so that a change to what the binary links against travels with the commit
+that caused it.
+
+`gst-plugins-good` stays a hard dependency even though narration no longer needs
+it: anything else that plays media through the webview still does, webkit2gtk-4.1
+will not pull it in, and on a host without it WebKit aborts the web process
+rather than reporting a failure. Keep the list in step with
+`ldd target/release/bread-of-life`.
 
 ## Building it yourself
 

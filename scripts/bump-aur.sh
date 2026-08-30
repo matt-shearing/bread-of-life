@@ -59,6 +59,27 @@ done
 # pkgrel restarts at 1 for a new upstream version.
 sed -i -E "s/^pkgver=.*/pkgver=${VERSION}/; s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
+# What the binary needs at runtime is decided HERE, not in the AUR repo, so it travels
+# with the commit that changes it. The desktop build picked up ALSA when audio playback
+# moved out of the webview and into the app (docs/DESKTOP.md); nobody would have thought
+# to go and edit a PKGBUILD in a different repo for that.
+#
+# alsa-lib is pulled in by most of an Arch desktop already, so a missing entry is a
+# correctness bug rather than a broken install — which is exactly the kind that survives
+# for years. Keep this list in step with `ldd target/release/bread-of-life`.
+#
+# gst-plugins-good is here even though narration no longer touches GStreamer. Anything
+# ELSE that plays media through the webview still does, and webkit2gtk-4.1 does not pull
+# it in; on a host without it WebKit aborts the whole web process rather than reporting a
+# failure, so the app dies. A few MB is a cheap price for not shipping that crash again.
+DEPENDS="depends=('webkit2gtk-4.1' 'gtk3' 'alsa-lib' 'gst-plugins-good')"
+if ! grep -qE "^depends=\(.*\)$" PKGBUILD; then
+  echo "PKGBUILD has no single-line depends=() to rewrite — check it by hand" >&2
+  exit 1
+fi
+sed -i -E "s|^depends=\(.*\)$|${DEPENDS}|" PKGBUILD
+echo "  depends: $(sed -n 's/^depends=//p' PKGBUILD)"
+
 # Downloads both sources and rewrites sha256sums in place.
 updpkgsums
 
