@@ -21,10 +21,12 @@ import { estimateSpeechSeconds, pickVoice, speechSynthesisSupported, speechVoice
  * it marks the devotional complete.
  */
 
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
 /** Where the recordings live. Override for local testing with VITE_DEVOTIONAL_AUDIO_BASE. */
 export const DEVOTIONAL_AUDIO_BASE: string = (
   (import.meta.env.VITE_DEVOTIONAL_AUDIO_BASE as string | undefined) ||
-  "https://sync.breadoflife.dev/audio/spurgeon/v1/bm_george"
+  "https://github.com/matt-shearing/bread-of-life/releases/download/devotional-audio-v1"
 ).replace(/\/+$/, "");
 
 /** Only this devotional has recordings and a speech script. */
@@ -93,7 +95,11 @@ export function loadDevotionalManifest(): Promise<ManifestIndex | null> {
     if (cached && Date.now() - cached.fetchedAt < MAX_AGE_MS) return cached.items;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return cached?.items ?? null;
     try {
-      const res = await fetch(`${DEVOTIONAL_AUDIO_BASE}/manifest.json`, { cache: "no-cache" });
+      // In the app, plugin-http: GitHub's release downloads send no CORS headers, so a
+      // webview fetch of the manifest would be refused. The MP3s themselves need no CORS.
+      const res = isTauri
+        ? await (await import("@tauri-apps/plugin-http")).fetch(`${DEVOTIONAL_AUDIO_BASE}/manifest.json`)
+        : await fetch(`${DEVOTIONAL_AUDIO_BASE}/manifest.json`, { cache: "no-cache" });
       if (!res.ok) throw new Error(`manifest ${res.status}`);
       const json = (await res.json()) as { items?: Record<string, { path?: string; durationSec?: number }> };
       const items: ManifestIndex = {};

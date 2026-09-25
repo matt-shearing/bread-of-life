@@ -157,8 +157,18 @@ contains both. No dropped sentences or garbled chunk joins were found.
 
 ## Hosting
 
-Serve the files from the sync server at `sync.breadoflife.dev`, with GitHub Releases as a
-mirror.
+**Live hosting (since v0.4.0): a GitHub Release.** The files are assets of the prerelease
+`devotional-audio-v1` on the public repo, named flat (`morning-10-03.mp3`,
+`evening-10-03.mp3`) with `manifest.json` beside them; the manifest's `path` fields use those
+flat names. The release is marked prerelease and not latest, so Obtainium and the release
+workflows ignore it. GitHub's download URLs redirect to a signed CDN URL that supports byte
+ranges, and send no CORS headers, so the app fetches the manifest with `plugin-http` (the
+MP3s themselves play without CORS). A new voice or text revision goes in a new release tag
+(`devotional-audio-v2`) and a one-line change to `DEVOTIONAL_AUDIO_BASE`.
+
+The sync server was the first choice, but on 2026-09-25 its SSH port was closed at the host
+firewall (even from the private network), so it could not be updated. The Caddy recipe
+below still applies if the audio moves there.
 
 **Sync server behind Caddy (recommended).** One voice is about 615 MB, which fits on the
 server's disk. Caddy's `file_server` handles byte-range requests, which the Android player
@@ -248,7 +258,7 @@ exactly as the "Mark complete" button does.
 
 - **The recording is the main path.** `src/audio/devotionalAudio.ts` holds the base URL in
   one constant, `DEVOTIONAL_AUDIO_BASE`
-  (`https://sync.breadoflife.dev/audio/spurgeon/v1/bm_george`). Set
+  (`https://github.com/matt-shearing/bread-of-life/releases/download/devotional-audio-v1`). Set
   `VITE_DEVOTIONAL_AUDIO_BASE` to point a dev build at another server. The app fetches
   `manifest.json`, keeps a compact copy (id, path, length) in `localStorage`, re-checks it
   every six hours, and uses the stored copy when offline. The button shows the recording's
