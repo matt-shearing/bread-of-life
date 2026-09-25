@@ -18,12 +18,12 @@ import { localDayKey } from "./day.ts";
  * deterministic ids mean re-running it never duplicates anything. If the app is not
  * opened for a while, the window simply runs down; it never piles up.
  *
- * The window is short (today and tomorrow) on purpose. After a reboot the notification
- * plugin's restore receiver re-arms every saved one-off and fires any that fell due
- * while the phone was off, all at once, fifteen seconds after boot. A short window caps
- * that burst at two days' worth. The cost: if the app is not opened for two days the
- * reminders stop until it is. The devotional, memory and prayer reminders use the same
- * window (src/lib/dailyReminders.ts).
+ * The window is a week. The reminders matter most on the days the app is not opened,
+ * so they must keep coming for a while without a reconcile. The cost: after a reboot
+ * the notification plugin's restore receiver fires every saved one-off that fell due
+ * while the phone was off, all at once, fifteen seconds after boot. That only bites
+ * when the phone was off across reminder times, and it is capped at the window. The
+ * devotional, memory and prayer reminders use the same window (src/lib/dailyReminders.ts).
  */
 
 export interface ReminderSlot {
@@ -38,7 +38,7 @@ export const DEFAULT_READING_SLOTS: ReminderSlot[] = [
 ];
 export const MAX_READING_SLOTS = 4;
 /** How many days ahead one-offs are scheduled (today included). */
-export const READING_WINDOW_DAYS = 2;
+export const READING_WINDOW_DAYS = 7;
 /**
  * How far ahead the cancel sweep reaches, whatever the window: builds before the window
  * was shortened scheduled a week ahead, and those alarms must not survive the upgrade.

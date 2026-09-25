@@ -397,14 +397,15 @@ test(`[${TZ}] a past reminder is kept only if it is showing or was last planned 
   assert.ok(!planReadingReminders(state({ now: now + 3_600_000, previous: applied(mid) })).cancel.includes(two));
 });
 
-test(`[${TZ}] the rolling window is today and tomorrow, so a reboot can replay at most two days`, () => {
-  assert.equal(READING_WINDOW_DAYS, 2);
+test(`[${TZ}] the rolling window is a week, so reminders keep coming if the app is not opened`, () => {
+  assert.equal(READING_WINDOW_DAYS, 7);
   const slots = ["06:00", "12:00", "18:00", "22:00"].map((time) => ({ time, enabled: true }));
   const { schedule, cancel } = planReadingReminders(state({ now: at(2026, 9, 25, 5, 0), slots }));
-  assert.ok(schedule.every((r) => r.at < at(2026, 9, 27, 0, 0)), "nothing past tomorrow");
-  // A build with the old 7-day window left ids up to a week out: they are swept too.
-  for (let d = 27; d <= 30; d++) assert.ok(cancel.includes(reminderId(`2026-09-${d}`, 0)), `${d}`);
-  assert.ok(cancel.includes(reminderId("2026-10-02", 3)));
+  assert.ok(schedule.every((r) => r.at < at(2026, 10, 2, 0, 0)), "nothing past the week");
+  // Every day of the week is covered, so reminders keep coming with the app unopened.
+  for (let d = 25; d <= 30; d++) assert.ok(schedule.some((r) => r.id === reminderId(`2026-09-${d}`, 3)), `${d}`);
+  assert.ok(schedule.some((r) => r.id === reminderId("2026-10-01", 0)));
+  assert.ok(schedule.every((r) => !cancel.includes(r.id)));
 });
 
 test(`[${TZ}] upgrade: the reading reminder time chosen before v0.4 is kept`, () => {
@@ -439,8 +440,8 @@ const DAILY = [
 test(`[${TZ}] devotional / memory / prayer reminders are rolling one-offs, not repeating alarms`, () => {
   assert.ok(daily, "src/lib/dailyReminders.ts exists");
   const now = at(2026, 9, 25, 10, 0);
-  const { schedule, cancel } = daily.planDailyReminders({ now, reminders: DAILY });
-  // 7 am today is past; 9 pm today is not. Two days, prayers off.
+  const { schedule, cancel } = daily.planDailyReminders({ now, reminders: DAILY, windowDays: 2 });
+  // 7 am today is past; 9 pm today is not. A two-day window, prayers off.
   assert.deepEqual(
     schedule.map((r) => `${r.kind} ${r.dayKey} ${hhmm(r.at)}`),
     ["memory 2026-09-25 21:00", "devotion 2026-09-26 07:00", "memory 2026-09-26 21:00"],
@@ -452,7 +453,7 @@ test(`[${TZ}] devotional / memory / prayer reminders are rolling one-offs, not r
   for (const d of ["2026-09-25", "2026-09-26", "2026-09-27"]) assert.ok(cancel.includes(daily.dailyReminderId("prayers", d)));
   // Nothing scheduled is also cancelled; re-planning gives the same ids.
   assert.ok(schedule.every((r) => !cancel.includes(r.id)));
-  assert.deepEqual(daily.planDailyReminders({ now: now + 60_000, reminders: DAILY }).schedule.map((r) => r.id), schedule.map((r) => r.id));
+  assert.deepEqual(daily.planDailyReminders({ now: now + 60_000, reminders: DAILY, windowDays: 2 }).schedule.map((r) => r.id), schedule.map((r) => r.id));
   // What reaches the plugin is an exact, allow-while-idle one-off (setExactAndAllowWhileIdle),
   // never the `interval` schedule the plugin re-arms with a plain setExact.
   const p = JSON.parse(JSON.stringify(toPluginPayload(daily.toNative(schedule[0]), "c", "a")));
