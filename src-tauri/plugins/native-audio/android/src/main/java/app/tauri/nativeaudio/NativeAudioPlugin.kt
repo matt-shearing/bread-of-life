@@ -3,17 +3,26 @@ package app.tauri.nativeaudio
 import android.Manifest
 import android.app.Activity
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.Intent
+import android.content.ServiceConnection
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.app.ActivityManager
 import android.os.Build
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
+import androidx.annotation.OptIn
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
@@ -23,14 +32,22 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.BitmapLoader
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CacheBitmapLoader
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionResult
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import kotlin.math.max
 
 private const val TAG = "plugin/native-audio"
@@ -48,6 +65,10 @@ private const val PROGRESS_KEY_STORY_ID = "story_id"
 private const val PROGRESS_KEY_CURRENT_TIME = "current_time"
 private const val PROGRESS_KEY_UPDATED_AT_MS = "updated_at_ms"
 private const val PROGRESS_KEY_STATUS = "status"
+// Turn on logcat output in a release build with: adb shell setprop log.tag.BoLAudio DEBUG
+private const val DEBUG_TAG = "BoLAudio"
+private const val DEBUG_LOG_CAPACITY = 300
+private const val ARTWORK_SIZE_PX = 256
 
 data class NativeAudioState(
     val status: String,
@@ -58,6 +79,8 @@ data class NativeAudioState(
     val rate: Double,
     val index: Int = 0,
     val error: String? = null,
+    /** Monotonic time the snapshot was taken, so JS can drop events older than a getState. */
+    val capturedAtMs: Long = SystemClock.elapsedRealtime(),
 )
 
 data class NativeAudioProgressCheckpoint(
@@ -106,10 +129,44 @@ private data class PendingSeekState(
     val startedAtMs: Long,
 )
 
+@OptIn(UnstableApi::class)
 object NativeAudioRuntime {
     private val lock = Any()
     private val tickHandler = Handler(Looper.getMainLooper())
     private var tickScheduled = false
+
+    /** Tests swap in a player that needs no network or audio hardware. */
+    @Volatile
+    internal var playerFactory: (Context) -> ExoPlayer = { ctx ->
+        ExoPlayer.Builder(ctx)
+            .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
+            .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
+            .build()
+    }
+
+    // The service is kept alive by this binding while a queue is loaded. A started-only service
+    // is stopped by Android's background limits about a minute after it leaves the foreground
+    // (i.e. during a pause), and nothing brought it back when an earphone press resumed playback.
+    private var serviceBindRequested = false
+    private var serviceRunning = false
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            debugLog("service", "bound")
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            debugLog("service", "binding lost (process of service died)")
+        }
+
+        override fun onNullBinding(name: ComponentName?) {
+            debugLog("service", "bound (null binder)")
+        }
+    }
+
+    private val debugLines = ArrayDeque<String>()
+    @Volatile
+    private var debugToLogcat: Boolean? = null
+    private var appIconBitmap: Bitmap? = null
 
     private var player: ExoPlayer? = null
     private var appContext: Context? = null
@@ -140,7 +197,17 @@ object NativeAudioRuntime {
     }
 
     private val playerListener = object : Player.Listener {
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            debugLog("player", "playWhenReady=$playWhenReady reason=${playWhenReadyReasonName(reason)}")
+        }
+
+        override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+            // Non-zero = playWhenReady is true but audio is held back (e.g. transient focus loss).
+            debugLog("player", "suppressionReason=$playbackSuppressionReason")
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
+            debugLog("player", "playbackState=${playbackStateName(playbackState)}")
             if (playbackState == Player.STATE_ENDED) {
                 synchronized(lock) {
                     appContext?.let { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
@@ -161,6 +228,7 @@ object NativeAudioRuntime {
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            debugLog("player", "isPlaying=$isPlaying serviceRunning=${synchronized(lock) { serviceRunning }}")
             syncTicking()
             emitState()
         }
@@ -195,6 +263,7 @@ object NativeAudioRuntime {
 
         override fun onPlayerError(error: PlaybackException) {
             Log.e(TAG, "onPlayerError code=${error.errorCodeName} message=${error.message}", error)
+            debugLog("player", "error ${error.errorCodeName}: ${error.message}")
             synchronized(lock) {
                 lastError = error.message ?: "unknown"
                 pendingSeekState = null
@@ -216,16 +285,34 @@ object NativeAudioRuntime {
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build()
 
-            val exoPlayer = ExoPlayer.Builder(ctx)
-                .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
-                .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
-                .build()
+            val exoPlayer = playerFactory(ctx)
             exoPlayer.setAudioAttributes(audioAttributes, true)
             exoPlayer.setHandleAudioBecomingNoisy(true)
-            exoPlayer.setWakeMode(C.WAKE_MODE_LOCAL)
+            // Chapters stream over the network: hold a Wi-Fi lock as well as a CPU wake lock
+            // while playing, so a locked phone does not let the connection sleep.
+            exoPlayer.setWakeMode(C.WAKE_MODE_NETWORK)
             exoPlayer.addListener(playerListener)
             player = exoPlayer
+            // Every play command reaches ExoPlayer through this wrapper: the app's own Play
+            // button (via play() below), the notification, the lock screen and earphone or
+            // Bluetooth buttons (via Media3's MediaSession). So the set-up a play needs lives
+            // here, once, instead of only on the app's path.
             mediaSessionPlayer = object : ForwardingPlayer(exoPlayer) {
+                override fun play() {
+                    onPlayRequested("play")
+                    super.play()
+                }
+
+                override fun setPlayWhenReady(playWhenReady: Boolean) {
+                    if (playWhenReady) onPlayRequested("setPlayWhenReady") else onPauseRequested("setPlayWhenReady")
+                    super.setPlayWhenReady(playWhenReady)
+                }
+
+                override fun pause() {
+                    onPauseRequested("pause")
+                    super.pause()
+                }
+
                 override fun getAvailableCommands(): Player.Commands {
                     return super.getAvailableCommands()
                         .buildUpon()
@@ -271,6 +358,8 @@ object NativeAudioRuntime {
 
             val sessionPlayer = mediaSessionPlayer ?: exoPlayer
             mediaSession = MediaSession.Builder(ctx, sessionPlayer)
+                .setCallback(sessionCallback)
+                .setBitmapLoader(AppIconBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader(ctx))) { appIcon(ctx) })
                 .apply {
                     if (pendingIntent != null) setSessionActivity(pendingIntent)
                 }
@@ -286,17 +375,60 @@ object NativeAudioRuntime {
         emitState()
     }
 
-    fun startService(context: Context) {
-        val serviceIntent = Intent(context.applicationContext, NativeAudioService::class.java)
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.applicationContext.startForegroundService(serviceIntent)
-            } else {
-                context.applicationContext.startService(serviceIntent)
-            }
-        }.onFailure { error ->
-            Log.w(TAG, "startService failed", error)
+    /**
+     * Keep [NativeAudioService] alive for as long as something is loaded. Binding is allowed from
+     * the background (unlike startService), never needs a matching startForeground(), and a bound
+     * service is not stopped by the background-service limits. Media3 promotes the service to the
+     * foreground itself whenever the player plays.
+     */
+    private fun ensureServiceBoundLocked(context: Context) {
+        if (serviceBindRequested) return
+        val ctx = context.applicationContext
+        val intent = Intent(ctx, NativeAudioService::class.java).setAction(MediaSessionService.SERVICE_INTERFACE)
+        val bound = runCatching { ctx.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE) }
+            .onFailure { Log.w(TAG, "bindService failed", it) }
+            .getOrDefault(false)
+        serviceBindRequested = bound
+        debugLog("service", "bind requested ok=$bound")
+    }
+
+    /** Drop our binding so the service can stop (dispose, or the app swiped away while paused). */
+    fun releaseServiceBinding(context: Context) {
+        synchronized(lock) {
+            if (!serviceBindRequested) return
+            serviceBindRequested = false
+            runCatching { context.applicationContext.unbindService(serviceConnection) }
+                .onFailure { Log.w(TAG, "unbindService failed", it) }
+            debugLog("service", "unbound")
         }
+    }
+
+    internal fun onServiceCreated(@Suppress("UNUSED_PARAMETER") service: NativeAudioService) {
+        synchronized(lock) { serviceRunning = true }
+        debugLog("service", "onCreate")
+    }
+
+    internal fun onServiceDestroyed(@Suppress("UNUSED_PARAMETER") service: NativeAudioService) {
+        synchronized(lock) { serviceRunning = false }
+    }
+
+    internal fun isServiceBindRequested(): Boolean = synchronized(lock) { serviceBindRequested }
+
+    /**
+     * Runs for EVERY play, whatever sent it (see the ForwardingPlayer in [ensure]). Earphone and
+     * lock-screen commands never pass through [play], so anything a play needs must happen here.
+     */
+    private fun onPlayRequested(via: String) {
+        synchronized(lock) {
+            debugLog("command", "play via=$via from=${currentController()}")
+            pendingSeekState = null
+            lastError = null
+            appContext?.let { ensureServiceBoundLocked(it) }
+        }
+    }
+
+    private fun onPauseRequested(via: String) {
+        debugLog("command", "pause via=$via from=${currentController()}")
     }
 
     fun stopService(context: Context) {
@@ -316,6 +448,7 @@ object NativeAudioRuntime {
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
             lastError = null
+            ensureServiceBoundLocked(context)
             syncTickingLocked()
         }
         emitState()
@@ -337,6 +470,7 @@ object NativeAudioRuntime {
             exoPlayer.setMediaItems(mediaItems, start, 0L)
             exoPlayer.prepare()
             lastError = null
+            ensureServiceBoundLocked(context)
             syncTickingLocked()
         }
         emitState()
@@ -362,18 +496,16 @@ object NativeAudioRuntime {
         emitState()
     }
 
+    /** The app's Play button. Goes through the same wrapper as every other play command. */
     fun play(context: Context) {
-        startService(context)
         synchronized(lock) {
             ensure(context)
             val exoPlayer = player ?: return
+            val sessionPlayer = mediaSessionPlayer ?: exoPlayer
             if (exoPlayer.playbackState == Player.STATE_ENDED) {
                 exoPlayer.seekTo(0L)
             }
-            pendingSeekState = null
-            exoPlayer.playWhenReady = true
-            exoPlayer.play()
-            lastError = null
+            sessionPlayer.play()
             syncTickingLocked()
         }
         emitState()
@@ -383,7 +515,7 @@ object NativeAudioRuntime {
         synchronized(lock) {
             ensure(context)
             pendingSeekState = null
-            player?.pause()
+            (mediaSessionPlayer ?: player)?.pause()
             syncTickingLocked()
             persistProgressCheckpointLocked(context.applicationContext, snapshotLocked(), force = true)
         }
@@ -469,6 +601,7 @@ object NativeAudioRuntime {
             currentStoryId = null
             appContext = null
         }
+        releaseServiceBinding(context)
         stopService(context)
         emitState()
     }
@@ -483,6 +616,144 @@ object NativeAudioRuntime {
         synchronized(lock) {
             return mediaSessionPlayer ?: player
         }
+    }
+
+    /**
+     * Logs who asked the session to do what: the app, the media notification, the system UI,
+     * Bluetooth/earphones, Android Auto… Media3 calls this for every controller command.
+     */
+    private val sessionCallback = object : MediaSession.Callback {
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            debugLog("session", "connected ${describe(session, controller)}")
+        }
+
+        override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            debugLog("session", "disconnected ${describe(session, controller)}")
+        }
+
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            intent: Intent,
+        ): Boolean {
+            @Suppress("DEPRECATION")
+            val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+            val keyName = key?.let { mediaKeyName(it.keyCode) } ?: "none"
+            val action = when (key?.action) {
+                KeyEvent.ACTION_DOWN -> "down"
+                KeyEvent.ACTION_UP -> "up"
+                else -> "?"
+            }
+            debugLog("button", "$keyName $action repeat=${key?.repeatCount ?: 0} from=${describe(session, controllerInfo)}")
+            return false // let Media3 handle it as usual
+        }
+
+        @Deprecated("Media3 still calls this for every player command in 1.4.x")
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int,
+        ): Int {
+            debugLog("session", "command ${playerCommandName(playerCommand)} from=${describe(session, controller)}")
+            return SessionResult.RESULT_SUCCESS
+        }
+    }
+
+    private fun currentController(): String {
+        val session = mediaSession ?: return "app"
+        val controller = runCatching { session.controllerForCurrentRequest }.getOrNull() ?: return "app"
+        return describe(session, controller)
+    }
+
+    private fun describe(session: MediaSession, controller: MediaSession.ControllerInfo): String {
+        val role = when {
+            session.isMediaNotificationController(controller) -> "media-notification"
+            session.isAutomotiveController(controller) -> "automotive"
+            session.isAutoCompanionController(controller) -> "android-auto"
+            controller.controllerVersion == MediaSession.ControllerInfo.LEGACY_CONTROLLER_VERSION -> "legacy"
+            else -> "media3"
+        }
+        return "${controller.packageName}($role uid=${controller.uid})"
+    }
+
+    /** Ring buffer of recent audio events, always kept (cheap); logcat only when debugging. */
+    fun debugLog(tag: String, message: String) {
+        val line = "${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())} [$tag] $message"
+        synchronized(debugLines) {
+            debugLines.addLast(line)
+            while (debugLines.size > DEBUG_LOG_CAPACITY) debugLines.removeFirst()
+        }
+        if (isDebugLoggingEnabled()) Log.d(DEBUG_TAG, "[$tag] $message")
+    }
+
+    fun debugLogLines(): List<String> = synchronized(debugLines) { debugLines.toList() }
+
+    private fun isDebugLoggingEnabled(): Boolean {
+        val cached = debugToLogcat
+        val debuggable = cached ?: run {
+            val ctx = appContext ?: return Log.isLoggable(DEBUG_TAG, Log.DEBUG)
+            ((ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0).also { debugToLogcat = it }
+        }
+        return debuggable || Log.isLoggable(DEBUG_TAG, Log.DEBUG)
+    }
+
+    /** The app's launcher icon as a bitmap: the notification and lock-screen artwork. */
+    private fun appIcon(ctx: Context): Bitmap? {
+        synchronized(lock) {
+            appIconBitmap?.let { return it }
+            val bitmap = runCatching {
+                val drawable = ctx.packageManager.getApplicationIcon(ctx.applicationInfo)
+                Bitmap.createBitmap(ARTWORK_SIZE_PX, ARTWORK_SIZE_PX, Bitmap.Config.ARGB_8888).also {
+                    val canvas = Canvas(it)
+                    drawable.setBounds(0, 0, canvas.width, canvas.height)
+                    drawable.draw(canvas)
+                }
+            }.onFailure { Log.w(TAG, "app icon unavailable", it) }.getOrNull()
+            appIconBitmap = bitmap
+            return bitmap
+        }
+    }
+
+    private fun mediaKeyName(keyCode: Int): String = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "PLAY_PAUSE"
+        KeyEvent.KEYCODE_HEADSETHOOK -> "HEADSETHOOK"
+        KeyEvent.KEYCODE_MEDIA_PLAY -> "PLAY"
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> "PAUSE"
+        KeyEvent.KEYCODE_MEDIA_STOP -> "STOP"
+        KeyEvent.KEYCODE_MEDIA_NEXT -> "NEXT"
+        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "PREVIOUS"
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "FAST_FORWARD"
+        KeyEvent.KEYCODE_MEDIA_REWIND -> "REWIND"
+        else -> "key#$keyCode"
+    }
+
+    private fun playWhenReadyReasonName(reason: Int): String = when (reason) {
+        Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST -> "user"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS -> "audio-focus-loss"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY -> "becoming-noisy"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE -> "remote"
+        Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM -> "end-of-item"
+        else -> reason.toString()
+    }
+
+    private fun playbackStateName(state: Int): String = when (state) {
+        Player.STATE_IDLE -> "idle"
+        Player.STATE_BUFFERING -> "buffering"
+        Player.STATE_READY -> "ready"
+        Player.STATE_ENDED -> "ended"
+        else -> state.toString()
+    }
+
+    private fun playerCommandName(command: Int): String = when (command) {
+        Player.COMMAND_PLAY_PAUSE -> "play/pause"
+        Player.COMMAND_STOP -> "stop"
+        Player.COMMAND_SEEK_BACK -> "seek-back"
+        Player.COMMAND_SEEK_FORWARD -> "seek-forward"
+        Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> "previous"
+        Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> "next"
+        Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM -> "seek"
+        Player.COMMAND_PREPARE -> "prepare"
+        else -> "command#$command"
     }
 
     private fun syncTicking() {
@@ -627,6 +898,30 @@ object NativeAudioRuntime {
             return null
         }
         return seekState
+    }
+}
+
+/**
+ * Media3's default bitmap loader, plus the app icon as artwork when a track has none of its own
+ * (Bible chapters don't). The icon is produced here, per request, rather than put into every
+ * MediaItem: a continuous-Bible queue holds about a thousand items, and embedding a bitmap in each
+ * would ship megabytes to every controller.
+ */
+@OptIn(UnstableApi::class)
+internal class AppIconBitmapLoader(
+    private val delegate: BitmapLoader,
+    private val appIcon: () -> Bitmap?,
+) : BitmapLoader {
+    override fun supportsMimeType(mimeType: String): Boolean = delegate.supportsMimeType(mimeType)
+
+    override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> = delegate.decodeBitmap(data)
+
+    override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> = delegate.loadBitmap(uri)
+
+    override fun loadBitmapFromMetadata(metadata: MediaMetadata): ListenableFuture<Bitmap>? {
+        delegate.loadBitmapFromMetadata(metadata)?.let { return it }
+        val icon = appIcon() ?: return null
+        return Futures.immediateFuture(icon)
     }
 }
 
@@ -807,6 +1102,14 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /** Recent audio events (commands, media buttons, service lifecycle) for bug reports. */
+    @Command
+    fun getDebugLog(invoke: Invoke) {
+        val payload = JSObject()
+        payload.put("lines", org.json.JSONArray(NativeAudioRuntime.debugLogLines()))
+        invoke.resolve(payload)
+    }
+
     @Command
     fun dispose(invoke: Invoke) {
         runCatching {
@@ -849,6 +1152,7 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         payload.put("buffering", state.buffering)
         payload.put("rate", state.rate)
         payload.put("index", state.index)
+        payload.put("capturedAtMs", state.capturedAtMs)
         if (!state.error.isNullOrBlank()) payload.put("error", state.error)
         return payload
     }

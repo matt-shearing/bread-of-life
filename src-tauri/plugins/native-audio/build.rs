@@ -13,6 +13,7 @@ const COMMANDS: &[&str] = &[
     "get_state",
     "get_progress_checkpoint",
     "clear_progress_checkpoint",
+    "get_debug_log",
     "dispose",
 ];
 

@@ -15,5 +15,6 @@ permissions = [
   "allow-get-state",
   "allow-get-progress-checkpoint",
   "allow-clear-progress-checkpoint",
+  "allow-get-debug-log",
   "allow-dispose",
 ]

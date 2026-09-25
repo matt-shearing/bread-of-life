@@ -139,6 +139,8 @@ class NativeEngine implements AudioEngine {
   private idx = 0;
   private wasPlaying = false;
   private ended = false;
+  /** Native capture time (ms, monotonic) of the newest state applied. */
+  private lastCapturedAt = -1;
 
   constructor() {
     this.ready = (async () => {
@@ -153,20 +155,46 @@ class NativeEngine implements AudioEngine {
     })().catch(() => {
       /* plugin unavailable — leave api null; calls no-op */
     });
+    // The player keeps going while the WebView is frozen in the background, and it can be
+    // paused or resumed from earphones, the lock screen or the notification without JS
+    // hearing about it in time. When the app comes back, take native's word for everything.
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") this.resync();
+      });
+    }
   }
 
-  private onState(s: import("tauri-plugin-native-audio-api").NativeAudioState) {
+  /** Replace what JS believes with the native player's current snapshot. */
+  resync() {
+    void this.ready.then(async () => {
+      if (!this.api) return;
+      try {
+        this.onState(await this.api.getState(), true);
+      } catch {
+        /* keep the last known state */
+      }
+    });
+  }
+
+  private onState(s: NativeSnapshot, authoritative = false) {
+    // Events queued while the WebView was frozen can arrive after a fresher snapshot;
+    // anything captured earlier than what we already applied is stale.
+    if (typeof s.capturedAtMs === "number") {
+      if (s.capturedAtMs < this.lastCapturedAt) return;
+      this.lastCapturedAt = s.capturedAtMs;
+    }
     this.cur = s.currentTime;
     if (s.duration) this.dur = s.duration;
     this.handlers.onTime?.(s.currentTime);
     if (s.duration) this.handlers.onDuration?.(s.duration);
     this.handlers.onLoading?.(s.buffering || s.status === "loading");
-    if (s.isPlaying !== this.wasPlaying) {
+    if (authoritative || s.isPlaying !== this.wasPlaying) {
       this.wasPlaying = s.isPlaying;
       (s.isPlaying ? this.handlers.onPlay : this.handlers.onPause)?.();
     }
     // The native player advanced to a new playlist item on its own (background-safe).
-    const index = (s as { index?: number }).index;
+    const index = s.index;
     if (typeof index === "number" && index !== this.idx) {
       this.idx = index;
       this.handlers.onIndexChange?.(index);
@@ -253,6 +281,14 @@ class NativeEngine implements AudioEngine {
     this.run((api) => api.pause());
   }
 }
+
+/** The plugin's state event, plus the fields our vendored plugin adds to it. */
+type NativeSnapshot = import("tauri-plugin-native-audio-api").NativeAudioState & {
+  /** Position in the native playlist. */
+  index?: number;
+  /** When native took this snapshot (monotonic ms). Orders events against `getState`. */
+  capturedAtMs?: number;
+};
 
 /** What `desktop_audio_state` reports (see `src-tauri/src/desktop_audio.rs`). */
 interface DesktopAudioState {
