@@ -1,4 +1,5 @@
 import { READING_DEEP_LINK, READING_ID_BASE } from "./readingReminders.ts";
+import { dailyDeepLinkForId } from "./dailyReminders.ts";
 
 /**
  * The pure halves of the native notification glue in notify.ts, kept free of app
@@ -52,6 +53,6 @@ export function deepLinkFor(payload: unknown, byId: Record<number, string> = {})
   const id = Number(obj.id ?? outer?.id);
   if (!Number.isFinite(id)) return null;
   if (id >= READING_ID_BASE && id < READING_ID_BASE + 10_000) return READING_DEEP_LINK;
-  return byId[id] ?? null;
+  return dailyDeepLinkForId(id) ?? byId[id] ?? null;
 }
 

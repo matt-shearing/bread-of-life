@@ -13,14 +13,16 @@ import {
   type PlannedReminder,
   type ReadingReminderState,
 } from "@/lib/readingReminders";
+import { planDailyReminders, toNative, type DailyReminder, type PlannedDaily } from "@/lib/dailyReminders";
 
 /**
  * Notifications. Two delivery paths:
  *
  * - **Android / iOS app** — real OS notifications via `@tauri-apps/plugin-notification`,
  *   registered as OS *schedules* so they fire when the app is closed. Tapping one opens
- *   the right screen. The daily-reading reminders are one-off notifications over a
- *   rolling window, re-planned whenever state changes (src/lib/readingReminders.ts).
+ *   the right screen. Every reminder (reading, devotional, memory, prayers) is a one-off
+ *   notification over a short rolling window, re-planned whenever state changes
+ *   (src/lib/readingReminders.ts, src/lib/dailyReminders.ts).
  * - **Desktop app and browser** — the plugin cannot schedule on desktop (it shows the
  *   notification immediately), so the in-app foreground checks below fire reminders
  *   while the app is open, through the plugin on desktop and the Web Notification API
@@ -47,13 +49,11 @@ function plugin(): Promise<NotifPlugin> {
 }
 
 /**
- * Stable numeric ids so each repeating reminder can be cancelled/replaced. `plan`
- * (8804) was the single daily reading-plan reminder; the daily-reading reminders
- * (src/lib/readingReminders.ts, ids from READING_ID_BASE) replaced it, and it is only
- * kept here so the old repeating alarm gets cancelled on devices that still have it.
+ * The ids of the old REPEATING reminders, replaced by rolling one-offs
+ * (src/lib/dailyReminders.ts cancels them). Kept so a tap on one still showing from
+ * before the upgrade opens the right screen.
  */
 const SCHEDULE_ID = { devotion: 8801, memory: 8802, prayers: 8803, plan: 8804 } as const;
-export type ReminderKind = keyof typeof SCHEDULE_ID;
 const DEEP_LINK_BY_ID: Record<number, string> = {
   [SCHEDULE_ID.devotion]: "/devotional",
   [SCHEDULE_ID.memory]: "/memory",
@@ -173,51 +173,7 @@ async function scheduleNative(list: NativeNotification[]): Promise<void> {
   await invoke("plugin:notification|batch", { notifications: list.map((n) => toPluginPayload(n, CHANNEL_ID, ACTION_TYPE)) });
 }
 
-function parseHHMM(t: string): [number, number] {
-  const [hh, mm] = t.split(":").map(Number);
-  return [Math.min(23, Math.max(0, hh || 0)), Math.min(59, Math.max(0, mm || 0))];
-}
-
-/**
- * (Re)register a DAILY OS notification at a clock time. No-op off mobile.
- *
- * Uses the plugin's calendar-match `interval` schedule (fires whenever the clock reads
- * HH:MM:00 and re-arms itself for the next day). The previous `Schedule.at(next,
- * repeating=true)` looked daily but is not: on Android the plugin repeats it every
- * (first fire − time of scheduling), so a 7 am devotional set at 10 pm came back every
- * nine hours.
- */
-export async function scheduleDailyReminder(
-  kind: ReminderKind,
-  timeHHMM: string,
-  title: string,
-  body: string,
-  largeBody?: string,
-): Promise<void> {
-  if (!osSchedulesReminders) return;
-  const p = await plugin();
-  await setupNativeNotifications();
-  const id = SCHEDULE_ID[kind];
-  await p.cancel([id]).catch(() => {}); // replace any existing schedule for this kind
-  if (!(await p.isPermissionGranted())) return;
-  const [hour, minute] = parseHHMM(timeHHMM);
-  await scheduleNative([
-    {
-      id,
-      title,
-      body,
-      largeBody: largeBody ?? body,
-      schedule: { interval: { interval: { hour, minute, second: 0 }, allowWhileIdle: true } },
-    },
-  ]);
-}
-
-export async function cancelDailyReminder(kind: ReminderKind): Promise<void> {
-  if (!osSchedulesReminders) return;
-  await (await plugin()).cancel([SCHEDULE_ID[kind]]).catch(() => {});
-}
-
-/** The settings needed to (re)build the devotional, memory and prayer schedules. */
+/** The settings needed to build the devotional, memory and prayer reminders. */
 export interface ReminderSettings {
   notifyDevotion: boolean;
   devotionTime: string;
@@ -226,45 +182,45 @@ export interface ReminderSettings {
   reminderTime: string; // shared clock time for the memory / prayers reminders
 }
 
-/**
- * Reconcile the devotional, memory and prayer daily schedules with the settings. Call
- * at app start and whenever a toggle or time changes. No-op off mobile. The reading
- * reminders have their own reconcile (`reconcileReadingReminders`).
- */
-export async function syncReminderSchedules(s: ReminderSettings): Promise<void> {
-  if (!osSchedulesReminders) return;
-  const jobs: Promise<void>[] = [
-    s.notifyDevotion
-      ? scheduleDailyReminder(
-          "devotion",
-          s.devotionTime,
-          "Time for your devotional",
-          "Your Morning & Evening reading is ready.",
-          "A few quiet minutes with Spurgeon’s devotional. Tap “Go now” to read today’s portion and mark it done.",
-        )
-      : cancelDailyReminder("devotion"),
-    s.notifyMemory
-      ? scheduleDailyReminder(
-          "memory",
-          s.reminderTime,
-          "Hide His word in your heart",
-          "Verses are due for review in Memory Lane.",
-          "You have memory verses due today. A short review keeps them fresh — tap “Go now” to open Memory Lane.",
-        )
-      : cancelDailyReminder("memory"),
-    s.notifyPrayers
-      ? scheduleDailyReminder(
-          "prayers",
-          s.reminderTime,
-          "Time to pray",
-          "Lift up today’s prayers.",
-          "Bring your requests before God, and look back on the ones He’s already answered. Tap “Go now” to open your prayers.",
-        )
-      : cancelDailyReminder("prayers"),
-    // The old single reading-plan reminder, superseded by the reading reminders.
-    cancelDailyReminder("plan"),
+function dailyReminders(s: ReminderSettings): DailyReminder[] {
+  return [
+    {
+      kind: "devotion",
+      enabled: s.notifyDevotion,
+      time: s.devotionTime,
+      title: "Time for your devotional",
+      body: "Your Morning & Evening reading is ready.",
+      largeBody:
+        "A few quiet minutes with Spurgeon’s devotional. Tap “Go now” to read today’s portion and mark it done.",
+    },
+    {
+      kind: "memory",
+      enabled: s.notifyMemory,
+      time: s.reminderTime,
+      title: "Hide His word in your heart",
+      body: "Verses are due for review in Memory Lane.",
+      largeBody: "You have memory verses due today. A short review keeps them fresh — tap “Go now” to open Memory Lane.",
+    },
+    {
+      kind: "prayers",
+      enabled: s.notifyPrayers,
+      time: s.reminderTime,
+      title: "Time to pray",
+      body: "Lift up today’s prayers.",
+      largeBody:
+        "Bring your requests before God, and look back on the ones He’s already answered. Tap “Go now” to open your prayers.",
+    },
   ];
-  await Promise.all(jobs);
+}
+
+/**
+ * Re-plan the devotional, memory and prayer reminders after a toggle or time changes.
+ * Call at app start and on every change. They are rolling one-offs planned together
+ * with the reading reminders, so this is the same reconcile (which reads the current
+ * settings from the store). No-op off mobile.
+ */
+export function syncReminderSchedules(_s?: ReminderSettings): Promise<void> {
+  return reconcileReadingReminders();
 }
 
 /* ------------------------------ reading reminders ------------------------------ */
@@ -306,7 +262,22 @@ export async function readingReminderState(now: number = Date.now()): Promise<Re
 }
 
 /** The last plan applied, for debugging from the console (`__bolReadingReminders`). */
-let lastApplied: { at: string; state: ReadingReminderState; schedule: PlannedReminder[] } | null = null;
+let lastApplied: { at: string; state: ReadingReminderState; schedule: (PlannedReminder | PlannedDaily)[] } | null = null;
+
+/**
+ * Every notification the last reconcile scheduled or kept, with its time. The next
+ * reconcile uses it to tell a reminder that already fired (leave it in the shade) from
+ * one whose slot was just moved into the past (its old alarm is pending: cancel it).
+ */
+const APPLIED_KEY = "bol-reminders-applied";
+function loadApplied(): { id: number; at: number }[] | undefined {
+  try {
+    const raw = JSON.parse(localStorage.getItem(APPLIED_KEY) ?? "null") as unknown;
+    return Array.isArray(raw) ? raw.filter((r) => typeof r?.id === "number" && typeof r?.at === "number") : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 async function applyReadingReminders(): Promise<void> {
   if (!osSchedulesReminders) return;
@@ -314,25 +285,39 @@ async function applyReadingReminders(): Promise<void> {
   await setupNativeNotifications();
   const state = await readingReminderState();
   const granted = await p.isPermissionGranted().catch(() => false);
-  const plan = planReadingReminders(granted ? state : { ...state, enabled: false });
-  await p.cancel([...plan.cancel, SCHEDULE_ID.plan]).catch(() => {});
-  await scheduleNative(
-    plan.schedule.map((r) => ({
-      id: r.id,
-      title: r.title,
-      body: r.body,
-      largeBody: r.largeBody,
-      schedule: { at: { date: new Date(r.at), repeating: false, allowWhileIdle: true } },
-    })),
-  );
-  lastApplied = { at: new Date().toString(), state, schedule: plan.schedule };
+  // What the OS is showing now. If it cannot say, the saved record alone decides.
+  const delivered = await p
+    .active()
+    .then((list) => new Set(list.map((n) => Number(n.id))))
+    .catch(() => undefined);
+  const fired = { delivered, previous: loadApplied() };
+  const plan = planReadingReminders({ ...state, ...fired, enabled: granted && state.enabled });
+  const ui = useUI.getState();
+  const daily = planDailyReminders({
+    now: state.now,
+    ...fired,
+    reminders: dailyReminders(ui).map((r) => ({ ...r, enabled: granted && r.enabled })),
+  });
+  await p.cancel([...plan.cancel, ...daily.cancel]).catch(() => {});
+  const schedule = [...plan.schedule, ...daily.schedule].sort((a, b) => a.at - b.at);
+  await scheduleNative(schedule.map(toNative));
+  try {
+    localStorage.setItem(
+      APPLIED_KEY,
+      JSON.stringify([...schedule, ...plan.keep, ...daily.keep].map((r) => ({ id: r.id, at: r.at }))),
+    );
+  } catch {
+    /* storage blocked: the next reconcile relies on active() alone */
+  }
+  lastApplied = { at: new Date().toString(), state, schedule };
   (window as unknown as Record<string, unknown>).__bolReadingReminders = lastApplied;
 }
 
 let reconciling: Promise<void> | null = null;
 let reconcileAgain = false;
 /**
- * Make the OS's reading reminders match the current state: call on app start, on
+ * Make the OS's reminders (reading, and the devotional, memory and prayer ones planned
+ * alongside) match the current state: call on app start, on
  * return to the app, when a reading is completed here or arrives by sync, and when the
  * settings change. Calls that arrive while one is running collapse into one more run.
  * No-op off mobile (see `maybeNotifyReading`).

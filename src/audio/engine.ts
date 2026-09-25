@@ -157,6 +157,15 @@ class NativeEngine implements AudioEngine {
   private ended = false;
   /** Native capture time (ms, monotonic) of the newest state applied. */
   private lastCapturedAt = -1;
+  /**
+   * Bumped by every `loadQueue`. While a `set_queue` is in flight, state events are
+   * ignored: ticks native captured before the new playlist landed still carry the OLD
+   * index, and taking them as "the player advanced" marked skipped chapters read (a jump
+   * back) or flicked the mini-player to the old chapter (a jump forward). The command's
+   * own reply, a snapshot taken after the switch, is applied when it resolves.
+   */
+  private queueGen = 0;
+  private queueSwitching = false;
 
   constructor() {
     this.ready = (async () => {
@@ -194,6 +203,7 @@ class NativeEngine implements AudioEngine {
   }
 
   private onState(s: NativeSnapshot, authoritative = false) {
+    if (this.queueSwitching) return;
     // Events queued while the WebView was frozen can arrive after a fresher snapshot;
     // anything captured earlier than what we already applied is stale.
     if (typeof s.capturedAtMs === "number") {
@@ -228,22 +238,36 @@ class NativeEngine implements AudioEngine {
     this.dur = 0;
     this.ended = false;
     this.idx = startIndex;
+    const gen = ++this.queueGen;
+    this.queueSwitching = true;
+    const settle = (snapshot?: unknown) => {
+      if (gen !== this.queueGen) return; // a newer jump owns the player now
+      this.queueSwitching = false;
+      const s = snapshot as NativeSnapshot | null | undefined;
+      if (s && typeof s === "object" && typeof s.currentTime === "number") this.onState(s);
+    };
+    // Never go deaf for good if the command hangs: after a few seconds, listen again.
+    setTimeout(() => settle(), 5000);
     void this.ready.then(async () => {
-      if (!this.invoke) return;
+      if (!this.invoke) return settle();
       try {
-        await this.invoke("plugin:native-audio|set_queue", {
+        const snapshot = await this.invoke<NativeSnapshot>("plugin:native-audio|set_queue", {
           items: tracks.map((t) => {
             const { src } = splitOffset(t.src);
             return { src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl };
           }),
           startIndex,
         });
+        settle(snapshot);
+        if (gen !== this.queueGen) return; // superseded: that jump plays its own queue
         await this.api?.play();
         // Missler chapters can start mid-file (#t= hint) — ExoPlayer ignores the
         // fragment, so seek the start track ourselves.
         const off = splitOffset(tracks[startIndex]?.src ?? "").startSec;
         if (off > 0) await this.api?.seekTo(off);
       } catch {
+        if (gen !== this.queueGen) return;
+        settle();
         this.handlers.onPause?.();
       }
     });

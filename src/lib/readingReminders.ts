@@ -17,6 +17,13 @@ import { localDayKey } from "./day.ts";
  * the whole window: finishing today's reading drops today's remaining ones, and the
  * deterministic ids mean re-running it never duplicates anything. If the app is not
  * opened for a while, the window simply runs down; it never piles up.
+ *
+ * The window is short (today and tomorrow) on purpose. After a reboot the notification
+ * plugin's restore receiver re-arms every saved one-off and fires any that fell due
+ * while the phone was off, all at once, fifteen seconds after boot. A short window caps
+ * that burst at two days' worth. The cost: if the app is not opened for two days the
+ * reminders stop until it is. The devotional, memory and prayer reminders use the same
+ * window (src/lib/dailyReminders.ts).
  */
 
 export interface ReminderSlot {
@@ -31,7 +38,12 @@ export const DEFAULT_READING_SLOTS: ReminderSlot[] = [
 ];
 export const MAX_READING_SLOTS = 4;
 /** How many days ahead one-offs are scheduled (today included). */
-export const READING_WINDOW_DAYS = 7;
+export const READING_WINDOW_DAYS = 2;
+/**
+ * How far ahead the cancel sweep reaches, whatever the window: builds before the window
+ * was shortened scheduled a week ahead, and those alarms must not survive the upgrade.
+ */
+export const SWEEP_AHEAD_DAYS = 8;
 /**
  * Ids are READING_ID_BASE + (day number mod 1000) * 10 + slot, well clear of the
  * other reminders (8801–8804) and inside a Java int.
@@ -39,7 +51,28 @@ export const READING_WINDOW_DAYS = 7;
 export const READING_ID_BASE = 8_810_000;
 export const READING_DEEP_LINK = "/read-today";
 
-export interface ReadingReminderState {
+/**
+ * What we know about notifications that may already have fired, so a reminder whose
+ * time is now past can be told apart from one that was merely moved into the past.
+ */
+export interface FiredInfo {
+  /** Ids the OS is showing right now (the plugin's `active()`), if it could say. */
+  delivered?: ReadonlySet<number>;
+  /** The last plan applied on this device: everything it scheduled or kept. */
+  previous?: ReadonlyArray<{ id: number; at: number }>;
+}
+
+/**
+ * Did notification `id` already fire? Yes if it is showing, or if the last plan applied
+ * had it due at or before `now`. Otherwise its alarm, if any, is still pending.
+ */
+export function firedAlready(id: number, now: number, info: FiredInfo): boolean {
+  if (info.delivered?.has(id)) return true;
+  const prev = info.previous?.find((p) => p.id === id);
+  return !!prev && prev.at <= now;
+}
+
+export interface ReadingReminderState extends FiredInfo {
   now: number;
   /** The master switch for daily-reading reminders on this device. */
   enabled: boolean;
@@ -72,6 +105,8 @@ export interface ReminderPlan {
   schedule: PlannedReminder[];
   /** Ids that must not exist: cancel them (this also clears one from the shade). */
   cancel: number[];
+  /** Today's reminders that already fired and are left alone (in the shade). */
+  keep: { id: number; at: number }[];
 }
 
 /** "HH:MM" → [hours, minutes], or null if it is not a valid clock time. */
@@ -85,7 +120,7 @@ export function parseTime(t: string): [number, number] | null {
 }
 
 /** Whole days since 1970-01-01 for a "YYYY-MM-DD" key. Calendar arithmetic only. */
-function dayNumber(dayKey: string): number {
+export function dayNumber(dayKey: string): number {
   const [y, m, d] = dayKey.split("-").map(Number);
   return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
 }
@@ -95,7 +130,7 @@ export function reminderId(dayKey: string, slot: number): number {
 }
 
 /** Local midnight-based date `offset` days from `now`, at hh:mm (DST-safe). */
-function localAt(now: number, offset: number, hh: number, mm: number): Date {
+export function localAt(now: number, offset: number, hh: number, mm: number): Date {
   const d = new Date(now);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + offset, hh, mm, 0, 0);
 }
@@ -163,7 +198,7 @@ function active(s: ReadingReminderState): boolean {
 export function planReadingReminders(s: ReadingReminderState): ReminderPlan {
   const window = Math.max(1, s.windowDays ?? READING_WINDOW_DAYS);
   const schedule: PlannedReminder[] = [];
-  const keep = new Set<number>();
+  const keep: { id: number; at: number }[] = [];
 
   if (active(s)) {
     for (let offset = 0; offset < window; offset++) {
@@ -171,30 +206,62 @@ export function planReadingReminders(s: ReadingReminderState): ReminderPlan {
         if (r.at > s.now) {
           if (offset === 0 && s.doneToday) continue; // done: nothing more today
           schedule.push(r);
-        } else if (offset === 0 && !s.doneToday) {
+        } else if (offset === 0 && !s.doneToday && firedAlready(r.id, s.now, s)) {
           // Already fired today and the reading is still not done: leave it in the
-          // notification shade rather than cancelling (which would clear it).
-          keep.add(r.id);
+          // notification shade rather than cancelling (which would clear it). A time
+          // that is past only because the slot was just moved earlier has NOT fired:
+          // its old alarm is still set for the old time, so it falls through to cancel.
+          keep.push({ id: r.id, at: r.at });
         }
       }
     }
   }
 
-  const wanted = new Set(schedule.map((r) => r.id));
-  const cancel: number[] = [];
-  // Sweep every id this feature could have used from two days back to past the end of
-  // the window, so a shortened window, a removed slot or a changed setting leaves
-  // nothing behind.
-  for (let offset = -2; offset <= window + 1; offset++) {
-    const dayKey = localDayKey(localAt(s.now, offset, 12, 0).getTime());
-    for (let slot = 0; slot < MAX_READING_SLOTS; slot++) {
-      const id = reminderId(dayKey, slot);
-      // Anything else goes, including yesterday's still sitting in the shade.
-      if (!wanted.has(id) && !keep.has(id)) cancel.push(id);
-    }
-  }
+  const cancel = sweep(s.now, window, schedule, keep, (dayKey) =>
+    Array.from({ length: MAX_READING_SLOTS }, (_, slot) => reminderId(dayKey, slot)),
+  );
   schedule.sort((a, b) => a.at - b.at);
-  return { schedule, cancel };
+  return { schedule, cancel, keep };
+}
+
+/**
+ * Every id a feature could have used from two days back to past the end of the window
+ * (and never less than SWEEP_AHEAD_DAYS ahead), minus the ones wanted or kept. So a
+ * shortened window, a removed slot or a changed setting leaves nothing behind, and
+ * yesterday's still sitting in the shade goes too.
+ */
+export function sweep(
+  now: number,
+  window: number,
+  schedule: ReadonlyArray<{ id: number }>,
+  keep: ReadonlyArray<{ id: number }>,
+  idsForDay: (dayKey: string) => number[],
+): number[] {
+  const leave = new Set([...schedule, ...keep].map((r) => r.id));
+  const cancel: number[] = [];
+  for (let offset = -2; offset <= Math.max(window + 1, SWEEP_AHEAD_DAYS); offset++) {
+    const dayKey = localDayKey(localAt(now, offset, 12, 0).getTime());
+    for (const id of idsForDay(dayKey)) if (!leave.has(id)) cancel.push(id);
+  }
+  return cancel;
+}
+
+/**
+ * Persisted-UI migration (store/ui.ts, `bol-ui` version 0 → 1). Before v0.4 the single
+ * reading-plan reminder fired at `reminderTime` (shared with memory and prayers); v0.4
+ * replaced it with reminder slots defaulting to 2 pm and 8 pm. Without this, an upgrade
+ * silently moved a user's chosen time. If the reading reminder was on, their time
+ * becomes the first slot and 8 pm stays as the second (unless it was 8 pm already).
+ */
+export function migrateReminderPrefs(persisted: Record<string, unknown>, version: number): Record<string, unknown> {
+  if (version >= 1 || !persisted || typeof persisted !== "object") return persisted;
+  if (Array.isArray(persisted.readingReminderSlots) || persisted.notifyPlan !== true) return persisted;
+  const hm = typeof persisted.reminderTime === "string" ? parseTime(persisted.reminderTime) : null;
+  if (!hm) return persisted;
+  const time = `${String(hm[0]).padStart(2, "0")}:${String(hm[1]).padStart(2, "0")}`;
+  const slots: ReminderSlot[] = [{ time, enabled: true }];
+  if (time !== "20:00") slots.push({ time: "20:00", enabled: true });
+  return { ...persisted, readingReminderSlots: slots };
 }
 
 /**
