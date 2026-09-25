@@ -52,6 +52,8 @@ pub fn run() {
     #[cfg(target_os = "android")]
     {
         builder = builder.plugin(tauri_plugin_all_files::init());
+        // Reading reminders: exact-alarm permissions + the tap that launched the app.
+        builder = builder.plugin(tauri_plugin_reminders::init());
     }
 
     builder

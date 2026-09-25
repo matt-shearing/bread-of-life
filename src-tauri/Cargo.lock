@@ -331,6 +331,7 @@ dependencies = [
  "tauri-plugin-native-audio",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "tauri-plugin-reminders",
 ]
 
 [[package]]
@@ -4275,6 +4276,14 @@ dependencies = [
  "url",
  "windows",
  "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-reminders"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

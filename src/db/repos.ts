@@ -244,19 +244,39 @@ export async function startPlan(planId: string) {
   if (!existing) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [] });
 }
 
+/**
+ * Keep `completedAt` in step with `completedDays` for one day: stamp it the moment the
+ * day BECOMES done (touching a day that was already done keeps its original time, or
+ * none for days completed before stamps existed), and drop it when the day re-opens.
+ */
+function stampCompletion(
+  prev: Record<number, number> | undefined,
+  prevDays: number[],
+  day: number,
+  doneNow: boolean,
+): Record<number, number> {
+  const next = { ...(prev ?? {}) };
+  if (!doneNow) delete next[day];
+  else if (!prevDays.includes(day)) next[day] = Date.now();
+  return next;
+}
+
 export async function setDayDone(planId: string, day: number, done: boolean) {
   // Transactional for the same reason as setChapterDone below: this races the
   // narration's own mark-read writes.
   await db.transaction("rw", db.plans, async () => {
     const p = await db.plans.get(planId);
     if (!p) {
-      if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day] });
+      if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day], completedAt: { [day]: Date.now() } });
       return;
     }
     const set = new Set(p.completedDays);
     if (done) set.add(day);
     else set.delete(day);
-    await db.plans.update(planId, { completedDays: [...set].sort((a, b) => a - b) });
+    await db.plans.update(planId, {
+      completedDays: [...set].sort((a, b) => a - b),
+      completedAt: stampCompletion(p.completedAt, p.completedDays, day, done),
+    });
   });
 }
 
@@ -301,6 +321,7 @@ export async function setChapterDone(
       startedAt: base.startedAt,
       completedDays: [...days].sort((a, b) => a - b),
       chapterProgress,
+      completedAt: stampCompletion(base.completedAt, base.completedDays, day, days.has(day)),
     };
     if (existing) await db.plans.update(planId, next);
     else await db.plans.add(next);

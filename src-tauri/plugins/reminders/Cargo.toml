@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-reminders"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+build = "build.rs"
+links = "tauri-plugin-reminders"
+description = "Android glue for Bread of Life's reading reminders: exact-alarm permissions and the notification that launched the app"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tauri_plugin_reminders"
+path = "src/lib.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Daily-reading reminders are one-off notifications at a clock time. Without the
+         right to set exact alarms, Android 12+ may deliver them well after that time.
+         USE_EXACT_ALARM (Android 13+) is granted at install; Google Play restricts it to
+         alarm and calendar apps, but Bread of Life is sideloaded (Obtainium).
+         SCHEDULE_EXACT_ALARM covers Android 12 (API 31-32), where it is granted by
+         default. Both are ignored on older versions, which need neither. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+</manifest>
