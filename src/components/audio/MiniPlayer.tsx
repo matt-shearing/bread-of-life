@@ -1,7 +1,6 @@
-import { useNavigate } from "react-router-dom";
 import { Headphones, Loader2, Pause, Play, SkipBack, SkipForward, X } from "lucide-react";
 import { useAudio, toggle, next, prev, stop, seekTo } from "@/audio/controller";
-import { useUI } from "@/store/ui";
+import { useOpenNowPlaying } from "./NowPlaying";
 
 function fmt(s: number): string {
   if (!Number.isFinite(s) || s < 0) s = 0;
@@ -17,8 +16,7 @@ function fmt(s: number): string {
  */
 export function MiniPlayer() {
   const { queue, index, playing, currentTime, duration, loading } = useAudio();
-  const goTo = useUI((s) => s.goTo);
-  const navigate = useNavigate();
+  const openNowPlaying = useOpenNowPlaying();
 
   const track = queue[index];
   if (!track) return null;
@@ -41,11 +39,8 @@ export function MiniPlayer() {
       <div className="flex items-center gap-1.5 px-3 py-2">
         <button
           className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-          onClick={() => {
-            goTo(track.ho, track.chapter);
-            navigate("/bible");
-          }}
-          aria-label={`Open ${track.title}`}
+          onClick={openNowPlaying}
+          aria-label={`Now playing: ${track.title}. Open the player`}
         >
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary-600">
             {loading ? (

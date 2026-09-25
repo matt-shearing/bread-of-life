@@ -52,6 +52,10 @@ export interface AudioEngine {
   queueNext(): void;
   queuePrev(): void;
   seekTo(seconds: number): void;
+  /** True if `setRate` works on this engine. Optional so engines without it need no stub. */
+  readonly supportsRate?: boolean;
+  /** Playback speed (1 = normal). Keeps applying to later tracks until changed. */
+  setRate?(rate: number): void;
   currentTime(): number;
   duration(): number;
   release(): void;
@@ -62,8 +66,10 @@ export interface AudioEngine {
 export class Html5Engine implements AudioEngine {
   readonly usesWebMediaSession = true;
   readonly supportsNativeQueue = false;
+  readonly supportsRate = true;
   handlers: EngineHandlers = {};
   private el: HTMLAudioElement | null = null;
+  private rate = 1;
 
   // Html5 plays one track at a time; the controller drives the queue, so these are no-ops.
   loadQueue() {}
@@ -74,6 +80,8 @@ export class Html5Engine implements AudioEngine {
     if (this.el) return this.el;
     const el = new Audio();
     el.preload = "metadata";
+    el.defaultPlaybackRate = this.rate;
+    el.playbackRate = this.rate;
     el.addEventListener("play", () => this.handlers.onPlay?.());
     el.addEventListener("pause", () => this.handlers.onPause?.());
     el.addEventListener("timeupdate", () => this.handlers.onTime?.(el.currentTime));
@@ -100,6 +108,13 @@ export class Html5Engine implements AudioEngine {
   }
   pause() {
     this.audio().pause();
+  }
+  setRate(rate: number) {
+    this.rate = rate;
+    if (!this.el) return;
+    // A new `src` resets playbackRate to defaultPlaybackRate, so set both.
+    this.el.defaultPlaybackRate = rate;
+    this.el.playbackRate = rate;
   }
   seekTo(seconds: number) {
     const a = this.audio();
@@ -130,6 +145,7 @@ export class Html5Engine implements AudioEngine {
 class NativeEngine implements AudioEngine {
   readonly usesWebMediaSession = false;
   readonly supportsNativeQueue = true;
+  readonly supportsRate = true;
   handlers: EngineHandlers = {};
   private api: typeof import("tauri-plugin-native-audio-api") | null = null;
   private invoke: typeof import("@tauri-apps/api/core").invoke | null = null;
@@ -270,6 +286,10 @@ class NativeEngine implements AudioEngine {
   seekTo(seconds: number) {
     this.cur = seconds;
     this.run((api) => api.seekTo(seconds));
+  }
+  setRate(rate: number) {
+    // ExoPlayer's speed belongs to the player, not the item, so it carries across the queue.
+    this.run((api) => api.setRate(rate));
   }
   currentTime() {
     return this.cur;

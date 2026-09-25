@@ -24,6 +24,9 @@ export interface Track {
    *  different answers from the Listen button and from the follow-the-audio cursor. */
   planId?: string;
   planDay?: number;
+  /** Plan day only: which of the day's readings (passages) this chapter belongs to —
+   *  several chapters can make one reading ("Genesis 1–2"). Set by buildReadingQueue. */
+  readingGroup?: number;
 }
 
 /** Fires when a track finishes NATURALLY (not on manual skip) — used to mark a plan
@@ -38,9 +41,11 @@ export interface AudioState {
   currentTime: number;
   duration: number;
   loading: boolean;
+  /** Playback speed (1 = normal). Only changeable when `canSetRate` is true. */
+  rate: number;
 }
 
-const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0, duration: 0, loading: false };
+const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0, duration: 0, loading: false, rate: 1 };
 
 let state: AudioState = EMPTY;
 const listeners = new Set<() => void>();
@@ -144,7 +149,7 @@ function syncPositionState() {
   const dur = engine.duration();
   if (!ms || !Number.isFinite(dur) || dur <= 0) return;
   try {
-    ms.setPositionState({ duration: dur, position: Math.min(engine.currentTime(), dur), playbackRate: 1 });
+    ms.setPositionState({ duration: dur, position: Math.min(engine.currentTime(), dur), playbackRate: state.rate });
   } catch {
     /* Safari/older WebViews may throw on bad values — non-fatal */
   }
@@ -240,7 +245,30 @@ export function prev() {
   }
 }
 export function jumpTo(index: number) {
-  if (index >= 0 && index < state.queue.length) loadIndex(index, true);
+  if (index < 0 || index >= state.queue.length) return;
+  if (engine.supportsNativeQueue) {
+    // The native player holds the whole playlist; `load` would replace it with one
+    // track. Re-hand it the same playlist starting at `index` instead, and only mark
+    // chapters read from here on (skipping ahead is not listening).
+    markedUpTo = index;
+    set({ index, currentTime: 0, duration: 0, loading: true });
+    setMediaMetadata(state.queue[index]);
+    engine.loadQueue(
+      state.queue.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })),
+      index,
+    );
+    return;
+  }
+  loadIndex(index, true);
+}
+
+/** Whether the active engine can change playback speed (the Linux desktop one can't). */
+export const canSetRate = !!engine.supportsRate;
+
+export function setRate(rate: number) {
+  if (!canSetRate || !Number.isFinite(rate) || rate <= 0) return;
+  engine.setRate?.(rate);
+  set({ rate });
 }
 export function seekTo(sec: number) {
   engine.seekTo(sec);
@@ -257,7 +285,7 @@ export function stop() {
   onTrackComplete = null;
   advancing = false;
   markedUpTo = 0;
-  set({ ...EMPTY });
+  set({ ...EMPTY, rate: state.rate }); // the chosen speed outlives the queue
 }
 
 /* ---------------------------------- react ------------------------------------ */
