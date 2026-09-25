@@ -239,6 +239,7 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
         </div>
 
         <div
+          data-np-scroll
           className={cn(
             "relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+1rem)]",
             hasList && "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:overflow-hidden md:pb-0",
@@ -342,7 +343,7 @@ function Cover({
 } & HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className="relative aspect-square w-full max-w-[min(18rem,42dvh)] touch-none select-none md:max-w-[18rem] md:touch-auto"
+      className="relative aspect-square w-full max-w-[clamp(7.5rem,calc(100dvh-26rem),18rem)] touch-none select-none md:max-w-[18rem] md:touch-auto"
       {...rest}
     >
       <div
@@ -835,12 +836,20 @@ function UpNextList({ queue, index }: { queue: Track[]; index: number }) {
 
 /* ================================== hooks =================================== */
 
-/** Keep the playing row in view as playback moves through the list. */
+/**
+ * Keep the playing row in view as playback moves through the list. On desktop the list
+ * scrolls in its own column. On a phone the list shares one scroller with the player,
+ * so only follow along once the listener has scrolled down to the list — otherwise a
+ * track change would push the artwork and controls up under the header.
+ */
 function useScrollCurrentIntoView(key: unknown) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current?.querySelector<HTMLElement>("[data-current]");
-    el?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    if (!el) return;
+    const scroller = el.closest<HTMLElement>("[data-np-scroll]");
+    if (isPhoneWidth() && (!scroller || scroller.scrollTop === 0)) return;
+    el.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [key]);
   return ref;
 }
