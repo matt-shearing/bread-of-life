@@ -1,0 +1,7 @@
+[default]
+description = "Default permissions for the plugin"
+permissions = [
+  "allow-synthesize",
+  "allow-register-listener",
+  "allow-remove-listener",
+]

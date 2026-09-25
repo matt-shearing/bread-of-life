@@ -21,6 +21,8 @@ export interface EngineTrack {
   title: string;
   subtitle: string;
   artworkUrl?: string;
+  /** Speech-engine tracks only: the words to say (see speechEngine.ts). */
+  speech?: import("@/lib/devotionalSpeech").SpeechSegment[];
 }
 
 export interface EngineHandlers {

@@ -238,6 +238,38 @@ readings exist, how long each is, and the checksum to verify a download. `items`
 - `textSha256` identifies the spoken script; the app can ignore it.
 - A missing item means the app should fall back to the phone's voice for that reading.
 
+## In the app
+
+The Devotional page (Morning and Evening each) and the dashboard's devotional card have a
+**Listen** button. It plays the reading through the one audio controller as a track titled
+"Morning — 25 September · Spurgeon", so it gets the mini-player, Now Playing, the lock-screen
+controls and, later, Android Auto. When the reading plays to the end it is marked complete,
+exactly as the "Mark complete" button does.
+
+- **The recording is the main path.** `src/audio/devotionalAudio.ts` holds the base URL in
+  one constant, `DEVOTIONAL_AUDIO_BASE`
+  (`https://sync.breadoflife.dev/audio/spurgeon/v1/bm_george`). Set
+  `VITE_DEVOTIONAL_AUDIO_BASE` to point a dev build at another server. The app fetches
+  `manifest.json`, keeps a compact copy (id, path, length) in `localStorage`, re-checks it
+  every six hours, and uses the stored copy when offline. The button shows the recording's
+  length from the manifest.
+- **The device's own voice is the fallback**, used when the reading is not in the manifest,
+  the manifest cannot be reached, or the device is offline. It says the same words as the
+  recording: `src/lib/devotionalSpeech.ts` is a line-for-line port of this script's
+  normaliser, and `pnpm test:devotional-speech` compares the two (set
+  `BOL_DEVAUDIO_PYTHON` to the venv's python to compare all 732 readings live). The
+  pronunciation lexicon is IPA for Kokoro and is not applied to the device voice.
+  - **Android:** the WebView has no usable `speechSynthesis`, so the `device-tts` plugin
+    (`src-tauri/plugins/device-tts`) renders the reading with `TextToSpeech.synthesizeToFile`,
+    one segment at a time with the same pauses, into one WAV in the app cache (the four
+    most recent are kept), preferring an installed British English voice. The app plays it
+    as a `file://` track through the native queue, as it plays a downloaded Missler chapter.
+    The button shows "Preparing voice… n%" while it renders.
+  - **Desktop and browser:** `window.speechSynthesis`, segment by segment
+    (`src/audio/speechEngine.ts`). Its length and position are estimates. Where there is no
+    voice (WebKitGTK often has none) and no recording, the button is disabled with the
+    reason.
+
 ## Known gaps
 
 - The lexicon covers the names found by scanning the corpus, but espeak-ng will still get some

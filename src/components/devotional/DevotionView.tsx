@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { setDevotionDone } from "@/db/repos";
 import type { Devotional, DevotionDay, DevotionReading } from "@/data/devotional";
 import { Button } from "@/components/ui";
+import { ListenButton } from "./ListenButton";
 import { cn } from "@/lib/cn";
 
 function labelIcon(label: string) {
@@ -45,21 +46,26 @@ export function DevotionView({
         </div>
       )}
 
-      {reading.ref && (
-        <button
-          onClick={() => onOpenVerse(reading)}
-          disabled={!reading.ho}
-          className={cn(
-            "mb-3 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium",
-            reading.ho
-              ? "bg-primary/10 text-primary-700 hover:bg-primary/20 dark:text-primary-300"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          <BookOpen style={{ width: 14, height: 14 }} />
-          {reading.ref}
-        </button>
-      )}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        {reading.ref ? (
+          <button
+            onClick={() => onOpenVerse(reading)}
+            disabled={!reading.ho}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium",
+              reading.ho
+                ? "bg-primary/10 text-primary-700 hover:bg-primary/20 dark:text-primary-300"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            <BookOpen style={{ width: 14, height: 14 }} />
+            {reading.ref}
+          </button>
+        ) : (
+          <span />
+        )}
+        <ListenButton devotionalId={dev.id} dayKey={dayKey} index={index} reading={reading} />
+      </div>
 
       <div className="space-y-3 font-serif text-[15px] leading-relaxed text-foreground/90">
         {reading.text.split(/\n\n+/).map((p, i) => (

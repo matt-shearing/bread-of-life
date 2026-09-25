@@ -325,6 +325,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-all-files",
+ "tauri-plugin-device-tts",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-http",
@@ -4157,6 +4158,14 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-all-files"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-device-tts"
 version = "0.1.0"
 dependencies = [
  "tauri",

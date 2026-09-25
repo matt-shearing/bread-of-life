@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
-import { selectEngine, type AudioEngine } from "./engine";
+import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack } from "./engine";
+import { WebSpeechEngine } from "./speechEngine";
+import type { SpeechSegment } from "@/lib/devotionalSpeech";
 
 /**
  * A single, app-wide audio player for scripture narration. It lives OUTSIDE the React
@@ -27,6 +29,24 @@ export interface Track {
   /** Plan day only: which of the day's readings (passages) this chapter belongs to —
    *  several chapters can make one reading ("Genesis 1–2"). Set by buildReadingQueue. */
   readingGroup?: number;
+  /** A spoken devotional (Spurgeon's Morning and Evening), not a Bible chapter. Such a
+   *  track has `ho: ""` and `chapter: 0`, so nothing mistakes it for chapter narration. */
+  devotional?: DevotionalTrackInfo;
+  /** Read aloud by the browser's own speech engine instead of playing `src`. Only set
+   *  where the platform has `speechSynthesis` (desktop browsers); see speechEngine.ts. */
+  speech?: SpeechSegment[];
+}
+
+export interface DevotionalTrackInfo {
+  devotionalId: string;
+  /** "MM-DD" */
+  day: string;
+  slot: "morning" | "evening";
+  /** The reading's index in its day (0 = Morning, 1 = Evening); the completion key. */
+  index: number;
+  ref: string;
+  /** Whether this is the recording or the device's own voice. */
+  voice: "recording" | "device";
 }
 
 /** Fires when a track finishes NATURALLY (not on manual skip) — used to mark a plan
@@ -52,7 +72,35 @@ const listeners = new Set<() => void>();
 
 // The swappable playback engine (HTML5 today; native Media3 later). The queue,
 // auto-advance, mark-read and Media Session all live here in the controller.
-const engine: AudioEngine = selectEngine();
+const mainEngine: AudioEngine = selectEngine();
+// A second engine, created on first use, for tracks read aloud by the browser's
+// speechSynthesis (a devotional with no recording on a desktop browser). The controller
+// switches `engine` per queue; everything else talks to whichever is active.
+let speechEngine: AudioEngine | null = null;
+let engine: AudioEngine = mainEngine;
+
+function engineFor(t: Track | undefined): AudioEngine {
+  if (t?.speech) {
+    if (!speechEngine) {
+      speechEngine = new WebSpeechEngine();
+      speechEngine.handlers = handlersFor(speechEngine);
+      if (state.rate !== 1) speechEngine.setRate?.(state.rate);
+    }
+    return speechEngine;
+  }
+  return mainEngine;
+}
+
+/** Make `e` the active engine, silencing the other one. */
+function activate(e: AudioEngine) {
+  if (e === engine) return;
+  engine.release();
+  engine = e;
+}
+
+function toEngineTrack(t: Track): EngineTrack {
+  return { src: t.src, title: t.title, subtitle: t.subtitle, speech: t.speech };
+}
 
 // HTML5: single-advance guard (a native engine drives its own advancement).
 let advancing = false;
@@ -90,7 +138,26 @@ function advanceQueue() {
   setTimeout(() => next(), 60); // out of the state-callback stack; loadIndex resets the guard
 }
 
-engine.handlers = {
+/** The controller's reaction to engine events. Events from an engine that is no longer
+ *  active (a late "paused" from the one just released) are ignored. */
+function handlersFor(e: AudioEngine): EngineHandlers {
+  const h = sharedHandlers;
+  const live = <A extends unknown[]>(fn: ((...a: A) => void) | undefined) =>
+    (...a: A) => {
+      if (e === engine) fn?.(...a);
+    };
+  return {
+    onPlay: live(h.onPlay),
+    onPause: live(h.onPause),
+    onTime: live(h.onTime),
+    onDuration: live(h.onDuration),
+    onLoading: live(h.onLoading),
+    onIndexChange: live(h.onIndexChange),
+    onEnded: live(h.onEnded),
+  };
+}
+
+const sharedHandlers: EngineHandlers = {
   onPlay: () => {
     set({ playing: true });
     setMediaPlaybackState("playing");
@@ -123,6 +190,7 @@ engine.handlers = {
     }
   },
 };
+mainEngine.handlers = handlersFor(mainEngine);
 
 function emit() {
   listeners.forEach((l) => l());
@@ -181,7 +249,8 @@ function loadIndex(index: number, autoplay: boolean) {
   const t = state.queue[index];
   if (!t) return;
   advancing = false; // new track — allow the next advance
-  engine.load({ src: t.src, title: t.title, subtitle: t.subtitle });
+  activate(engineFor(t));
+  engine.load(toEngineTrack(t));
   set({ index, currentTime: 0, duration: 0, loading: true });
   setMediaMetadata(t);
   if (autoplay) engine.play();
@@ -196,11 +265,12 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
   onTrackComplete = opts?.onComplete ?? null;
   const start = Math.max(0, Math.min(opts?.startIndex ?? 0, tracks.length - 1));
   set({ queue: tracks });
+  activate(engineFor(tracks[start]));
   if (engine.supportsNativeQueue) {
     markedUpTo = start; // don't mark anything before where we start
     set({ index: start, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(tracks[start]);
-    engine.loadQueue(tracks.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })), start);
+    engine.loadQueue(tracks.map(toEngineTrack), start);
   } else {
     loadIndex(start, true);
   }
@@ -253,21 +323,19 @@ export function jumpTo(index: number) {
     markedUpTo = index;
     set({ index, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(state.queue[index]);
-    engine.loadQueue(
-      state.queue.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })),
-      index,
-    );
+    engine.loadQueue(state.queue.map(toEngineTrack), index);
     return;
   }
   loadIndex(index, true);
 }
 
 /** Whether the active engine can change playback speed (the Linux desktop one can't). */
-export const canSetRate = !!engine.supportsRate;
+export const canSetRate = !!mainEngine.supportsRate;
 
 export function setRate(rate: number) {
   if (!canSetRate || !Number.isFinite(rate) || rate <= 0) return;
-  engine.setRate?.(rate);
+  mainEngine.setRate?.(rate);
+  speechEngine?.setRate?.(rate);
   set({ rate });
 }
 export function seekTo(sec: number) {

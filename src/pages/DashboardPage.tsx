@@ -23,6 +23,7 @@ import { readingDayKeys, readingStreak } from "@/lib/streak";
 import { useUI } from "@/store/ui";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
+import { ListenButton } from "@/components/devotional/ListenButton";
 
 function greeting() {
   const h = new Date().getHours();
@@ -405,10 +406,11 @@ function DevotionTile() {
         </div>
         <div className="font-serif text-base font-bold">{reading.ref}</div>
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{snippet}</p>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap items-start gap-2">
           <Button size="sm" onClick={() => setOpen(true)}>
             <BookOpen style={{ width: 15, height: 15 }} /> Read now
           </Button>
+          <ListenButton devotionalId={dev.id} dayKey={key} index={index} reading={reading} />
           <Button size="sm" variant="ghost" onClick={() => navigate("/devotional")}>
             Browse all
           </Button>

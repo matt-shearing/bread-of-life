@@ -1,7 +1,7 @@
 {
   "identifier": "android",
-  "description": "Android-only permissions: the All files access (MANAGE_EXTERNAL_STORAGE) bridge and the reading-reminder glue.",
+  "description": "Android-only permissions: the All files access (MANAGE_EXTERNAL_STORAGE) bridge, the reading-reminder glue, and the phone's text-to-speech voice for spoken devotionals.",
   "platforms": ["android"],
   "windows": ["main"],
-  "permissions": ["all-files:default", "reminders:default"]
+  "permissions": ["all-files:default", "reminders:default", "device-tts:default"]
 }
