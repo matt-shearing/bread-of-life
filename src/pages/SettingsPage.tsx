@@ -9,6 +9,7 @@ import { requestFeature, reportBug } from "@/lib/feedback";
 import { SyncSettings } from "@/components/settings/SyncSettings";
 import { E2ESettings } from "@/components/settings/E2ESettings";
 import { MisslerSettings } from "@/components/settings/MisslerSettings";
+import { AudioDebugLog } from "@/components/settings/AudioDebugLog";
 import { version as APP_VERSION } from "../../package.json";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
@@ -373,6 +374,7 @@ export function SettingsPage() {
               <p className="text-xs text-muted-foreground">
                 Opens a pre-filled issue on GitHub (needs a free GitHub account).
               </p>
+              <AudioDebugLog />
             </CardContent>
           </Card>
 

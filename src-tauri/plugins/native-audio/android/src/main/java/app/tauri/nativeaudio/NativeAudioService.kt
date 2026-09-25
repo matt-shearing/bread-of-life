@@ -14,6 +14,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSessionService
 import com.google.common.collect.ImmutableList
 
@@ -22,7 +24,9 @@ private const val CHANNEL_ID_SUFFIX = ".native_audio"
 private const val NOTIFICATION_ICON_NAME = "ic_notification"
 
 /**
- * The playback service. Media3 owns the media notification AND the foreground state: whenever
+ * The playback service, and the media library Android Auto browses (see CarLibrary): as a
+ * `MediaLibraryService` it answers both Media3's `MediaLibraryService` and the platform's
+ * `MediaBrowserService` bind actions, which is how the car finds the app. Media3 owns the media notification AND the foreground state: whenever
  * the session's player starts playing — from the app, the notification, the lock screen, or an
  * earphone button — `MediaSessionService` promotes itself to the foreground, and it drops back
  * (keeping the notification) on pause.
@@ -36,7 +40,7 @@ private const val NOTIFICATION_ICON_NAME = "ic_notification"
  * Android's background-service limits cannot stop it during a pause.
  */
 @OptIn(UnstableApi::class)
-class NativeAudioService : MediaSessionService() {
+class NativeAudioService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
@@ -61,7 +65,7 @@ class NativeAudioService : MediaSessionService() {
         NativeAudioRuntime.onServiceCreated(this)
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
         return NativeAudioRuntime.mediaSession()
     }
 

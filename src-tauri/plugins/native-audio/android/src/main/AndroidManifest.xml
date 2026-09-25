@@ -6,14 +6,30 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application>
+        <!-- Android Auto: this app is a media app. Android Auto lists it in the car's launcher
+             because of this meta-data plus the MediaBrowserService action below. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <!-- Exported so Android Auto, the system media controls and Bluetooth can bind to it.
+             Media3's MediaLibraryService answers both bind actions. -->
         <service
             android:name="app.tauri.nativeaudio.NativeAudioService"
             android:enabled="true"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- Artwork tiles for the car (generated book/chapter images). Read-only, nothing private. -->
+        <provider
+            android:name="app.tauri.nativeaudio.CarArtworkProvider"
+            android:authorities="${applicationId}.nativeaudio.artwork"
+            android:exported="true" />
     </application>
 </manifest>

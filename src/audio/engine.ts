@@ -21,6 +21,25 @@ export interface EngineTrack {
   title: string;
   subtitle: string;
   artworkUrl?: string;
+  /** Native only: names the item for Android Auto's Recent / Continue listening and the
+   *  car's queue ("ch/JHN/3", or a plan track id; see nativeMediaId in queue.ts). */
+  mediaId?: string;
+  /** Native only: which of a plan day's readings this chapter belongs to ("Next reading"). */
+  group?: number;
+}
+
+/** A queue item as the native player reports it (see the plugin's `get_queue`). */
+export interface NativeQueueItem {
+  mediaId: string;
+  src: string;
+  title: string;
+  subtitle: string;
+  ho?: string;
+  chapter?: number;
+  planId?: string;
+  planDay?: number;
+  planReadingIndex?: number;
+  readingGroup?: number;
 }
 
 export interface EngineHandlers {
@@ -32,6 +51,13 @@ export interface EngineHandlers {
   onLoading?: (loading: boolean) => void;
   /** Native queue only: the native player advanced to a new playlist index. */
   onIndexChange?: (index: number) => void;
+  /** Native only: something outside the app (Android Auto, a voice request, the system's
+   *  resume card) loaded a new queue, or the app started while one was already playing. */
+  onExternalQueue?: (items: NativeQueueItem[], index: number) => void;
+  /** Native only: the speed changed outside the app (the car's speed button). */
+  onRate?: (rate: number) => void;
+  /** Native only: plan chapters finished in the car are waiting to be recorded. */
+  onPendingCompletions?: (count: number) => void;
 }
 
 export interface AudioEngine {
@@ -166,6 +192,10 @@ class NativeEngine implements AudioEngine {
    */
   private queueGen = 0;
   private queueSwitching = false;
+  /** Native's queue generation last seen, and whether we are fetching a queue to adopt. */
+  private seenNativeGen = -1;
+  private adopting = false;
+  private rate = 1;
 
   constructor() {
     this.ready = (async () => {
@@ -180,6 +210,9 @@ class NativeEngine implements AudioEngine {
     })().catch(() => {
       /* plugin unavailable — leave api null; calls no-op */
     });
+    // The app may start while the car (or an earlier app session) is already playing:
+    // take native's state once, so a queue started without us is adopted.
+    this.resync();
     // The player keeps going while the WebView is frozen in the background, and it can be
     // paused or resumed from earphones, the lock screen or the notification without JS
     // hearing about it in time. When the app comes back, take native's word for everything.
@@ -210,6 +243,29 @@ class NativeEngine implements AudioEngine {
       if (s.capturedAtMs < this.lastCapturedAt) return;
       this.lastCapturedAt = s.capturedAtMs;
     }
+    if (typeof s.pendingCompletions === "number" && s.pendingCompletions > 0) {
+      this.handlers.onPendingCompletions?.(s.pendingCompletions);
+    }
+    if (typeof s.rate === "number" && s.rate > 0 && Math.abs(s.rate - this.rate) > 0.001) {
+      this.rate = s.rate;
+      this.handlers.onRate?.(s.rate);
+    }
+    // A queue the app did not load: the car started one, or the app has just started and
+    // native was already playing. Its indexes mean nothing against our queue, so adopt it
+    // before anything is taken as "the player advanced" (which marks chapters read).
+    if (typeof s.queueGeneration === "number" && s.queueGeneration !== this.seenNativeGen) {
+      const firstLook = this.seenNativeGen < 0;
+      this.seenNativeGen = s.queueGeneration;
+      if (s.queueOrigin === "car" || (firstLook && this.queueGen === 0 && s.queueGeneration > 0)) {
+        this.adopting = true;
+        void this.adoptNativeQueue(s.queueGeneration);
+      }
+    }
+    if (this.adopting) {
+      // Keep time and play state live; the index is applied with the adopted queue.
+      if (typeof s.index === "number") this.idx = s.index;
+      this.ended = s.status === "ended";
+    }
     this.cur = s.currentTime;
     if (s.duration) this.dur = s.duration;
     this.handlers.onTime?.(s.currentTime);
@@ -221,6 +277,7 @@ class NativeEngine implements AudioEngine {
     }
     // The native player advanced to a new playlist item on its own (background-safe).
     const index = s.index;
+    if (this.adopting) return;
     if (typeof index === "number" && index !== this.idx) {
       this.idx = index;
       this.handlers.onIndexChange?.(index);
@@ -230,6 +287,23 @@ class NativeEngine implements AudioEngine {
       this.handlers.onEnded?.();
     } else if (s.status !== "ended") {
       this.ended = false;
+    }
+  }
+
+  /** Fetch the native queue and hand it to the controller as its own. */
+  private async adoptNativeQueue(gen: number) {
+    await this.ready;
+    try {
+      const q = await this.invoke?.<{ items: NativeQueueItem[]; index: number; queueGeneration: number }>(
+        "plugin:native-audio|get_queue",
+      );
+      if (!q || gen !== this.seenNativeGen || this.queueSwitching) return; // superseded
+      this.idx = q.index;
+      if (q.items.length) this.handlers.onExternalQueue?.(q.items, q.index);
+    } catch {
+      /* keep what we had */
+    } finally {
+      if (gen === this.seenNativeGen) this.adopting = false;
     }
   }
 
@@ -254,10 +328,11 @@ class NativeEngine implements AudioEngine {
         const snapshot = await this.invoke<NativeSnapshot>("plugin:native-audio|set_queue", {
           items: tracks.map((t) => {
             const { src } = splitOffset(t.src);
-            return { src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl };
+            return { src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl, mediaId: t.mediaId, group: t.group };
           }),
           startIndex,
         });
+        if (snapshot && typeof snapshot.queueGeneration === "number") this.seenNativeGen = snapshot.queueGeneration;
         settle(snapshot);
         if (gen !== this.queueGen) return; // superseded: that jump plays its own queue
         await this.api?.play();
@@ -313,6 +388,7 @@ class NativeEngine implements AudioEngine {
   }
   setRate(rate: number) {
     // ExoPlayer's speed belongs to the player, not the item, so it carries across the queue.
+    this.rate = rate;
     this.run((api) => api.setRate(rate));
   }
   currentTime() {
@@ -332,6 +408,11 @@ type NativeSnapshot = import("tauri-plugin-native-audio-api").NativeAudioState &
   index?: number;
   /** When native took this snapshot (monotonic ms). Orders events against `getState`. */
   capturedAtMs?: number;
+  /** Bumped by every queue change; with `queueOrigin`, tells the app of a car-started queue. */
+  queueGeneration?: number;
+  queueOrigin?: "app" | "car";
+  /** Plan chapters finished in the car, waiting for the app (take_car_completions). */
+  pendingCompletions?: number;
 };
 
 /** What `desktop_audio_state` reports (see `src-tauri/src/desktop_audio.rs`). */

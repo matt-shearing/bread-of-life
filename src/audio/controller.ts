@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { selectEngine, type AudioEngine } from "./engine";
+import { selectEngine, type AudioEngine, type EngineTrack, type NativeQueueItem } from "./engine";
 
 /**
  * A single, app-wide audio player for scripture narration. It lives OUTSIDE the React
@@ -114,6 +114,20 @@ engine.handlers = {
     const t = state.queue[index];
     if (t) setMediaMetadata(t);
   },
+  // Android Auto (or the system's resume card) loaded a queue the app did not: take it as
+  // ours so the mini-player and Now Playing show it. Its plan chapters are recorded by
+  // native (they reach the app through take_car_completions), so nothing marks here.
+  onExternalQueue: (items, index) => {
+    const queue = items.map(trackFromNative);
+    onTrackComplete = null;
+    advancing = false;
+    markedUpTo = index;
+    set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), currentTime: 0, duration: 0 });
+    const t = queue[index];
+    if (t) setMediaMetadata(t);
+  },
+  onRate: (rate) => set({ rate }),
+  onPendingCompletions: (count) => onNativeCompletions?.(count),
   onEnded: () => {
     set({ playing: false });
     if (engine.supportsNativeQueue) {
@@ -124,12 +138,52 @@ engine.handlers = {
   },
 };
 
+/** Plan chapters finished in Android Auto are waiting to be recorded (see src/audio/car.ts). */
+let onNativeCompletions: ((count: number) => void) | null = null;
+export function setNativeCompletionsHandler(fn: ((count: number) => void) | null) {
+  onNativeCompletions = fn;
+}
+
 function emit() {
   listeners.forEach((l) => l());
 }
 function set(patch: Partial<AudioState>) {
   state = { ...state, ...patch };
   emit();
+}
+
+function trackFromNative(item: NativeQueueItem): Track {
+  return {
+    ho: item.ho ?? "",
+    chapter: item.chapter ?? 0,
+    src: item.src,
+    title: item.title,
+    subtitle: item.subtitle,
+    planId: item.planId,
+    planDay: item.planDay,
+    planReadingIndex: item.planReadingIndex,
+    readingGroup: item.readingGroup,
+  };
+}
+
+/**
+ * The name the native player (and Android Auto's Recent and Continue listening) knows a
+ * track by: a plan day's chapter as "plan/<plan>/<day>/<reading>/<book>/<chapter>", any
+ * other Bible chapter as "ch/<book>/<chapter>". Mirrors MediaIds in CarData.kt. Other audio
+ * (Missler, devotionals) has none.
+ */
+export function nativeMediaId(t: Track): string | undefined {
+  const m = /\/([0-9A-Z]{3})\/(\d+)\/audio\/[A-Za-z0-9_-]+\.mp3$/.exec(t.src.split(/[?#]/)[0]);
+  const isChapter = !!m && m[1] === t.ho && Number(m[2]) === t.chapter;
+  if (!isChapter) return undefined;
+  if (t.planId != null && t.planDay != null && t.planReadingIndex != null) {
+    return `plan/${encodeURIComponent(t.planId)}/${t.planDay}/${t.planReadingIndex}/${t.ho}/${t.chapter}`;
+  }
+  return `ch/${t.ho}/${t.chapter}`;
+}
+
+function toEngineTrack(t: Track): EngineTrack {
+  return { src: t.src, title: t.title, subtitle: t.subtitle, mediaId: nativeMediaId(t), group: t.readingGroup };
 }
 
 /* -------------------------------- media session ------------------------------- */
@@ -200,7 +254,7 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
     markedUpTo = start; // don't mark anything before where we start
     set({ index: start, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(tracks[start]);
-    engine.loadQueue(tracks.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })), start);
+    engine.loadQueue(tracks.map(toEngineTrack), start);
   } else {
     loadIndex(start, true);
   }
@@ -253,10 +307,7 @@ export function jumpTo(index: number) {
     markedUpTo = index;
     set({ index, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(state.queue[index]);
-    engine.loadQueue(
-      state.queue.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })),
-      index,
-    );
+    engine.loadQueue(state.queue.map(toEngineTrack), index);
     return;
   }
   loadIndex(index, true);

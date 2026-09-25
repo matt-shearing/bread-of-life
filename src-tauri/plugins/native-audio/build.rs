@@ -14,6 +14,10 @@ const COMMANDS: &[&str] = &[
     "get_progress_checkpoint",
     "clear_progress_checkpoint",
     "get_debug_log",
+    "set_car_snapshot",
+    "take_car_completions",
+    "ack_car_completions",
+    "get_queue",
     "dispose",
 ];
 

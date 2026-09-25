@@ -19,6 +19,10 @@ Default permissions for the plugin
 - `allow-get-progress-checkpoint`
 - `allow-clear-progress-checkpoint`
 - `allow-get-debug-log`
+- `allow-set-car-snapshot`
+- `allow-take-car-completions`
+- `allow-ack-car-completions`
+- `allow-get-queue`
 - `allow-dispose`
 
 ## Permission Table
@@ -29,6 +33,32 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`native-audio:allow-ack-car-completions`
+
+</td>
+<td>
+
+Enables the ack_car_completions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-ack-car-completions`
+
+</td>
+<td>
+
+Denies the ack_car_completions command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -130,6 +160,32 @@ Enables the get_progress_checkpoint command without any pre-configured scope.
 <td>
 
 Denies the get_progress_checkpoint command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-get-queue`
+
+</td>
+<td>
+
+Enables the get_queue command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-get-queue`
+
+</td>
+<td>
+
+Denies the get_queue command without any pre-configured scope.
 
 </td>
 </tr>
@@ -371,6 +427,32 @@ Denies the seek_to command without any pre-configured scope.
 <tr>
 <td>
 
+`native-audio:allow-set-car-snapshot`
+
+</td>
+<td>
+
+Enables the set_car_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-set-car-snapshot`
+
+</td>
+<td>
+
+Denies the set_car_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `native-audio:allow-set-queue`
 
 </td>
@@ -442,6 +524,32 @@ Enables the set_source command without any pre-configured scope.
 <td>
 
 Denies the set_source command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-take-car-completions`
+
+</td>
+<td>
+
+Enables the take_car_completions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-take-car-completions`
+
+</td>
+<td>
+
+Denies the take_car_completions command without any pre-configured scope.
 
 </td>
 </tr>

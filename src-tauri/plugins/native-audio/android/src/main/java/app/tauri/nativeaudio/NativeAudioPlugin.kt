@@ -15,6 +15,7 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.app.ActivityManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -37,9 +38,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CacheBitmapLoader
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import androidx.media3.session.SessionResult
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -69,6 +70,7 @@ private const val PROGRESS_KEY_STATUS = "status"
 private const val DEBUG_TAG = "BoLAudio"
 private const val DEBUG_LOG_CAPACITY = 300
 private const val ARTWORK_SIZE_PX = 256
+private const val LAST_PLAYED_THROTTLE_MS = 5_000L
 
 data class NativeAudioState(
     val status: String,
@@ -81,6 +83,12 @@ data class NativeAudioState(
     val error: String? = null,
     /** Monotonic time the snapshot was taken, so JS can drop events older than a getState. */
     val capturedAtMs: Long = SystemClock.elapsedRealtime(),
+    /** Bumped whenever the queue is replaced, by the app or from outside it (the car). */
+    val queueGeneration: Long = 0,
+    /** "app" when the app loaded the queue, "car" when Android Auto (or any other controller) did. */
+    val queueOrigin: String = "app",
+    /** Plan chapters finished from the car that the app has not collected yet. */
+    val pendingCompletions: Int = 0,
 )
 
 data class NativeAudioProgressCheckpoint(
@@ -116,6 +124,21 @@ class QueueItemArg {
     var title: String? = null
     var artist: String? = null
     var artworkUrl: String? = null
+    /** "ch/JHN/3" or "plan/<plan>/<day>/<reading>/<book>/<chapter>" (see MediaIds). Optional:
+     *  a Bible narration URL is recognised without it. */
+    var mediaId: String? = null
+    /** Plan day only: which of the day's readings this chapter belongs to. */
+    var group: Int? = null
+}
+
+@InvokeArg
+class CarSnapshotArgs {
+    var json: String? = null
+}
+
+@InvokeArg
+class AckCompletionsArgs {
+    var upTo: Long? = null
 }
 
 @InvokeArg
@@ -170,7 +193,14 @@ object NativeAudioRuntime {
 
     private var player: ExoPlayer? = null
     private var appContext: Context? = null
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
+    private var carLibrary: CarLibrary? = null
+    private var queueGeneration = 0L
+    private var queueOrigin = "app"
+    /** The item now current, and whether it has actually started playing (for Recent). */
+    private var currentItemId: String? = null
+    private var recordedStartOf: String? = null
+    private var lastPlayedPersistedAtMs = 0L
     private var mediaSessionPlayer: Player? = null
     private var lastError: String? = null
     private var pendingSeekState: PendingSeekState? = null
@@ -184,6 +214,7 @@ object NativeAudioRuntime {
             val shouldContinue = synchronized(lock) {
                 val snapshot = snapshotLocked()
                 appContext?.let { persistProgressCheckpointLocked(it, snapshot, force = false) }
+                persistLastPlayedLocked(force = false)
                 NativeAudioPlugin.emitToActive(snapshot)
                 val isPlaying = player?.isPlaying == true
                 tickScheduled = isPlaying
@@ -211,6 +242,9 @@ object NativeAudioRuntime {
             if (playbackState == Player.STATE_ENDED) {
                 synchronized(lock) {
                     appContext?.let { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
+                    // The last chapter of the queue finished.
+                    player?.currentMediaItem?.let { recordCompletionLocked(it) }
+                    persistLastPlayedLocked(force = true)
                 }
             }
             syncTicking()
@@ -223,17 +257,33 @@ object NativeAudioRuntime {
             appContext?.let {
                 synchronized(lock) { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
             }
+            synchronized(lock) {
+                // The chapter before this one ran to its end (not a skip): a plan reading heard.
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    val exo = player
+                    val previous = exo?.let { p -> (p.currentMediaItemIndex - 1).takeIf { it >= 0 }?.let { p.getMediaItemAt(it) } }
+                    previous?.let { recordCompletionLocked(it) }
+                }
+                currentItemId = mediaItem?.mediaId
+                if (player?.isPlaying == true) recordStartLocked()
+                persistLastPlayedLocked(force = true)
+            }
             syncTicking()
             emitState()
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             debugLog("player", "isPlaying=$isPlaying serviceRunning=${synchronized(lock) { serviceRunning }}")
+            synchronized(lock) {
+                if (isPlaying) recordStartLocked() else persistLastPlayedLocked(force = true)
+            }
             syncTicking()
             emitState()
         }
 
         override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
+            // The speed button shows the current speed.
+            synchronized(lock) { mediaSession }?.setCustomLayout(CarCommands.layout(playbackParameters.speed))
             emitState()
         }
 
@@ -313,6 +363,39 @@ object NativeAudioRuntime {
                     super.pause()
                 }
 
+                // A queue set through the session came from outside the app: Android Auto, a
+                // voice request, the system's resume card. The app's own queues go straight
+                // to ExoPlayer (setQueue/setSource below) and never pass through here.
+                override fun setMediaItems(mediaItems: MutableList<MediaItem>) {
+                    onExternalQueue(mediaItems.size)
+                    super.setMediaItems(mediaItems)
+                }
+
+                override fun setMediaItems(mediaItems: MutableList<MediaItem>, resetPosition: Boolean) {
+                    onExternalQueue(mediaItems.size)
+                    super.setMediaItems(mediaItems, resetPosition)
+                }
+
+                override fun setMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long) {
+                    onExternalQueue(mediaItems.size)
+                    super.setMediaItems(mediaItems, startIndex, startPositionMs)
+                }
+
+                override fun setMediaItem(mediaItem: MediaItem) {
+                    onExternalQueue(1)
+                    super.setMediaItem(mediaItem)
+                }
+
+                override fun setMediaItem(mediaItem: MediaItem, resetPosition: Boolean) {
+                    onExternalQueue(1)
+                    super.setMediaItem(mediaItem, resetPosition)
+                }
+
+                override fun setMediaItem(mediaItem: MediaItem, startPositionMs: Long) {
+                    onExternalQueue(1)
+                    super.setMediaItem(mediaItem, startPositionMs)
+                }
+
                 override fun getAvailableCommands(): Player.Commands {
                     return super.getAvailableCommands()
                         .buildUpon()
@@ -332,20 +415,32 @@ object NativeAudioRuntime {
                     return super.isCommandAvailable(command)
                 }
 
+                // Earphones and the lock screen: previous/next nudge 10 s (a double-tap on an
+                // earphone must not lose the chapter). In the car the same buttons are the big
+                // on-screen skip buttons, where a listener expects the previous/next chapter.
                 override fun seekToPrevious() {
-                    exoPlayer.seekBack()
+                    if (isCarRequest()) carPrevious() else exoPlayer.seekBack()
                 }
 
                 override fun seekToPreviousMediaItem() {
-                    exoPlayer.seekBack()
+                    if (isCarRequest()) carPrevious() else exoPlayer.seekBack()
                 }
 
                 override fun seekToNext() {
-                    exoPlayer.seekForward()
+                    if (isCarRequest()) carNext() else exoPlayer.seekForward()
                 }
 
                 override fun seekToNextMediaItem() {
-                    exoPlayer.seekForward()
+                    if (isCarRequest()) carNext() else exoPlayer.seekForward()
+                }
+
+                private fun carPrevious() {
+                    if (exoPlayer.currentPosition > 3000L || !exoPlayer.hasPreviousMediaItem()) exoPlayer.seekTo(0L)
+                    else exoPlayer.seekToPreviousMediaItem()
+                }
+
+                private fun carNext() {
+                    if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem()
                 }
             }
 
@@ -356,10 +451,15 @@ object NativeAudioRuntime {
                 PendingIntent.getActivity(ctx, 0, it, flags)
             }
 
+            val library = CarLibrary(ctx, CarStore(ctx))
+            carLibrary = library
             val sessionPlayer = mediaSessionPlayer ?: exoPlayer
-            mediaSession = MediaSession.Builder(ctx, sessionPlayer)
-                .setCallback(sessionCallback)
+            // A library session: the same session the phone, lock screen and earphones use, plus
+            // the browse tree Android Auto shows (see CarLibrary). Built from a Context, not the
+            // service, because it outlives any one service instance (see NativeAudioService).
+            mediaSession = MediaLibrarySession.Builder(ctx, sessionPlayer, CarSessionCallback { synchronized(lock) { carLibrary } })
                 .setBitmapLoader(AppIconBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader(ctx))) { appIcon(ctx) })
+                .setCustomLayout(CarCommands.layout(exoPlayer.playbackParameters.speed))
                 .apply {
                     if (pendingIntent != null) setSessionActivity(pendingIntent)
                 }
@@ -441,10 +541,11 @@ object NativeAudioRuntime {
             ensure(context)
             val exoPlayer = player ?: return
 
-            val mediaItem = buildMediaItem(src, title, artist, artworkUrl)
+            val mediaItem = buildMediaItem(src, title, artist, artworkUrl, null, null)
 
             pendingSeekState = null
             currentStoryId = storyId?.takeIf { it > 0 }
+            onAppQueueLocked()
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
             lastError = null
@@ -462,10 +563,11 @@ object NativeAudioRuntime {
             val exoPlayer = player ?: return
             val mediaItems = items
                 .filter { !it.src.isNullOrBlank() }
-                .map { buildMediaItem(it.src!!.trim(), it.title, it.artist, it.artworkUrl) }
+                .map { buildMediaItem(it.src!!.trim(), it.title, it.artist, it.artworkUrl, it.mediaId, it.group) }
             if (mediaItems.isEmpty()) return
             pendingSeekState = null
             currentStoryId = null
+            onAppQueueLocked()
             val start = startIndex.coerceIn(0, mediaItems.size - 1)
             exoPlayer.setMediaItems(mediaItems, start, 0L)
             exoPlayer.prepare()
@@ -599,6 +701,9 @@ object NativeAudioRuntime {
             lastError = null
             pendingSeekState = null
             currentStoryId = null
+            carLibrary = null
+            currentItemId = null
+            recordedStartOf = null
             appContext = null
         }
         releaseServiceBinding(context)
@@ -606,7 +711,7 @@ object NativeAudioRuntime {
         emitState()
     }
 
-    fun mediaSession(): MediaSession? {
+    fun mediaSession(): MediaLibrarySession? {
         synchronized(lock) {
             return mediaSession
         }
@@ -618,54 +723,13 @@ object NativeAudioRuntime {
         }
     }
 
-    /**
-     * Logs who asked the session to do what: the app, the media notification, the system UI,
-     * Bluetooth/earphones, Android Auto… Media3 calls this for every controller command.
-     */
-    private val sessionCallback = object : MediaSession.Callback {
-        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
-            debugLog("session", "connected ${describe(session, controller)}")
-        }
-
-        override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
-            debugLog("session", "disconnected ${describe(session, controller)}")
-        }
-
-        override fun onMediaButtonEvent(
-            session: MediaSession,
-            controllerInfo: MediaSession.ControllerInfo,
-            intent: Intent,
-        ): Boolean {
-            @Suppress("DEPRECATION")
-            val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-            val keyName = key?.let { mediaKeyName(it.keyCode) } ?: "none"
-            val action = when (key?.action) {
-                KeyEvent.ACTION_DOWN -> "down"
-                KeyEvent.ACTION_UP -> "up"
-                else -> "?"
-            }
-            debugLog("button", "$keyName $action repeat=${key?.repeatCount ?: 0} from=${describe(session, controllerInfo)}")
-            return false // let Media3 handle it as usual
-        }
-
-        @Deprecated("Media3 still calls this for every player command in 1.4.x")
-        override fun onPlayerCommandRequest(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            playerCommand: Int,
-        ): Int {
-            debugLog("session", "command ${playerCommandName(playerCommand)} from=${describe(session, controller)}")
-            return SessionResult.RESULT_SUCCESS
-        }
-    }
-
     private fun currentController(): String {
         val session = mediaSession ?: return "app"
         val controller = runCatching { session.controllerForCurrentRequest }.getOrNull() ?: return "app"
         return describe(session, controller)
     }
 
-    private fun describe(session: MediaSession, controller: MediaSession.ControllerInfo): String {
+    internal fun describe(session: MediaSession, controller: MediaSession.ControllerInfo): String {
         val role = when {
             session.isMediaNotificationController(controller) -> "media-notification"
             session.isAutomotiveController(controller) -> "automotive"
@@ -714,7 +778,7 @@ object NativeAudioRuntime {
         }
     }
 
-    private fun mediaKeyName(keyCode: Int): String = when (keyCode) {
+    internal fun mediaKeyName(keyCode: Int): String = when (keyCode) {
         KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "PLAY_PAUSE"
         KeyEvent.KEYCODE_HEADSETHOOK -> "HEADSETHOOK"
         KeyEvent.KEYCODE_MEDIA_PLAY -> "PLAY"
@@ -744,7 +808,7 @@ object NativeAudioRuntime {
         else -> state.toString()
     }
 
-    private fun playerCommandName(command: Int): String = when (command) {
+    internal fun playerCommandName(command: Int): String = when (command) {
         Player.COMMAND_PLAY_PAUSE -> "play/pause"
         Player.COMMAND_STOP -> "stop"
         Player.COMMAND_SEEK_BACK -> "seek-back"
@@ -829,18 +893,219 @@ object NativeAudioRuntime {
         lastProgressPersistedTimeSec = snapshot.currentTime
     }
 
-    private fun buildMediaItem(src: String, title: String?, artist: String?, artworkUrl: String?): MediaItem {
+    /**
+     * A queue item from the app. Every Bible chapter gets a media id ("ch/JHN/3", or the plan
+     * id the app sent) so Recent, Continue listening and the car's queue can name it, and its
+     * amber tile as artwork unless the app sent artwork of its own.
+     */
+    private fun buildMediaItem(src: String, title: String?, artist: String?, artworkUrl: String?, mediaId: String?, group: Int?): MediaItem {
         val metadataBuilder = MediaMetadata.Builder()
         if (!title.isNullOrBlank()) metadataBuilder.setTitle(title)
-        if (!artist.isNullOrBlank()) metadataBuilder.setArtist(artist)
+        if (!artist.isNullOrBlank()) {
+            metadataBuilder.setArtist(artist)
+            metadataBuilder.setSubtitle(artist)
+        }
+        val chapter = MediaIds.chapterOf(mediaId)
+            ?: BibleCatalog.parseAudioUrl(src)?.let { it.ho to it.chapter }
+        val id = mediaId?.takeIf { MediaIds.parse(it) != null }
+            ?: chapter?.let { (ho, c) -> MediaIds.chapter(ho, c) }
         if (!artworkUrl.isNullOrBlank()) {
             runCatching { Uri.parse(artworkUrl) }
                 .onSuccess { metadataBuilder.setArtworkUri(it) }
+        } else {
+            val ctx = appContext
+            if (ctx != null && chapter != null) metadataBuilder.setArtworkUri(CarArtwork.chapterUri(ctx, chapter.first, chapter.second))
         }
+        if (group != null) metadataBuilder.setExtras(Bundle().apply { putInt(CarLibrary.EXTRA_READING_GROUP, group) })
         return MediaItem.Builder()
             .setUri(src)
+            .apply { if (id != null) setMediaId(id) }
             .setMediaMetadata(metadataBuilder.build())
             .build()
+    }
+
+    /* -------------------------------- Android Auto -------------------------------- */
+
+    private fun onAppQueueLocked() {
+        queueGeneration++
+        queueOrigin = "app"
+        currentItemId = null
+        recordedStartOf = null
+    }
+
+    /** A queue arrived through the session (the car, a voice request, the resume card). */
+    private fun onExternalQueue(count: Int) {
+        synchronized(lock) {
+            queueGeneration++
+            queueOrigin = "car"
+            currentStoryId = null
+            pendingSeekState = null
+            lastError = null
+            currentItemId = null
+            recordedStartOf = null
+            appContext?.let { ensureServiceBoundLocked(it) }
+            debugLog("queue", "external queue of $count from=${currentController()}")
+        }
+        tickHandler.post { emitState() }
+    }
+
+    /** Is the command being handled from Android Auto (or a car's own media system)? */
+    private fun isCarRequest(): Boolean {
+        val session = mediaSession ?: return false
+        val controller = runCatching { session.controllerForCurrentRequest }.getOrNull() ?: return false
+        return session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)
+    }
+
+    /** The current item has started playing: put it at the top of Recent. */
+    private fun recordStartLocked() {
+        val exo = player ?: return
+        val item = exo.currentMediaItem ?: return
+        val id = item.mediaId.takeIf { MediaIds.parse(it) != null } ?: return
+        if (recordedStartOf == id) return
+        recordedStartOf = id
+        val src = item.localConfiguration?.uri?.toString() ?: return
+        carLibrary?.store?.addRecent(
+            PlayedItem(id, item.mediaMetadata.title?.toString().orEmpty(), item.mediaMetadata.artist?.toString().orEmpty(), src, 0L, System.currentTimeMillis()),
+        )
+        notifyLibraryChanged(MediaIds.TAB_RECENT)
+    }
+
+    /** Where playback is, for Continue listening (every few seconds while playing). */
+    private fun persistLastPlayedLocked(force: Boolean) {
+        val exo = player ?: return
+        val store = carLibrary?.store ?: return
+        val item = exo.currentMediaItem ?: return
+        val id = item.mediaId.takeIf { MediaIds.parse(it) != null } ?: return
+        val src = item.localConfiguration?.uri?.toString() ?: return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastPlayedPersistedAtMs < LAST_PLAYED_THROTTLE_MS) return
+        lastPlayedPersistedAtMs = now
+        val ended = exo.playbackState == Player.STATE_ENDED
+        store.setLastPlayed(
+            PlayedItem(id, item.mediaMetadata.title?.toString().orEmpty(), item.mediaMetadata.artist?.toString().orEmpty(), src,
+                if (ended) 0L else max(0L, exo.currentPosition), now),
+        )
+    }
+
+    /**
+     * A chapter finished. When the queue came from the car, the app did not load it and will not
+     * hear about it, so a plan reading is queued here for the app to record at its next start.
+     */
+    private fun recordCompletionLocked(item: MediaItem) {
+        if (queueOrigin != "car") return
+        val parsed = MediaIds.parse(item.mediaId) as? MediaIds.Parsed.PlanTrack ?: return
+        val store = carLibrary?.store ?: return
+        store.addCompletion(parsed, item.mediaId)
+        store.markTodayTrackDone(parsed.planId, parsed.day, parsed.readingIndex)
+        debugLog("queue", "completed ${item.mediaId} (for the app)")
+        notifyLibraryChanged(MediaIds.TAB_TODAY)
+    }
+
+    private fun notifyLibraryChanged(parentId: String) {
+        val session = mediaSession ?: return
+        val count = carLibrary?.children(parentId)?.size ?: return
+        tickHandler.post { runCatching { session.notifyChildrenChanged(parentId, count, null) } }
+    }
+
+    /** Back [ms] in the current chapter (the car's "back 30 seconds"). */
+    fun seekBackBy(ms: Long): Boolean {
+        synchronized(lock) {
+            val exo = player ?: return false
+            exo.seekTo(max(0L, exo.currentPosition - ms))
+        }
+        emitState()
+        return true
+    }
+
+    /**
+     * Skip to the next of the day's readings (all the chapters of "Genesis 1–3" at once), or to
+     * the next chapter when the queue is not a plan day.
+     */
+    fun nextReading(): Boolean {
+        synchronized(lock) {
+            val exo = player ?: return false
+            val index = exo.currentMediaItemIndex
+            val count = exo.mediaItemCount
+            val groupOf = { i: Int -> exo.getMediaItemAt(i).mediaMetadata.extras?.let { if (it.containsKey(CarLibrary.EXTRA_READING_GROUP)) it.getInt(CarLibrary.EXTRA_READING_GROUP) else null } }
+            val current = if (index in 0 until count) groupOf(index) else null
+            var target = -1
+            if (current != null) {
+                for (i in index + 1 until count) if (groupOf(i) != current) { target = i; break }
+            } else if (index + 1 < count) {
+                target = index + 1
+            }
+            if (target < 0) return false
+            exo.seekTo(target, 0L)
+        }
+        emitState()
+        return true
+    }
+
+    /** Step the speed through 1×, 1.2×, 1.5×, 2×, 0.8×. */
+    fun cycleSpeed(): Boolean {
+        synchronized(lock) {
+            val exo = player ?: return false
+            exo.setPlaybackSpeed(CarCommands.nextSpeed(exo.playbackParameters.speed))
+        }
+        emitState()
+        return true
+    }
+
+    /** The app's snapshot for the car (today's reading, devotional audio, narrator). */
+    fun setCarSnapshot(context: Context, json: String): Boolean {
+        ensure(context)
+        val ok = synchronized(lock) { carLibrary?.store?.setSnapshot(json) } ?: false
+        if (ok) {
+            notifyLibraryChanged(MediaIds.ROOT)
+            notifyLibraryChanged(MediaIds.TAB_TODAY)
+            notifyLibraryChanged(MediaIds.TAB_DEVOTIONAL)
+        }
+        return ok
+    }
+
+    fun carCompletions(context: Context): org.json.JSONArray {
+        ensure(context)
+        return synchronized(lock) { carLibrary?.store?.completions() } ?: org.json.JSONArray()
+    }
+
+    fun ackCarCompletions(context: Context, upTo: Long) {
+        ensure(context)
+        synchronized(lock) { carLibrary?.store?.ackCompletions(upTo) }
+        emitState()
+    }
+
+    internal fun carLibrary(): CarLibrary? = synchronized(lock) { carLibrary }
+
+    /** The loaded queue, for the app to adopt one the car started. */
+    fun queueItems(context: Context): org.json.JSONObject {
+        synchronized(lock) {
+            ensure(context)
+            val exo = player
+            val items = org.json.JSONArray()
+            if (exo != null) {
+                for (i in 0 until exo.mediaItemCount) {
+                    val item = exo.getMediaItemAt(i)
+                    val o = org.json.JSONObject()
+                        .put("mediaId", item.mediaId)
+                        .put("src", item.localConfiguration?.uri?.toString().orEmpty())
+                        .put("title", item.mediaMetadata.title?.toString().orEmpty())
+                        .put("subtitle", item.mediaMetadata.artist?.toString().orEmpty())
+                    when (val parsed = MediaIds.parse(item.mediaId)) {
+                        is MediaIds.Parsed.Chapter -> o.put("ho", parsed.ho).put("chapter", parsed.chapter)
+                        is MediaIds.Parsed.PlanTrack -> o.put("ho", parsed.ho).put("chapter", parsed.chapter)
+                            .put("planId", parsed.planId).put("planDay", parsed.day).put("planReadingIndex", parsed.readingIndex)
+                        else -> Unit
+                    }
+                    item.mediaMetadata.extras?.let { if (it.containsKey(CarLibrary.EXTRA_READING_GROUP)) o.put("readingGroup", it.getInt(CarLibrary.EXTRA_READING_GROUP)) }
+                    items.put(o)
+                }
+            }
+            return org.json.JSONObject()
+                .put("items", items)
+                .put("index", exo?.currentMediaItemIndex ?: 0)
+                .put("queueGeneration", queueGeneration)
+                .put("queueOrigin", queueOrigin)
+        }
     }
 
     private fun snapshotLocked(): NativeAudioState {
@@ -887,6 +1152,9 @@ object NativeAudioRuntime {
             rate = exoPlayer.playbackParameters.speed.toDouble(),
             index = exoPlayer.currentMediaItemIndex,
             error = lastError,
+            queueGeneration = queueGeneration,
+            queueOrigin = queueOrigin,
+            pendingCompletions = carLibrary?.store?.pendingCompletionCount() ?: 0,
         )
     }
 
@@ -1102,6 +1370,51 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /** Android Auto: the app's snapshot of today's reading, devotional audio and narrator. */
+    @Command
+    fun setCarSnapshot(invoke: Invoke) {
+        val json = invoke.parseArgs(CarSnapshotArgs::class.java).json
+        if (json.isNullOrBlank()) {
+            invoke.reject("json is required")
+            return
+        }
+        runCatching { NativeAudioRuntime.setCarSnapshot(activity.applicationContext, json) }
+            .onSuccess { ok -> if (ok) invoke.resolve() else invoke.reject("snapshot is not valid JSON") }
+            .onFailure { invoke.reject(it.message ?: "setCarSnapshot failed") }
+    }
+
+    /** Plan chapters finished while playing from the car, oldest first. Kept until acknowledged. */
+    @Command
+    fun takeCarCompletions(invoke: Invoke) {
+        runCatching { NativeAudioRuntime.carCompletions(activity.applicationContext) }
+            .onSuccess { items ->
+                val payload = JSObject()
+                payload.put("items", items)
+                invoke.resolve(payload)
+            }
+            .onFailure { invoke.reject(it.message ?: "takeCarCompletions failed") }
+    }
+
+    @Command
+    fun ackCarCompletions(invoke: Invoke) {
+        val upTo = invoke.parseArgs(AckCompletionsArgs::class.java).upTo
+        if (upTo == null) {
+            invoke.reject("upTo is required")
+            return
+        }
+        runCatching { NativeAudioRuntime.ackCarCompletions(activity.applicationContext, upTo) }
+            .onSuccess { invoke.resolve() }
+            .onFailure { invoke.reject(it.message ?: "ackCarCompletions failed") }
+    }
+
+    /** The loaded queue with each item's chapter and plan position (to adopt a car-started queue). */
+    @Command
+    fun getQueue(invoke: Invoke) {
+        runCatching { NativeAudioRuntime.queueItems(activity.applicationContext) }
+            .onSuccess { invoke.resolve(JSObject(it.toString())) }
+            .onFailure { invoke.reject(it.message ?: "getQueue failed") }
+    }
+
     /** Recent audio events (commands, media buttons, service lifecycle) for bug reports. */
     @Command
     fun getDebugLog(invoke: Invoke) {
@@ -1153,6 +1466,9 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         payload.put("rate", state.rate)
         payload.put("index", state.index)
         payload.put("capturedAtMs", state.capturedAtMs)
+        payload.put("queueGeneration", state.queueGeneration)
+        payload.put("queueOrigin", state.queueOrigin)
+        payload.put("pendingCompletions", state.pendingCompletions)
         if (!state.error.isNullOrBlank()) payload.put("error", state.error)
         return payload
     }
