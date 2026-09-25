@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
+import { NowPlaying } from "@/components/audio/NowPlaying";
 import { useUI } from "@/store/ui";
 import { useAutoTheme } from "@/lib/useAutoTheme";
 import { TooltipProvider } from "@/components/ui";
@@ -76,6 +77,8 @@ export function AppShell() {
         </main>
         <MobileNav />
       </div>
+      {/* Opened from the mini-player; covers the page (and the bottom nav) while shown. */}
+      <NowPlaying />
       <Onboarding />
     </TooltipProvider>
   );
