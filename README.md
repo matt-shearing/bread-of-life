@@ -8,12 +8,13 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.3.11** — your **reading plan now follows your account**, so the plan you start on your
-phone is waiting on your desktop, with the progress it already had. This is what v0.3.10 announced
-and, through a packaging mistake, did not actually ship — if you are on v0.3.10, this is the release
-that delivers it. Also brings v0.3.10's **reading-plan audio** fixes to everyone: marking readings
-done no longer races the narration, the guided reader follows the audio queue, and the Listen button
-plays *today's* readings rather than a whole-Bible queue.
+**Latest: v0.4.0** — **listen properly**. Pausing from your earphones and resuming no longer
+loses the sound. Tap the player for a **Now Playing** screen that shows the day's readings as they
+play, with a button to skip to the next reading. Bread of Life now works in **Android Auto**, with
+tabs for today's reading, the Bible, the devotional and what you played recently, and it answers
+"play John 3". **Spurgeon's Morning and Evening can be read aloud**, recorded in a warm British
+voice, with your phone's own voice when you're offline. And **daily-reading reminders** (2 pm and
+8 pm by default) stop once you've read, and mention your streak.
 
 **v0.3.9** — **"All files access"** on Android done right: point the app at your **Missler library
 anywhere** on your phone with a real **Browse…** folder picker, read it in place, and **play its
