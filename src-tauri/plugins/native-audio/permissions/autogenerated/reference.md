@@ -8,6 +8,9 @@ Default permissions for the plugin
 - `allow-register-listener`
 - `allow-remove-listener`
 - `allow-set-source`
+- `allow-set-queue`
+- `allow-next`
+- `allow-previous`
 - `allow-play`
 - `allow-pause`
 - `allow-seek-to`
@@ -15,6 +18,7 @@ Default permissions for the plugin
 - `allow-get-state`
 - `allow-get-progress-checkpoint`
 - `allow-clear-progress-checkpoint`
+- `allow-get-debug-log`
 - `allow-dispose`
 
 ## Permission Table
@@ -74,6 +78,32 @@ Enables the dispose command without any pre-configured scope.
 <td>
 
 Denies the dispose command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-get-debug-log`
+
+</td>
+<td>
+
+Enables the get_debug_log command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-get-debug-log`
+
+</td>
+<td>
+
+Denies the get_debug_log command without any pre-configured scope.
 
 </td>
 </tr>
@@ -159,6 +189,32 @@ Denies the initialize command without any pre-configured scope.
 <tr>
 <td>
 
+`native-audio:allow-next`
+
+</td>
+<td>
+
+Enables the next command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-next`
+
+</td>
+<td>
+
+Denies the next command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `native-audio:allow-pause`
 
 </td>
@@ -204,6 +260,32 @@ Enables the play command without any pre-configured scope.
 <td>
 
 Denies the play command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-previous`
+
+</td>
+<td>
+
+Enables the previous command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-previous`
+
+</td>
+<td>
+
+Denies the previous command without any pre-configured scope.
 
 </td>
 </tr>
@@ -282,6 +364,32 @@ Enables the seek_to command without any pre-configured scope.
 <td>
 
 Denies the seek_to command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-set-queue`
+
+</td>
+<td>
+
+Enables the set_queue command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-set-queue`
+
+</td>
+<td>
+
+Denies the set_queue command without any pre-configured scope.
 
 </td>
 </tr>

@@ -117,6 +117,26 @@ jobs:
           path: |
             ${{ steps.sign.outputs.signed || steps.apk.outputs.path }}
 
+      # Robolectric tests for the native audio plugin (Media3 session + service on the JVM).
+      # After the upload so a test failure still leaves the APK to inspect, and before the
+      # release step so a tag never ships with failing tests.
+      - name: Native audio plugin tests
+        working-directory: src-tauri/gen/android
+        run: |
+          PROJECT=$(grep -oE "':[^']*native-audio[^']*'" tauri.settings.gradle | head -1 | tr -d "'")
+          if [ -z "$PROJECT" ]; then
+            echo "native-audio plugin project not found in tauri.settings.gradle:"; cat tauri.settings.gradle; exit 1
+          fi
+          echo "Testing $PROJECT"
+          ./gradlew "$PROJECT:testDebugUnitTest" --console=plain
+
+      - name: Upload plugin test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-audio-test-report
+          path: src-tauri/plugins/native-audio/android/build/reports/tests/
+
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/') && steps.sign.outputs.signed != ''
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
