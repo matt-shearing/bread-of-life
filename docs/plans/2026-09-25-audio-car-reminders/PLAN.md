@@ -183,7 +183,12 @@ is where the voice comes from. Options:
   phone, and the desktop would need a separate path.
 - **C. Both.** Pre-recorded audio where available, the phone's voice as a fallback.
 
-This needs Matt's choice before starting. Whichever is chosen, the playback side is the same:
+**Decision (Matt, 2026-09-25): C, both.** Pre-recorded audio is the main path; the phone's own
+voice is the fallback when the file is not available.
+
+The generation pipeline (a script that turns the bundled text into MP3s, plus voice samples
+for Matt to choose from) does not touch the app and starts now on `feat/devotional-audio-pipeline`.
+The in-app playback and the phone-voice fallback wait for items 1 and 2. Whichever is chosen, the playback side is the same:
 a devotional becomes a `Track` in the queue with a title such as "Morning — Oct 3", and the
 Devotional page gets a Listen button.
 
