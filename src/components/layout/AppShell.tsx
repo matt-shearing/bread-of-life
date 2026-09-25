@@ -3,8 +3,12 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
+import { NowPlaying } from "@/components/audio/NowPlaying";
 import { useUI } from "@/store/ui";
 import { useAutoTheme } from "@/lib/useAutoTheme";
+import { useReadingReminders } from "@/lib/useReadingReminders";
+import { registerCarDevotionalSource, useCarSync } from "@/audio/car";
+import { carDevotionals } from "@/audio/devotionalAudio";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import {
@@ -22,7 +26,6 @@ export function AppShell() {
   const notifyDevotion = useUI((s) => s.notifyDevotion);
   const devotionTime = useUI((s) => s.devotionTime);
   const notifyMemory = useUI((s) => s.notifyMemory);
-  const notifyPlan = useUI((s) => s.notifyPlan);
   const reminderTime = useUI((s) => s.reminderTime);
 
   // The single writer of `resolvedTheme`: watches prefers-color-scheme in system
@@ -41,12 +44,23 @@ export function AppShell() {
     void initNotificationRouting((path) => navigate(path));
   }, [navigate]);
 
-  // Native app: keep the OS daily-reminder SCHEDULES in sync with the toggles/time
-  // (fires even when unfocused/closed). No-op in a browser — the foreground checks
-  // below cover app-open reminders there instead.
+  // Android/iOS: keep the OS daily-reminder SCHEDULES in sync with the toggles/time
+  // (fires even when closed). No-op on desktop and in a browser — the foreground
+  // checks below cover app-open reminders there instead.
   useEffect(() => {
-    void syncReminderSchedules({ notifyDevotion, devotionTime, notifyMemory, notifyPrayers, notifyPlan, reminderTime });
-  }, [notifyDevotion, devotionTime, notifyMemory, notifyPrayers, notifyPlan, reminderTime]);
+    void syncReminderSchedules({ notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime });
+  }, [notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime]);
+
+  // Daily-reading reminders: re-planned on start, return to the app, completion
+  // (here or synced in) and settings changes; in-app checks on desktop/browser.
+  useReadingReminders();
+
+  // Android Auto: keep the car's Today tab current and collect chapters finished in the car.
+  useCarSync();
+  useEffect(() => {
+    registerCarDevotionalSource(() => carDevotionals());
+    return () => registerCarDevotionalSource(null);
+  }, []);
 
   useEffect(() => {
     maybeNotifyPrayers(notifyPrayers);
@@ -76,6 +90,8 @@ export function AppShell() {
         </main>
         <MobileNav />
       </div>
+      {/* Opened from the mini-player; covers the page (and the bottom nav) while shown. */}
+      <NowPlaying />
       <Onboarding />
     </TooltipProvider>
   );

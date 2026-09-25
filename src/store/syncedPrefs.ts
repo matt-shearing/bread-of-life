@@ -17,8 +17,12 @@
  * "dark after sunset" means a different hour on a phone in Brisbane than on a desk
  * in London, and a coordinate is not ours to push at a server), font scale, reading
  * layout, rail open/width, sidebar state, dashboard background, onboarding flags,
- * the current Bible location, and the AI config (it holds an API key, which must
- * never leave the device in the clear).
+ * the current Bible location, the AI config (it holds an API key, which must
+ * never leave the device in the clear), and the daily-reading reminder switch and
+ * times (`notifyPlan`, `readingReminderSlots`): whether and when to be nagged is a
+ * choice per device. Reading COMPLETION does sync (the `plans` table), which is what
+ * lets a reading finished on the desktop silence the phone. `ui.notifyPlan` used to be
+ * synced; any old row for it is now ignored.
  */
 import { liveQuery, type Subscription } from "dexie";
 import { db } from "@/db";
@@ -33,7 +37,6 @@ const SETTING_KEY = {
   translation: "ui.translation",
   parallel: "ui.parallel",
   commentarySource: "ui.commentarySource",
-  notifyPlan: "ui.notifyPlan",
   notifyPrayers: "ui.notifyPrayers",
   notifyDevotion: "ui.notifyDevotion",
   notifyMemory: "ui.notifyMemory",
@@ -68,7 +71,7 @@ function applyRows(rows: { key: string; value: unknown }[]): void {
   try {
     // setState (not the store's actions) on purpose: a plan arriving from another
     // device must not fire setActivePlan's side effect of switching the daily
-    // reminder on — `notifyPlan` is its own synced key and carries its own value.
+    // reminder on — that switch is per device and stays as this device set it.
     useUI.setState(patch as Partial<UIState>);
   } finally {
     applying = false;

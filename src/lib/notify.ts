@@ -1,23 +1,45 @@
 import { db } from "@/db";
 import { isDueToday } from "@/db/repos";
 import { localDayKey } from "@/lib/day";
+import { getAnyPlan, countVerses } from "@/data/plans";
+import { useUI } from "@/store/ui";
+import { readingDayKeys, readingStreak } from "@/lib/streak";
+import { deepLinkFor, toPluginPayload, type NativeNotification } from "@/lib/notifyPayload";
+import {
+  READING_DEEP_LINK,
+  dueReadingReminders,
+  minutesForVerses,
+  planReadingReminders,
+  type PlannedReminder,
+  type ReadingReminderState,
+} from "@/lib/readingReminders";
+import { planDailyReminders, toNative, type DailyReminder, type PlannedDaily } from "@/lib/dailyReminders";
 
 /**
  * Notifications. Two delivery paths:
  *
- * - **Native app (Tauri)** — real OS notifications via `@tauri-apps/plugin-notification`,
- *   with DAILY reminders registered as OS *schedules* so they fire even when the app
- *   isn't focused (and, on mobile, when it's fully closed). Tapping one deep-links to
- *   the right screen. This is the primary path; the foreground checks below are skipped.
- * - **Browser (pnpm dev)** — the Web Notification API, fired by the in-app foreground
- *   checks while the tab is open (no OS scheduling available there).
- *
- * NOTE (verify on device): OS-scheduled delivery *while the app is fully closed* is
- * reliable on Android/iOS; on Linux desktop the plugin fires schedules while the app
- * runs but there's no background daemon to fire them when it's quit.
+ * - **Android / iOS app** — real OS notifications via `@tauri-apps/plugin-notification`,
+ *   registered as OS *schedules* so they fire when the app is closed. Tapping one opens
+ *   the right screen. Every reminder (reading, devotional, memory, prayers) is a one-off
+ *   notification over a short rolling window, re-planned whenever state changes
+ *   (src/lib/readingReminders.ts, src/lib/dailyReminders.ts).
+ * - **Desktop app and browser** — the plugin cannot schedule on desktop (it shows the
+ *   notification immediately), so the in-app foreground checks below fire reminders
+ *   while the app is open, through the plugin on desktop and the Web Notification API
+ *   in a browser.
  */
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const isAndroid = isTauri && typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+/**
+ * Can the OS deliver our scheduled notifications? Only on mobile. The DESKTOP build of
+ * tauri-plugin-notification (2.3.x) ignores `schedule` entirely and shows the
+ * notification the moment it is sent, so "scheduling" a 2 pm reminder on Linux popped
+ * it at launch. On desktop, as in a browser, reminders come from the in-app checks
+ * below while the app is open.
+ */
+export const osSchedulesReminders =
+  isTauri && typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
 type NotifPlugin = typeof import("@tauri-apps/plugin-notification");
 let _plugin: Promise<NotifPlugin> | null = null;
@@ -26,9 +48,18 @@ function plugin(): Promise<NotifPlugin> {
   return _plugin;
 }
 
-/** Stable numeric ids so each repeating reminder can be cancelled/replaced. */
+/**
+ * The ids of the old REPEATING reminders, replaced by rolling one-offs
+ * (src/lib/dailyReminders.ts cancels them). Kept so a tap on one still showing from
+ * before the upgrade opens the right screen.
+ */
 const SCHEDULE_ID = { devotion: 8801, memory: 8802, prayers: 8803, plan: 8804 } as const;
-export type ReminderKind = keyof typeof SCHEDULE_ID;
+const DEEP_LINK_BY_ID: Record<number, string> = {
+  [SCHEDULE_ID.devotion]: "/devotional",
+  [SCHEDULE_ID.memory]: "/memory",
+  [SCHEDULE_ID.prayers]: "/prayers",
+  [SCHEDULE_ID.plan]: READING_DEEP_LINK,
+};
 
 /** Ask for notification permission (native plugin in the app, Web API in a browser). */
 export async function ensureNotificationPermission(): Promise<boolean> {
@@ -80,14 +111,13 @@ export function setupNativeNotifications(): Promise<void> {
   return androidReady;
 }
 
-/** Shared native notification options: channel, tappable "Go now", expandable text, deep-link. */
+/** Options for an immediate native notification: channel, "Go now", expandable text. */
 function nativeOptions(o: {
   id?: number;
   title: string;
   body: string;
   largeBody?: string;
   deepLink?: string;
-  schedule?: import("@tauri-apps/plugin-notification").Schedule;
 }) {
   return {
     id: o.id,
@@ -100,7 +130,6 @@ function nativeOptions(o: {
     channelId: CHANNEL_ID,
     actionTypeId: ACTION_TYPE, // adds the "Go now" button
     autoCancel: true, // tapping dismisses it
-    schedule: o.schedule,
     extra: o.deepLink ? { deepLink: o.deepLink } : undefined,
   };
 }
@@ -118,109 +147,237 @@ async function sendNow(title: string, body: string, deepLink?: string, largeBody
   }
 }
 
-/* ----------------------- scheduled daily reminders (native) ------------------- */
+/* -------------------- scheduled reminders (Android / iOS only) ----------------- */
 
-/** The next Date at HH:MM — today if that time is still ahead, otherwise tomorrow. */
-function nextAt(timeHHMM: string): Date {
-  const [hh, mm] = timeHHMM.split(":").map(Number);
-  const d = new Date();
-  d.setHours(hh || 0, mm || 0, 0, 0);
-  if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
-  return d;
+/**
+ * How scheduled notifications reach the plugin, and why not `sendNotification`.
+ *
+ * `sendNotification` goes through the plugin's Rust `notify` command, which drops
+ * fields it does not model and never persists the schedule, so every reminder was
+ * lost at a reboot until the app was next opened. Its `batch` command goes straight to
+ * the Kotlin side, which saves each scheduled notification and re-arms it after a
+ * reboot (LocalNotificationRestoreReceiver).
+ *
+ * What it saves, and what it hands back when a notification is tapped, is the
+ * notification's `sourceJson`, a field the plugin never fills in itself. Without it a
+ * saved notification is the string "null" and a tap arrives with no notification
+ * attached, so the app cannot tell which screen to open. So we set it. It may only contain fields
+ * the Kotlin `Notification` class has: the fire and restore paths parse it with a
+ * strict Jackson mapper, and an unknown key would throw inside a BroadcastReceiver.
+ * That rules out `extra` (Kotlin's JSObject cannot be deserialised from it anyway), so
+ * the screen to open is worked out from the notification's id when it is tapped.
+ */
+async function scheduleNative(list: NativeNotification[]): Promise<void> {
+  if (!list.length) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("plugin:notification|batch", { notifications: list.map((n) => toPluginPayload(n, CHANNEL_ID, ACTION_TYPE)) });
 }
 
-/** (Re)register a repeating DAILY OS notification at a clock time. No-op in a browser. */
-export async function scheduleDailyReminder(
-  kind: ReminderKind,
-  timeHHMM: string,
-  title: string,
-  body: string,
-  deepLink?: string,
-  largeBody?: string,
-): Promise<void> {
-  if (!isTauri) return;
-  const p = await plugin();
-  await setupNativeNotifications();
-  const id = SCHEDULE_ID[kind];
-  await p.cancel([id]).catch(() => {}); // replace any existing schedule for this kind
-  if (!(await p.isPermissionGranted())) return;
-  p.sendNotification(
-    nativeOptions({
-      id,
-      title,
-      body,
-      largeBody,
-      deepLink,
-      schedule: p.Schedule.at(nextAt(timeHHMM), true, true), // repeat daily, allow while idle
-    }),
-  );
-}
-
-export async function cancelDailyReminder(kind: ReminderKind): Promise<void> {
-  if (!isTauri) return;
-  await (await plugin()).cancel([SCHEDULE_ID[kind]]).catch(() => {});
-}
-
-/** The settings needed to (re)build every native daily schedule. */
+/** The settings needed to build the devotional, memory and prayer reminders. */
 export interface ReminderSettings {
   notifyDevotion: boolean;
   devotionTime: string;
   notifyMemory: boolean;
   notifyPrayers: boolean;
-  notifyPlan: boolean;
-  reminderTime: string; // shared clock time for memory / prayers / plan reminders
+  reminderTime: string; // shared clock time for the memory / prayers reminders
+}
+
+function dailyReminders(s: ReminderSettings): DailyReminder[] {
+  return [
+    {
+      kind: "devotion",
+      enabled: s.notifyDevotion,
+      time: s.devotionTime,
+      title: "Time for your devotional",
+      body: "Your Morning & Evening reading is ready.",
+      largeBody:
+        "A few quiet minutes with Spurgeon’s devotional. Tap “Go now” to read today’s portion and mark it done.",
+    },
+    {
+      kind: "memory",
+      enabled: s.notifyMemory,
+      time: s.reminderTime,
+      title: "Hide His word in your heart",
+      body: "Verses are due for review in Memory Lane.",
+      largeBody: "You have memory verses due today. A short review keeps them fresh — tap “Go now” to open Memory Lane.",
+    },
+    {
+      kind: "prayers",
+      enabled: s.notifyPrayers,
+      time: s.reminderTime,
+      title: "Time to pray",
+      body: "Lift up today’s prayers.",
+      largeBody:
+        "Bring your requests before God, and look back on the ones He’s already answered. Tap “Go now” to open your prayers.",
+    },
+  ];
 }
 
 /**
- * Reconcile ALL native daily schedules with the current settings. Call at app start
- * and whenever a reminder toggle or time changes. Safe (no-op) in a browser.
+ * Re-plan the devotional, memory and prayer reminders after a toggle or time changes.
+ * Call at app start and on every change. They are rolling one-offs planned together
+ * with the reading reminders, so this is the same reconcile (which reads the current
+ * settings from the store). No-op off mobile.
  */
-export async function syncReminderSchedules(s: ReminderSettings): Promise<void> {
-  if (!isTauri) return;
-  const jobs: Promise<void>[] = [
-    s.notifyDevotion
-      ? scheduleDailyReminder(
-          "devotion",
-          s.devotionTime,
-          "Time for your devotional",
-          "Your Morning & Evening reading is ready.",
-          "/devotional",
-          "A few quiet minutes with Spurgeon’s devotional. Tap “Go now” to read today’s portion and mark it done.",
-        )
-      : cancelDailyReminder("devotion"),
-    s.notifyMemory
-      ? scheduleDailyReminder(
-          "memory",
-          s.reminderTime,
-          "Hide His word in your heart",
-          "Verses are due for review in Memory Lane.",
-          "/memory",
-          "You have memory verses due today. A short review keeps them fresh — tap “Go now” to open Memory Lane.",
-        )
-      : cancelDailyReminder("memory"),
-    s.notifyPrayers
-      ? scheduleDailyReminder(
-          "prayers",
-          s.reminderTime,
-          "Time to pray",
-          "Lift up today’s prayers.",
-          "/prayers",
-          "Bring your requests before God, and look back on the ones He’s already answered. Tap “Go now” to open your prayers.",
-        )
-      : cancelDailyReminder("prayers"),
-    s.notifyPlan
-      ? scheduleDailyReminder(
-          "plan",
-          s.reminderTime,
-          "Today’s reading",
-          "Your reading plan is waiting.",
-          "/read-today",
-          "Pick up today’s portion in the guided reader — right where you left off. Tap “Go now” to begin.",
-        )
-      : cancelDailyReminder("plan"),
-  ];
-  await Promise.all(jobs);
+export function syncReminderSchedules(_s?: ReminderSettings): Promise<void> {
+  return reconcileReadingReminders();
 }
+
+/* ------------------------------ reading reminders ------------------------------ */
+
+/**
+ * Everything the reading-reminder planner needs, read from the store and Dexie now.
+ * "Today's reading" is the active plan's first unfinished day (plans are self-paced,
+ * exactly as the dashboard and /read-today work it out); it counts as done today when
+ * any plan day was completed during today's LOCAL day.
+ */
+export async function readingReminderState(now: number = Date.now()): Promise<ReadingReminderState> {
+  const ui = useUI.getState();
+  let hasReading = false;
+  let doneToday = false;
+  let minutes: number | null = null;
+  if (ui.activePlanId) {
+    const [plan, prog] = await Promise.all([getAnyPlan(ui.activePlanId), db.plans.get(ui.activePlanId)]);
+    if (plan) {
+      const done = new Set(prog?.completedDays ?? []);
+      let day = 0;
+      while (day < plan.days.length && done.has(day)) day++;
+      hasReading = day < plan.days.length;
+      const today = localDayKey(now);
+      doneToday = Object.values(prog?.completedAt ?? {}).some((ts) => localDayKey(ts) === today);
+      if (hasReading) minutes = minutesForVerses((await countVerses(plan.days[day]).catch(() => null)) ?? 0);
+    }
+  }
+  const progress = await db.progress.toArray();
+  const streak = readingStreak(readingDayKeys(progress.map((p) => p.at)), now);
+  return {
+    now,
+    enabled: ui.notifyPlan,
+    slots: ui.readingReminderSlots,
+    hasReading,
+    doneToday,
+    streak,
+    minutes,
+  };
+}
+
+/** The last plan applied, for debugging from the console (`__bolReadingReminders`). */
+let lastApplied: { at: string; state: ReadingReminderState; schedule: (PlannedReminder | PlannedDaily)[] } | null = null;
+
+/**
+ * Every notification the last reconcile scheduled or kept, with its time. The next
+ * reconcile uses it to tell a reminder that already fired (leave it in the shade) from
+ * one whose slot was just moved into the past (its old alarm is pending: cancel it).
+ */
+const APPLIED_KEY = "bol-reminders-applied";
+function loadApplied(): { id: number; at: number }[] | undefined {
+  try {
+    const raw = JSON.parse(localStorage.getItem(APPLIED_KEY) ?? "null") as unknown;
+    return Array.isArray(raw) ? raw.filter((r) => typeof r?.id === "number" && typeof r?.at === "number") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function applyReadingReminders(): Promise<void> {
+  if (!osSchedulesReminders) return;
+  const p = await plugin();
+  await setupNativeNotifications();
+  const state = await readingReminderState();
+  const granted = await p.isPermissionGranted().catch(() => false);
+  // What the OS is showing now. If it cannot say, the saved record alone decides.
+  const delivered = await p
+    .active()
+    .then((list) => new Set(list.map((n) => Number(n.id))))
+    .catch(() => undefined);
+  const fired = { delivered, previous: loadApplied() };
+  const plan = planReadingReminders({ ...state, ...fired, enabled: granted && state.enabled });
+  const ui = useUI.getState();
+  const daily = planDailyReminders({
+    now: state.now,
+    ...fired,
+    reminders: dailyReminders(ui).map((r) => ({ ...r, enabled: granted && r.enabled })),
+  });
+  await p.cancel([...plan.cancel, ...daily.cancel]).catch(() => {});
+  const schedule = [...plan.schedule, ...daily.schedule].sort((a, b) => a.at - b.at);
+  await scheduleNative(schedule.map(toNative));
+  try {
+    localStorage.setItem(
+      APPLIED_KEY,
+      JSON.stringify([...schedule, ...plan.keep, ...daily.keep].map((r) => ({ id: r.id, at: r.at }))),
+    );
+  } catch {
+    /* storage blocked: the next reconcile relies on active() alone */
+  }
+  lastApplied = { at: new Date().toString(), state, schedule };
+  (window as unknown as Record<string, unknown>).__bolReadingReminders = lastApplied;
+}
+
+let reconciling: Promise<void> | null = null;
+let reconcileAgain = false;
+/**
+ * Make the OS's reminders (reading, and the devotional, memory and prayer ones planned
+ * alongside) match the current state: call on app start, on
+ * return to the app, when a reading is completed here or arrives by sync, and when the
+ * settings change. Calls that arrive while one is running collapse into one more run.
+ * No-op off mobile (see `maybeNotifyReading`).
+ */
+export function reconcileReadingReminders(): Promise<void> {
+  if (!osSchedulesReminders) return Promise.resolve();
+  if (reconciling) {
+    reconcileAgain = true;
+    return reconciling;
+  }
+  reconciling = (async () => {
+    do {
+      reconcileAgain = false;
+      try {
+        await applyReadingReminders();
+      } catch (e) {
+        console.error("reading reminders: reconcile failed", e);
+      }
+    } while (reconcileAgain);
+  })().finally(() => {
+    reconciling = null;
+  });
+  return reconciling;
+}
+
+const READING_SHOWN_KEY = "bol-reading-notified";
+
+/**
+ * Desktop app and browser: the OS cannot hold the schedule, so while the app is open
+ * this is checked every minute and shows each of today's reminders once, from its time
+ * for fifteen minutes, unless today's reading is already done.
+ */
+export async function maybeNotifyReading(): Promise<void> {
+  if (osSchedulesReminders) return;
+  if (!isTauri && (typeof Notification === "undefined" || Notification.permission !== "granted")) return;
+  const state = await readingReminderState();
+  const today = localDayKey(state.now);
+  let shown: string[] = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(READING_SHOWN_KEY) ?? "null") as { day?: string; keys?: string[] } | null;
+    if (raw?.day === today && Array.isArray(raw.keys)) shown = raw.keys;
+  } catch {
+    /* unreadable: start the day afresh */
+  }
+  const due = dueReadingReminders(state, new Set(shown));
+  if (!due.length) return;
+  // Several due at once (a slow wake): show only the latest, but mark them all.
+  const r = due[due.length - 1];
+  try {
+    localStorage.setItem(
+      READING_SHOWN_KEY,
+      JSON.stringify({ day: today, keys: [...shown, ...due.map((d) => `${d.dayKey}#${d.slot}`)] }),
+    );
+  } catch {
+    /* storage blocked: may repeat, never crashes */
+  }
+  await sendNow(r.title, r.body, r.deepLink, r.largeBody);
+}
+
+/* ------------------------------ tap → screen ----------------------------------- */
 
 /** Route a tapped notification (or its "Go now" action) to its screen. Call once at
  *  startup with the router's navigate. Also registers the channel + action type. */
@@ -231,26 +388,41 @@ export async function initNotificationRouting(navigate: (path: string) => void):
   try {
     await setupNativeNotifications();
     const p = await plugin();
-    // Fires for the "Go now" action button and (on supported platforms) the body tap.
-    await p.onAction((n) => {
-      const link = (n.extra as Record<string, unknown> | undefined)?.deepLink;
-      if (typeof link === "string") navigate(link);
+    // A tap while the app is running (or in the background).
+    await p.onAction((payload) => {
+      const link = deepLinkFor(payload, DEEP_LINK_BY_ID);
+      if (link) navigate(link);
     });
   } catch {
     // onAction isn't supported on every platform — non-fatal.
   }
+  // A tap that STARTED the app: the plugin reported it before we were listening, so
+  // ask our own plugin for the launch intent's notification (Android only).
+  if (isAndroid) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const launch = await invoke<{ id?: number; notification?: string }>("plugin:reminders|launch_notification");
+      if (launch && typeof launch.id === "number") {
+        const link = deepLinkFor({ id: launch.id, notification: launch.notification }, DEEP_LINK_BY_ID);
+        if (link) navigate(link);
+      }
+    } catch {
+      /* older build without the plugin: the app just opens normally */
+    }
+  }
 }
 
 /* --------------------- foreground checks (browser / dev only) ----------------- */
-// In the native app the OS schedules above own delivery, so these return early there
-// to avoid double-notifying. They keep the browser (pnpm dev) experience working.
+// On Android/iOS the OS schedules above own delivery, so these return early there to
+// avoid double-notifying. In a browser and in the DESKTOP app (whose notification
+// plugin cannot schedule) they are how reminders arrive while the app is open.
 
 let prayersNotifiedThisSession = false;
 let memoryNotifiedThisSession = false;
 
 /** Devotional reminder: at/after the set time each day, fire once (browser only). */
 export async function maybeNotifyDevotion(enabled: boolean, timeHHMM: string): Promise<void> {
-  if (isTauri || !enabled || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (osSchedulesReminders || !enabled || typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const now = new Date();
   const [hh, mm] = timeHHMM.split(":").map(Number);
   if (now.getHours() * 60 + now.getMinutes() < hh * 60 + mm) return; // not time yet
@@ -266,7 +438,7 @@ export async function maybeNotifyDevotion(enabled: boolean, timeHHMM: string): P
 
 /** Memory-verse nudge, once/session/day when cards are due (browser only). */
 export async function maybeNotifyMemory(enabled: boolean): Promise<void> {
-  if (isTauri || memoryNotifiedThisSession || !enabled) return;
+  if (osSchedulesReminders || memoryNotifiedThisSession || !enabled) return;
   memoryNotifiedThisSession = true;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const todayKey = localDayKey();
@@ -279,7 +451,7 @@ export async function maybeNotifyMemory(enabled: boolean): Promise<void> {
 
 /** Due-prayers nudge, once per launch (browser only). */
 export async function maybeNotifyPrayers(enabled: boolean): Promise<void> {
-  if (isTauri || prayersNotifiedThisSession || !enabled) return;
+  if (osSchedulesReminders || prayersNotifiedThisSession || !enabled) return;
   prayersNotifiedThisSession = true;
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const prayers = await db.prayers.where("status").equals("active").toArray();

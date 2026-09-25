@@ -49,6 +49,12 @@ tauri-plugin-native-audio = { path = "plugins/native-audio" }
 # library in place from Downloads / any shared-storage folder once granted.
 [target.'cfg(target_os = "android")'.dependencies]
 tauri-plugin-all-files = { path = "plugins/all-files" }
+# Reading-reminder glue (see plugins/reminders): exact-alarm permissions in its
+# manifest, and the notification tap that cold-started the app. Android-only.
+tauri-plugin-reminders = { path = "plugins/reminders" }
+# The phone's own text-to-speech voice rendered to a WAV (see plugins/device-tts): the
+# fallback for a spoken devotional whose recording is not available. Android-only.
+tauri-plugin-device-tts = { path = "plugins/device-tts" }
 
 [profile.release]
 panic = "abort"

@@ -18,9 +18,12 @@ import {
 } from "@/data/devotional";
 import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
 import { refLabel, refRange } from "@/lib/osis";
+import { localDayKey } from "@/lib/day";
+import { readingDayKeys, readingStreak } from "@/lib/streak";
 import { useUI } from "@/store/ui";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
+import { ListenButton } from "@/components/devotional/ListenButton";
 
 function greeting() {
   const h = new Date().getHours();
@@ -110,19 +113,6 @@ function TodaysPlan() {
   );
 }
 
-function computeStreak(days: Set<string>): number {
-  let streak = 0;
-  const d = new Date();
-  for (;;) {
-    const key = d.toISOString().slice(0, 10);
-    if (days.has(key)) {
-      streak++;
-      d.setDate(d.getDate() - 1);
-    } else break;
-  }
-  return streak;
-}
-
 export function DashboardPage() {
   const navigate = useNavigate();
   const { goTo } = useUI();
@@ -141,27 +131,26 @@ export function DashboardPage() {
   const duePrayers = (prayers ?? []).filter(isDueToday);
   const lastRead = progress?.[0];
 
-  const streak = useMemo(() => {
-    const days = new Set((progress ?? []).map((p) => new Date(p.at).toISOString().slice(0, 10)));
-    return computeStreak(days);
-  }, [progress]);
+  // Local days, shared with the reading reminders (src/lib/streak.ts).
+  const readDays = useMemo(() => readingDayKeys((progress ?? []).map((p) => p.at)), [progress]);
+  const streak = useMemo(() => readingStreak(readDays).days, [readDays]);
 
   const weekDots = useMemo(() => {
-    const days = new Set((progress ?? []).map((p) => new Date(p.at).toISOString().slice(0, 10)));
     const out: { label: string; active: boolean; today: boolean }[] = [];
     const d = new Date();
     d.setDate(d.getDate() - 6);
+    const todayKey = localDayKey();
     for (let i = 0; i < 7; i++) {
-      const key = d.toISOString().slice(0, 10);
+      const key = localDayKey(d.getTime());
       out.push({
         label: d.toLocaleDateString(undefined, { weekday: "narrow" }),
-        active: days.has(key),
-        today: key === new Date().toISOString().slice(0, 10),
+        active: readDays.has(key),
+        today: key === todayKey,
       });
       d.setDate(d.getDate() + 1);
     }
     return out;
-  }, [progress]);
+  }, [readDays]);
 
   function openVotd() {
     if (votd) {
@@ -417,10 +406,11 @@ function DevotionTile() {
         </div>
         <div className="font-serif text-base font-bold">{reading.ref}</div>
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{snippet}</p>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap items-start gap-2">
           <Button size="sm" onClick={() => setOpen(true)}>
             <BookOpen style={{ width: 15, height: 15 }} /> Read now
           </Button>
+          <ListenButton devotionalId={dev.id} dayKey={key} index={index} reading={reading} />
           <Button size="sm" variant="ghost" onClick={() => navigate("/devotional")}>
             Browse all
           </Button>

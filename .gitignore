@@ -28,3 +28,8 @@ art/image-gen/icons/
 # Missler personal library — dev symlink to a LOCAL, copyrighted folder.
 # Never commit the library or the link; the app reads it from a user-set path.
 /public/missler-library
+
+# Generated devotional audio (scripts/build-devotional-audio.py) and its venv
+/build/
+/.venv-devaudio/
+__pycache__/

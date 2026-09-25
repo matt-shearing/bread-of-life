@@ -2,6 +2,7 @@ import { getChapterFor, loadIndex, translationById } from "@/data/bible";
 import { getMisslerAudio } from "@/data/missler";
 import { BOOKS, refLabel } from "@/lib/osis";
 import type { Track } from "./controller";
+import { groupDayReadings, groupIndexByReading, type DayReading } from "./readingGroups";
 
 function subtitleFor(translation: string, label: string): string {
   if (label.toLowerCase().startsWith("missler")) return "Missler Inspired";
@@ -39,16 +40,19 @@ export async function trackForChapter(
 }
 
 /** Build a play queue from a plan day's readings (chapters with no audio are skipped).
- *  Each track keeps its `planReadingIndex` so completion can mark that reading read. */
+ *  Each track keeps its `planReadingIndex` so completion can mark that reading read, and
+ *  its `readingGroup` — which of the day's passages it belongs to (see readingGroups.ts)
+ *  — so Now Playing can list the day and skip a whole passage at once. */
 export async function buildReadingQueue(
   translation: string,
-  readings: { ho: string; chapter: number }[],
+  readings: DayReading[],
   narratorPref?: string,
 ): Promise<Track[]> {
+  const groupOf = groupIndexByReading(groupDayReadings(readings));
   const tracks = await Promise.all(
     readings.map(async (r, i): Promise<Track | null> => {
       const t = await trackForChapter(translation, r.ho, r.chapter, narratorPref);
-      return t ? { ...t, planReadingIndex: i } : null;
+      return t ? { ...t, planReadingIndex: i, readingGroup: groupOf[i] } : null;
     }),
   );
   return tracks.filter((t): t is Track => t !== null);

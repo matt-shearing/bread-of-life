@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
-import { selectEngine, type AudioEngine } from "./engine";
+import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack, type NativeQueueItem } from "./engine";
+import { WebSpeechEngine } from "./speechEngine";
+import type { SpeechSegment } from "@/lib/devotionalSpeech";
 
 /**
  * A single, app-wide audio player for scripture narration. It lives OUTSIDE the React
@@ -24,6 +26,27 @@ export interface Track {
    *  different answers from the Listen button and from the follow-the-audio cursor. */
   planId?: string;
   planDay?: number;
+  /** Plan day only: which of the day's readings (passages) this chapter belongs to —
+   *  several chapters can make one reading ("Genesis 1–2"). Set by buildReadingQueue. */
+  readingGroup?: number;
+  /** A spoken devotional (Spurgeon's Morning and Evening), not a Bible chapter. Such a
+   *  track has `ho: ""` and `chapter: 0`, so nothing mistakes it for chapter narration. */
+  devotional?: DevotionalTrackInfo;
+  /** Read aloud by the browser's own speech engine instead of playing `src`. Only set
+   *  where the platform has `speechSynthesis` (desktop browsers); see speechEngine.ts. */
+  speech?: SpeechSegment[];
+}
+
+export interface DevotionalTrackInfo {
+  devotionalId: string;
+  /** "MM-DD" */
+  day: string;
+  slot: "morning" | "evening";
+  /** The reading's index in its day (0 = Morning, 1 = Evening); the completion key. */
+  index: number;
+  ref: string;
+  /** Whether this is the recording or the device's own voice. */
+  voice: "recording" | "device";
 }
 
 /** Fires when a track finishes NATURALLY (not on manual skip) — used to mark a plan
@@ -38,27 +61,61 @@ export interface AudioState {
   currentTime: number;
   duration: number;
   loading: boolean;
+  /** Playback speed (1 = normal). Only changeable when `canSetRate` is true. */
+  rate: number;
 }
 
-const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0, duration: 0, loading: false };
+const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0, duration: 0, loading: false, rate: 1 };
 
 let state: AudioState = EMPTY;
 const listeners = new Set<() => void>();
 
 // The swappable playback engine (HTML5 today; native Media3 later). The queue,
 // auto-advance, mark-read and Media Session all live here in the controller.
-const engine: AudioEngine = selectEngine();
+const mainEngine: AudioEngine = selectEngine();
+// A second engine, created on first use, for tracks read aloud by the browser's
+// speechSynthesis (a devotional with no recording on a desktop browser). The controller
+// switches `engine` per queue; everything else talks to whichever is active.
+let speechEngine: AudioEngine | null = null;
+let engine: AudioEngine = mainEngine;
+
+function engineFor(t: Track | undefined): AudioEngine {
+  if (t?.speech) {
+    if (!speechEngine) {
+      speechEngine = new WebSpeechEngine();
+      speechEngine.handlers = handlersFor(speechEngine);
+      if (state.rate !== 1) speechEngine.setRate?.(state.rate);
+    }
+    return speechEngine;
+  }
+  return mainEngine;
+}
+
+/** Make `e` the active engine, silencing the other one. */
+function activate(e: AudioEngine) {
+  if (e === engine) return;
+  engine.release();
+  engine = e;
+}
 
 // HTML5: single-advance guard (a native engine drives its own advancement).
 let advancing = false;
-// Native queue: how far through the queue we've marked read (exclusive index).
-let markedUpTo = 0;
+// Native queue: the indexes already reported as heard to the end, so each is marked once.
+let heard = new Set<number>();
 
-/** Mark tracks [markedUpTo, upto) read — the native player has advanced past them. */
-function markThrough(upto: number) {
-  for (let k = markedUpTo; k < upto && k < state.queue.length; k++) {
+/**
+ * Native queue: mark read the tracks native says ran to their end. Only natural ends count:
+ * a skip (the app's jump, the car's Next or "Next reading", the lock screen's buttons)
+ * moves the index without adding to native's list, so reaching a chapter is never taken as
+ * having heard the ones before it. The list covers the whole queue generation, so a run of
+ * chapters that finished while the WebView was frozen arrives complete in one late event.
+ */
+function markHeard(indexes: number[]) {
+  for (const k of indexes) {
+    if (heard.has(k)) continue;
+    heard.add(k);
     const t = state.queue[k];
-    if (onTrackComplete) {
+    if (t && onTrackComplete) {
       try {
         onTrackComplete(t, k); // e.g. mark the plan reading read
       } catch {
@@ -66,7 +123,6 @@ function markThrough(upto: number) {
       }
     }
   }
-  if (upto > markedUpTo) markedUpTo = upto;
 }
 
 /** HTML5 only: mark the current track read + step to the next one. */
@@ -85,7 +141,30 @@ function advanceQueue() {
   setTimeout(() => next(), 60); // out of the state-callback stack; loadIndex resets the guard
 }
 
-engine.handlers = {
+/** The controller's reaction to engine events. Events from an engine that is no longer
+ *  active (a late "paused" from the one just released) are ignored. */
+function handlersFor(e: AudioEngine): EngineHandlers {
+  const h = sharedHandlers;
+  const live = <A extends unknown[]>(fn: ((...a: A) => void) | undefined) =>
+    (...a: A) => {
+      if (e === engine) fn?.(...a);
+    };
+  return {
+    onPlay: live(h.onPlay),
+    onPause: live(h.onPause),
+    onTime: live(h.onTime),
+    onDuration: live(h.onDuration),
+    onLoading: live(h.onLoading),
+    onIndexChange: live(h.onIndexChange),
+    onFinished: live(h.onFinished),
+    onExternalQueue: live(h.onExternalQueue),
+    onRate: live(h.onRate),
+    onPendingCompletions: live(h.onPendingCompletions),
+    onEnded: live(h.onEnded),
+  };
+}
+
+const sharedHandlers: EngineHandlers = {
   onPlay: () => {
     set({ playing: true });
     setMediaPlaybackState("playing");
@@ -100,24 +179,42 @@ engine.handlers = {
   },
   onDuration: (d) => set({ duration: d }),
   onLoading: (b) => set({ loading: b }),
-  // NATIVE queue: ExoPlayer advanced to the next chapter itself (works in the background;
-  // these events batch and apply when JS resumes if the app was backgrounded). Mark the
-  // chapters we passed read and update the mini-player.
+  // NATIVE queue: the player moved to another chapter, by itself or by a skip (works in the
+  // background; these events batch and apply when JS resumes). Only the mini-player follows;
+  // what was heard arrives separately through onFinished.
   onIndexChange: (index) => {
-    markThrough(index);
     set({ index, currentTime: 0, duration: 0 });
     const t = state.queue[index];
     if (t) setMediaMetadata(t);
   },
+  onFinished: (indexes) => markHeard(indexes),
+  // Android Auto (or the system's resume card) loaded a queue the app did not: take it as
+  // ours so the mini-player and Now Playing show it. Its plan chapters are recorded by
+  // native (they reach the app through take_car_completions), so nothing marks here.
+  onExternalQueue: (items, index) => {
+    const queue = items.map(trackFromNative);
+    onTrackComplete = null;
+    advancing = false;
+    heard = new Set();
+    set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), currentTime: 0, duration: 0 });
+    const t = queue[index];
+    if (t) setMediaMetadata(t);
+  },
+  onRate: (rate) => set({ rate }),
+  onPendingCompletions: (count) => onNativeCompletions?.(count),
   onEnded: () => {
     set({ playing: false });
-    if (engine.supportsNativeQueue) {
-      markThrough(state.queue.length); // whole playlist finished — mark the rest read
-    } else {
-      advanceQueue(); // HTML5: one track ended, step forward
-    }
+    // Native: the last track's natural end arrives in onFinished like every other.
+    if (!engine.supportsNativeQueue) advanceQueue(); // HTML5: one track ended, step forward
   },
 };
+mainEngine.handlers = handlersFor(mainEngine);
+
+/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/car.ts). */
+let onNativeCompletions: ((count: number) => void) | null = null;
+export function setNativeCompletionsHandler(fn: ((count: number) => void) | null) {
+  onNativeCompletions = fn;
+}
 
 function emit() {
   listeners.forEach((l) => l());
@@ -125,6 +222,47 @@ function emit() {
 function set(patch: Partial<AudioState>) {
   state = { ...state, ...patch };
   emit();
+}
+
+function trackFromNative(item: NativeQueueItem): Track {
+  return {
+    ho: item.ho ?? "",
+    chapter: item.chapter ?? 0,
+    src: item.src,
+    title: item.title,
+    subtitle: item.subtitle,
+    planId: item.planId,
+    planDay: item.planDay,
+    planReadingIndex: item.planReadingIndex,
+    readingGroup: item.readingGroup,
+  };
+}
+
+/**
+ * The name the native player (and Android Auto's Recent and Continue listening) knows a
+ * track by: a plan day's chapter as "plan/<plan>/<day>/<reading>/<book>/<chapter>", any
+ * other Bible chapter as "ch/<book>/<chapter>". Mirrors MediaIds in CarData.kt. Other audio
+ * (Missler, devotionals) has none.
+ */
+export function nativeMediaId(t: Track): string | undefined {
+  const m = /\/([0-9A-Z]{3})\/(\d+)\/audio\/[A-Za-z0-9_-]+\.mp3$/.exec(t.src.split(/[?#]/)[0]);
+  const isChapter = !!m && m[1] === t.ho && Number(m[2]) === t.chapter;
+  if (!isChapter) return undefined;
+  if (t.planId != null && t.planDay != null && t.planReadingIndex != null) {
+    return `plan/${encodeURIComponent(t.planId)}/${t.planDay}/${t.planReadingIndex}/${t.ho}/${t.chapter}`;
+  }
+  return `ch/${t.ho}/${t.chapter}`;
+}
+
+function toEngineTrack(t: Track): EngineTrack {
+  return {
+    src: t.src,
+    title: t.title,
+    subtitle: t.subtitle,
+    speech: t.speech,
+    mediaId: nativeMediaId(t),
+    group: t.readingGroup,
+  };
 }
 
 /* -------------------------------- media session ------------------------------- */
@@ -144,7 +282,7 @@ function syncPositionState() {
   const dur = engine.duration();
   if (!ms || !Number.isFinite(dur) || dur <= 0) return;
   try {
-    ms.setPositionState({ duration: dur, position: Math.min(engine.currentTime(), dur), playbackRate: 1 });
+    ms.setPositionState({ duration: dur, position: Math.min(engine.currentTime(), dur), playbackRate: state.rate });
   } catch {
     /* Safari/older WebViews may throw on bad values — non-fatal */
   }
@@ -176,7 +314,8 @@ function loadIndex(index: number, autoplay: boolean) {
   const t = state.queue[index];
   if (!t) return;
   advancing = false; // new track — allow the next advance
-  engine.load({ src: t.src, title: t.title, subtitle: t.subtitle });
+  activate(engineFor(t));
+  engine.load(toEngineTrack(t));
   set({ index, currentTime: 0, duration: 0, loading: true });
   setMediaMetadata(t);
   if (autoplay) engine.play();
@@ -191,11 +330,12 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
   onTrackComplete = opts?.onComplete ?? null;
   const start = Math.max(0, Math.min(opts?.startIndex ?? 0, tracks.length - 1));
   set({ queue: tracks });
+  activate(engineFor(tracks[start]));
   if (engine.supportsNativeQueue) {
-    markedUpTo = start; // don't mark anything before where we start
+    heard = new Set(); // a new queue: native's list starts empty with it
     set({ index: start, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(tracks[start]);
-    engine.loadQueue(tracks.map((t) => ({ src: t.src, title: t.title, subtitle: t.subtitle })), start);
+    engine.loadQueue(tracks.map(toEngineTrack), start);
   } else {
     loadIndex(start, true);
   }
@@ -240,7 +380,28 @@ export function prev() {
   }
 }
 export function jumpTo(index: number) {
-  if (index >= 0 && index < state.queue.length) loadIndex(index, true);
+  if (index < 0 || index >= state.queue.length) return;
+  if (engine.supportsNativeQueue) {
+    // The native player holds the whole playlist; `load` would replace it with one
+    // track. Re-hand it the same playlist starting at `index` instead. Native starts a new
+    // list of chapters heard with it (skipping ahead is not listening).
+    heard = new Set();
+    set({ index, currentTime: 0, duration: 0, loading: true });
+    setMediaMetadata(state.queue[index]);
+    engine.loadQueue(state.queue.map(toEngineTrack), index);
+    return;
+  }
+  loadIndex(index, true);
+}
+
+/** Whether the active engine can change playback speed (the Linux desktop one can't). */
+export const canSetRate = !!mainEngine.supportsRate;
+
+export function setRate(rate: number) {
+  if (!canSetRate || !Number.isFinite(rate) || rate <= 0) return;
+  mainEngine.setRate?.(rate);
+  speechEngine?.setRate?.(rate);
+  set({ rate });
 }
 export function seekTo(sec: number) {
   engine.seekTo(sec);
@@ -256,8 +417,8 @@ export function stop() {
   if (ms) ms.metadata = null;
   onTrackComplete = null;
   advancing = false;
-  markedUpTo = 0;
-  set({ ...EMPTY });
+  heard = new Set();
+  set({ ...EMPTY, rate: state.rate }); // the chosen speed outlives the queue
 }
 
 /* ---------------------------------- react ------------------------------------ */

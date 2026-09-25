@@ -47,6 +47,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # The action's default also asks for the legacy "tools" package, which the
+          # current runner SDK no longer has (sdkmanager exits 1). The next step
+          # installs everything the build needs.
+          packages: platform-tools
 
       - name: Install NDK + build tools
         run: |
@@ -86,6 +91,24 @@ jobs:
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "Found: $APK"
 
+      # Android Auto only lists the app if these reach the final APK (they come from the
+      # native-audio plugin's manifest, merged into the app's by Gradle).
+      - name: Check Android Auto declarations in the APK
+        run: |
+          APK="${{ steps.apk.outputs.path }}"
+          AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
+          "$AAPT" dump xmltree "$APK" AndroidManifest.xml > apk-manifest.txt
+          grep -n -A3 -E 'car.application|MediaBrowserService|MediaLibraryService|NativeAudioService|CarArtworkProvider|nativeaudio.artwork' apk-manifest.txt
+          for want in com.google.android.gms.car.application android.media.browse.MediaBrowserService \
+                      androidx.media3.session.MediaLibraryService app.tauri.nativeaudio.CarArtworkProvider; do
+            grep -q "$want" apk-manifest.txt || { echo "::error::$want missing from the APK manifest"; exit 1; }
+          done
+          DESC=$("$AAPT" dump --values resources "$APK" | grep -A2 'automotive_app_desc' | grep -oE 'res/[^"]+\.xml' | head -1)
+          echo "automotive_app_desc -> $DESC"
+          [ -n "$DESC" ] || { echo "::error::automotive_app_desc.xml missing from the APK"; exit 1; }
+          "$AAPT" dump xmltree "$APK" "$DESC" | tee automotive.txt
+          grep -q '"media"' automotive.txt || { echo "::error::automotive_app_desc does not declare media"; exit 1; }
+
       - name: Sign APK
         id: sign
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
@@ -116,6 +139,35 @@ jobs:
           name: bread-of-life-apk
           path: |
             ${{ steps.sign.outputs.signed || steps.apk.outputs.path }}
+
+      # Robolectric tests for the native audio plugin (Media3 session + service on the JVM).
+      # After the upload so a test failure still leaves the APK to inspect, and before the
+      # release step so a tag never ships with failing tests.
+      - name: Native audio plugin tests
+        working-directory: src-tauri/gen/android
+        run: |
+          PROJECT=$(grep -oE "':[^']*native-audio[^']*'" tauri.settings.gradle | head -1 | tr -d "'")
+          if [ -z "$PROJECT" ]; then
+            echo "native-audio plugin project not found in tauri.settings.gradle:"; cat tauri.settings.gradle; exit 1
+          fi
+          echo "Testing $PROJECT"
+          ./gradlew "$PROJECT:testDebugUnitTest" --console=plain
+
+      # The car's generated artwork tiles (CarArtworkSamplesTest), to look at.
+      - name: Upload Android Auto artwork samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-auto-artwork
+          path: src-tauri/plugins/native-audio/android/build/car-artwork-samples/
+          if-no-files-found: ignore
+
+      - name: Upload plugin test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-audio-test-report
+          path: src-tauri/plugins/native-audio/android/build/reports/tests/
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/') && steps.sign.outputs.signed != ''

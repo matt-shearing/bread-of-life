@@ -15,5 +15,10 @@ permissions = [
   "allow-get-state",
   "allow-get-progress-checkpoint",
   "allow-clear-progress-checkpoint",
+  "allow-get-debug-log",
+  "allow-set-car-snapshot",
+  "allow-take-car-completions",
+  "allow-ack-car-completions",
+  "allow-get-queue",
   "allow-dispose",
 ]

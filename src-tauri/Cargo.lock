@@ -325,12 +325,14 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-all-files",
+ "tauri-plugin-device-tts",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-http",
  "tauri-plugin-native-audio",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "tauri-plugin-reminders",
 ]
 
 [[package]]
@@ -4163,6 +4165,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-device-tts"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
 name = "tauri-plugin-dialog"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4275,6 +4285,14 @@ dependencies = [
  "url",
  "windows",
  "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-reminders"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

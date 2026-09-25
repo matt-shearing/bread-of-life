@@ -57,6 +57,73 @@ pnpm android:build     # produce the APK
 3. Obtainium finds the latest Release APK and installs it; it auto-checks for
    updates on new releases. The repo is public, so no token is needed.
 
+## Android Auto
+
+Bread of Life has its own icon in the Android Auto launcher. Open it in the car to play the
+day's reading, any chapter of the Bible, today's devotional (once its recordings exist) or
+something you played recently. It works without opening the app on the phone first.
+
+### What the car shows
+
+Android Auto draws media apps from Google's templates, so the screens look like any other
+audio app's. The four tabs along the top are:
+
+- **Today**: *Continue listening* (the last chapter played, from where it stopped), then
+  *Play today's reading* (the active plan's day, from the first chapter not yet read), then
+  each of the day's readings. A reading already heard has a tick.
+- **Bible**: Old Testament or New Testament, then a grid of books, then a grid of chapters.
+  Psalms and Isaiah are split into pages of 50 chapters. A chapter plays on through the
+  following chapters, up to 150, as the Bible page in the app does.
+- **Devotional**: today's Spurgeon *Morning* and *Evening*. The tab appears only when the
+  app has recorded audio for today.
+- **Recent**: the last ten chapters or devotionals played.
+
+While something plays, the car shows the queue and three extra buttons: back 30 seconds,
+next reading (skips the rest of a passage such as "Genesis 1–3") and playback speed (1×,
+1.2×, 1.5×, 2×, 0.8×). In the car, the skip buttons move a whole chapter; on earphones they
+still move 10 seconds.
+
+Voice works too: "Hey Google, play John 3 on Bread of Life", "play First Corinthians
+chapter thirteen on Bread of Life", "play today's reading on Bread of Life", or "resume
+Bread of Life".
+
+Chapters finished in the car count towards the reading plan. The phone records them the
+next time the app opens.
+
+### Set up on GrapheneOS
+
+Do this once, on the phone, before the first drive.
+
+1. **Install sandboxed Google Play** if it is not already installed: open the **App Store**
+   (GrapheneOS's own), and install **Google Play services**.
+2. **Install Android Auto** from the GrapheneOS **App Store** as well. GrapheneOS does not
+   let Android Auto come from the Play Store or anywhere else.
+3. Open **Settings → Apps → Sandboxed Google Play → Android Auto**. Turn on **Allow
+   permissions for wired Android Auto** (or the wireless one, for a wireless car). Each
+   toggle asks you to confirm. If a wired connection will not start, turn on the wireless
+   permissions as well; some cars need them even over a cable.
+4. Let Android Auto show apps that did not come from the Play Store. Bread of Life comes
+   from Obtainium, and Android Auto hides such apps until you allow them:
+   1. Open **Settings → Apps → Android Auto → Additional settings in the app**.
+   2. Scroll to the bottom and tap **Version and permissions info** ten times. A message
+      says developer mode is on.
+   3. Tap the **⋮** menu at the top right, then **Developer settings**.
+   4. Scroll to the bottom and turn on **Unknown sources**.
+5. Connect to the car. If Bread of Life is not in the car's launcher, disconnect, force-stop
+   Android Auto (**Settings → Apps → Android Auto → Force stop**) and connect again. If it is
+   still missing, check that the launcher is not hiding it: in Android Auto's settings on the
+   phone (the screen from step 4.1), open **Customize launcher** and tick Bread of Life.
+
+GrapheneOS documents steps 1 to 3 in its [usage guide](https://grapheneos.org/usage#android-auto).
+Step 4 is Android Auto's own developer setting; Google can change or remove it in an Android
+Auto update, and it may need turning on again after one.
+
+### If something goes wrong
+
+In the app, **Settings → Feedback → Copy audio debug log** copies the player's recent
+events: every button press from the car, the phone or earphones, what the car asked to play,
+and the service starting and stopping. Paste it into a message or a bug report.
+
 ## F-Droid submission (when ready)
 
 F-Droid builds from source and requires the app to be fully FOSS. This project

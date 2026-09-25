@@ -1,0 +1,65 @@
+{
+  "_comment": "Narration URLs copied from the bundled public/bible/bsb book files. src/audio/audioUrl.ts (scripts/test-audio-url.mjs) and BibleCatalog.kt (AudioUrlAgreementTest) must both build exactly these.",
+  "cases": [
+    {
+      "ho": "GEN",
+      "chapter": 1,
+      "narrator": "david",
+      "url": "https://audio.bible.helloao.org/api/BSB/GEN/1/audio/david.mp3"
+    },
+    {
+      "ho": "GEN",
+      "chapter": 3,
+      "narrator": "souer",
+      "url": "https://audio.bible.helloao.org/api/BSB/GEN/3/audio/souer.mp3"
+    },
+    {
+      "ho": "PSA",
+      "chapter": 119,
+      "narrator": "hays",
+      "url": "https://audio.bible.helloao.org/api/BSB/PSA/119/audio/hays.mp3"
+    },
+    {
+      "ho": "SNG",
+      "chapter": 8,
+      "narrator": "david",
+      "url": "https://audio.bible.helloao.org/api/BSB/SNG/8/audio/david.mp3"
+    },
+    {
+      "ho": "1CO",
+      "chapter": 13,
+      "narrator": "david",
+      "url": "https://audio.bible.helloao.org/api/BSB/1CO/13/audio/david.mp3"
+    },
+    {
+      "ho": "JHN",
+      "chapter": 3,
+      "narrator": "david",
+      "url": "https://audio.bible.helloao.org/api/BSB/JHN/3/audio/david.mp3"
+    },
+    {
+      "ho": "OBA",
+      "chapter": 1,
+      "narrator": "hays",
+      "url": "https://audio.bible.helloao.org/api/BSB/OBA/1/audio/hays.mp3"
+    },
+    {
+      "ho": "3JN",
+      "chapter": 1,
+      "narrator": "souer",
+      "url": "https://audio.bible.helloao.org/api/BSB/3JN/1/audio/souer.mp3"
+    },
+    {
+      "ho": "REV",
+      "chapter": 22,
+      "narrator": "david",
+      "url": "https://audio.bible.helloao.org/api/BSB/REV/22/audio/david.mp3"
+    },
+    {
+      "ho": "EZK",
+      "chapter": 48,
+      "narrator": "hays",
+      "url": "https://audio.bible.helloao.org/api/BSB/EZK/48/audio/hays.mp3"
+    }
+  ]
+}

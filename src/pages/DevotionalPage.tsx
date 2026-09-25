@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DEVOTIONALS,
@@ -30,7 +30,11 @@ export function DevotionalPage() {
   const { goTo, devotionalId, setDevotionalId } = useUI();
   const dev = devotionalById(devotionalId);
   const [keys, setKeys] = useState<string[]>([]);
-  const [dayKey, setDayKey] = useState(mmdd());
+  // `?day=MM-DD&r=<index>` opens a given reading (Now Playing links here).
+  const [params] = useSearchParams();
+  const linkedDay = params.get("day");
+  const linkedIndex = params.get("r");
+  const [dayKey, setDayKey] = useState(linkedDay && /^\d\d-\d\d$/.test(linkedDay) ? linkedDay : mmdd());
   const [day, setDay] = useState<DevotionDay | null>(null);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -44,10 +48,20 @@ export function DevotionalPage() {
     setLoading(true);
     getDevotionDay(dev, dayKey).then((d) => {
       setDay(d);
-      setIndex(d ? currentReadingIndex(d) : 0);
+      const linked = dayKey === linkedDay && linkedIndex != null ? Number(linkedIndex) : NaN;
+      setIndex(d ? (Number.isInteger(linked) && linked >= 0 && linked < d.readings.length ? linked : currentReadingIndex(d)) : 0);
       setLoading(false);
     });
-  }, [dev, dayKey]);
+    // The link is read when the day loads, not on every change to it.
+  }, [dev, dayKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A link followed while this page is already open (from Now Playing over it).
+  useEffect(() => {
+    if (!linkedDay || !/^\d\d-\d\d$/.test(linkedDay)) return;
+    setDayKey(linkedDay);
+    const r = Number(linkedIndex);
+    if (linkedDay === dayKey && day && Number.isInteger(r) && r >= 0 && r < day.readings.length) setIndex(r);
+  }, [linkedDay, linkedIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function step(delta: number) {
     if (!keys.length) return;

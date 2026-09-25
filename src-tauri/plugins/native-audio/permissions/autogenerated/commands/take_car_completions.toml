@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-take-car-completions"
+description = "Enables the take_car_completions command without any pre-configured scope."
+commands.allow = ["take_car_completions"]
+
+[[permission]]
+identifier = "deny-take-car-completions"
+description = "Denies the take_car_completions command without any pre-configured scope."
+commands.deny = ["take_car_completions"]

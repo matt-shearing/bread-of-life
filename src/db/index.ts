@@ -97,6 +97,14 @@ export interface PlanProgress {
    * completedDays). Non-indexed — no schema string change needed.
    */
   chapterProgress?: Record<number, number[]>;
+  /**
+   * Day index → when that day was completed (epoch ms). The daily-reading reminders
+   * need to know whether a reading was finished TODAY (local day), and `completedDays`
+   * only says which days are done, not when. Syncs with the row, so a day finished on
+   * the desktop silences the phone's reminders at its next reconcile. Rows written
+   * before this field existed simply lack it. Non-indexed.
+   */
+  completedAt?: Record<number, number>;
 }
 
 export interface DevotionDone {

@@ -52,6 +52,10 @@ pub fn run() {
     #[cfg(target_os = "android")]
     {
         builder = builder.plugin(tauri_plugin_all_files::init());
+        // Reading reminders: exact-alarm permissions + the tap that launched the app.
+        builder = builder.plugin(tauri_plugin_reminders::init());
+        // Spoken devotionals: the phone's own voice when no recording is available.
+        builder = builder.plugin(tauri_plugin_device_tts::init());
     }
 
     builder
