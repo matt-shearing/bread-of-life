@@ -267,6 +267,10 @@ class AndroidAutoTest {
         assertEquals(SessionResult.RESULT_SUCCESS, await(b.sendCustomCommand(SessionCommand(CarCommands.NEXT_READING, Bundle.EMPTY), Bundle.EMPTY)).resultCode)
         runMainLooperUntil { player.currentMediaItemIndex == 2 }
         assertTrue(player.currentMediaItem!!.mediaId.endsWith("/MAT/1"))
+        // A skip, not listening: Genesis 1–2 are neither reported to the app nor recorded.
+        ShadowLooper.idleMainLooper()
+        assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
+        assertEquals(0, NativeAudioRuntime.carCompletions(context).length())
 
         // Back 30 seconds.
         player.seekTo(100_000L)
@@ -292,10 +296,12 @@ class AndroidAutoTest {
 
         playToTheEndOfTheCurrentChapter(player)
         runMainLooperUntil { player.currentMediaItemIndex == 1 }
+        assertEquals(listOf(0), NativeAudioRuntime.getState(context).finished)
 
         val completions = NativeAudioRuntime.carCompletions(context)
         assertEquals(1, completions.length())
         val c = completions.getJSONObject(0)
+        assertEquals("plan", c.getString("kind"))
         assertEquals("soul-food-max", c.getString("planId"))
         assertEquals(11, c.getInt("planDay"))
         assertEquals(0, c.getInt("planReadingIndex"))
@@ -309,27 +315,94 @@ class AndroidAutoTest {
     }
 
     @Test
-    fun appQueue_isNotReportedTwice() {
-        // A day the APP loaded marks its own chapters read; native must not queue them too.
-        NativeAudioRuntime.setQueue(
-            context,
-            listOf(
-                QueueItemArg().apply { src = BibleCatalog.chapterAudioUrl("GEN", 1); title = "Genesis 1"; mediaId = MediaIds.plan("p", 0, 0, "GEN", 1) },
-                QueueItemArg().apply { src = BibleCatalog.chapterAudioUrl("GEN", 2); title = "Genesis 2"; mediaId = MediaIds.plan("p", 0, 1, "GEN", 2) },
-            ),
-            0,
-        )
+    fun appQueue_planChaptersAreRecordedToo() {
+        // The app may be frozen or gone when a chapter of its own queue ends, so native records
+        // it as well; the app's recording is idempotent, so marking it twice is harmless.
+        NativeAudioRuntime.setQueue(context, planItems(), 0)
         NativeAudioRuntime.play(context)
         val player = sessionPlayer()
         runMainLooperUntil { player.isPlaying }
         assertEquals("app", NativeAudioRuntime.getState(context).queueOrigin)
         playToTheEndOfTheCurrentChapter(player)
         runMainLooperUntil { player.currentMediaItemIndex == 1 }
-        assertEquals(0, NativeAudioRuntime.carCompletions(context).length())
-        // …but it still shows in Recent, with its tile.
+        val completions = NativeAudioRuntime.carCompletions(context)
+        assertEquals(1, completions.length())
+        assertEquals(0, completions.getJSONObject(0).getInt("planReadingIndex"))
+        assertEquals(listOf(0), NativeAudioRuntime.getState(context).finished)
+        assertEquals(1, NativeAudioRuntime.getState(context).pendingCompletions)
+        // …and it still shows in Recent, with its tile.
         val recent = CarStore(context).recent()
         assertEquals("ch/GEN/2", MediaIds.chapterOf(recent[0].mediaId)!!.let { (ho, c) -> MediaIds.chapter(ho, c) })
         assertEquals(CarArtwork.chapterUri(context, "GEN", 1), player.getMediaItemAt(0).mediaMetadata.artworkUri)
+    }
+
+    @Test
+    fun carQueueAdoptedThenReplacedByTheApp_laterChaptersAreStillRecorded() {
+        // The car starts today's readings; the app adopts that queue, then the listener jumps
+        // in Now Playing, which hands native a queue of the app's own (origin "app").
+        NativeAudioRuntime.setCarSnapshot(context, snapshotJson())
+        val b = connect()
+        b.setMediaItem(MediaItem.Builder().setMediaId(MediaIds.TODAY_ALL).build())
+        b.prepare()
+        b.play()
+        val player = sessionPlayer()
+        runMainLooperUntil { player.isPlaying }
+        assertEquals("car", NativeAudioRuntime.getState(context).queueOrigin)
+
+        NativeAudioRuntime.setQueue(context, planItems(planId = "soul-food-max", day = 11), 1)
+        NativeAudioRuntime.play(context)
+        runMainLooperUntil { player.isPlaying && player.currentMediaItemIndex == 1 }
+        assertEquals("app", NativeAudioRuntime.getState(context).queueOrigin)
+        assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
+
+        // Genesis 2 (the last item here) runs to its end.
+        playToTheEndOfTheCurrentChapter(player)
+        runMainLooperUntil { player.playbackState == Player.STATE_ENDED }
+        val completions = NativeAudioRuntime.carCompletions(context)
+        assertEquals(1, completions.length())
+        assertEquals("soul-food-max", completions.getJSONObject(0).getString("planId"))
+        assertEquals(1, completions.getJSONObject(0).getInt("planReadingIndex"))
+        assertEquals(listOf(1), NativeAudioRuntime.getState(context).finished)
+    }
+
+    @Test
+    fun skipsInTheAppsQueue_areNotFinished() {
+        NativeAudioRuntime.setQueue(context, planItems() + planItems(from = 2), 0)
+        NativeAudioRuntime.play(context)
+        val player = sessionPlayer()
+        runMainLooperUntil { player.isPlaying }
+        NativeAudioRuntime.next(context)
+        runMainLooperUntil { player.currentMediaItemIndex == 1 }
+        assertTrue(NativeAudioRuntime.nextReading())
+        runMainLooperUntil { player.currentMediaItemIndex == 2 }
+        ShadowLooper.idleMainLooper()
+        assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
+        assertEquals(0, NativeAudioRuntime.carCompletions(context).length())
+        // A chapter that then plays out is finished, under its own index.
+        playToTheEndOfTheCurrentChapter(player)
+        runMainLooperUntil { player.currentMediaItemIndex == 3 }
+        assertEquals(listOf(2), NativeAudioRuntime.getState(context).finished)
+        // A new queue starts a new list.
+        NativeAudioRuntime.setQueue(context, planItems(), 0)
+        assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
+    }
+
+    @Test
+    fun devotionalFinishedInTheCar_isQueuedForTheApp() {
+        NativeAudioRuntime.setCarSnapshot(context, snapshotJson())
+        val b = connect()
+        b.setMediaItem(MediaItem.Builder().setMediaId(MediaIds.devotional("spurgeon-morning-evening:09-25:m")).build())
+        b.prepare()
+        b.play()
+        val player = sessionPlayer()
+        runMainLooperUntil { player.isPlaying }
+        playToTheEndOfTheCurrentChapter(player)
+        runMainLooperUntil { player.playbackState == Player.STATE_ENDED }
+        val completions = NativeAudioRuntime.carCompletions(context)
+        assertEquals(1, completions.length())
+        val c = completions.getJSONObject(0)
+        assertEquals("devotional", c.getString("kind"))
+        assertEquals("spurgeon-morning-evening:09-25:m", c.getString("devotionalId"))
     }
 
     @Test
@@ -426,6 +499,17 @@ class AndroidAutoTest {
     private fun searchRequest(query: String): MediaItem = MediaItem.Builder()
         .setRequestMetadata(MediaItem.RequestMetadata.Builder().setSearchQuery(query).build())
         .build()
+
+    /** Two chapters of a plan day, as the app sends them. */
+    private fun planItems(planId: String = "p", day: Int = 0, from: Int = 0): List<QueueItemArg> =
+        listOf(from to ("GEN" to from + 1), from + 1 to ("GEN" to from + 2)).map { (ri, ch) ->
+            QueueItemArg().apply {
+                src = BibleCatalog.chapterAudioUrl(ch.first, ch.second)
+                title = "Genesis ${ch.second}"
+                mediaId = MediaIds.plan(planId, day, ri, ch.first, ch.second)
+                group = ri
+            }
+        }
 
     private fun playToTheEndOfTheCurrentChapter(player: Player) {
         runMainLooperUntil { player.duration > 0 }

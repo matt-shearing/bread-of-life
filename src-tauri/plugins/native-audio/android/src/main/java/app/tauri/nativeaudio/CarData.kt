@@ -13,9 +13,9 @@ import org.json.JSONObject
  * The app is often not running when the phone connects to the car, so the web side writes a
  * small snapshot here whenever it changes (today's plan day, its tracks, devotional audio,
  * the narrator), and it is kept in SharedPreferences. The native side keeps its own record of
- * what was actually played (Continue listening, Recent) and of plan chapters that finished
- * while playing from the car, which the app collects at its next start
- * (`take_car_completions` / `ack_car_completions`).
+ * what was actually played (Continue listening, Recent) and of plan chapters and devotionals
+ * that played to their end, from the car or anywhere else, which the app collects as soon as it
+ * hears some are waiting, or at its next start (`take_car_completions` / `ack_car_completions`).
  */
 internal data class CarTrack(
     val readingIndex: Int,
@@ -258,11 +258,9 @@ internal class CarStore(context: Context) {
     }
 
     fun addCompletion(parsed: MediaIds.Parsed.PlanTrack, mediaId: String, at: Long = System.currentTimeMillis()) {
-        val list = completionsArray()
-        val seq = prefs.getLong(KEY_COMPLETION_SEQ, 0L) + 1
-        list.put(
+        appendCompletion(
             JSONObject()
-                .put("seq", seq)
+                .put("kind", "plan")
                 .put("mediaId", mediaId)
                 .put("planId", parsed.planId)
                 .put("planDay", parsed.day)
@@ -271,6 +269,24 @@ internal class CarStore(context: Context) {
                 .put("chapter", parsed.chapter)
                 .put("completedAt", at),
         )
+    }
+
+    /** A devotional heard to the end; [MediaIds.Parsed.Devotional.id] is the app's own id
+     *  ("spurgeon-morning-evening:09-25:m"), which it maps to its completion key. */
+    fun addDevotionalCompletion(parsed: MediaIds.Parsed.Devotional, mediaId: String, at: Long = System.currentTimeMillis()) {
+        appendCompletion(
+            JSONObject()
+                .put("kind", "devotional")
+                .put("mediaId", mediaId)
+                .put("devotionalId", parsed.id)
+                .put("completedAt", at),
+        )
+    }
+
+    private fun appendCompletion(entry: JSONObject) {
+        val list = completionsArray()
+        val seq = prefs.getLong(KEY_COMPLETION_SEQ, 0L) + 1
+        list.put(entry.put("seq", seq))
         // Keep the queue bounded; a year of daily readings is far more than will ever wait.
         val trimmed = JSONArray()
         val from = maxOf(0, list.length() - COMPLETION_LIMIT)

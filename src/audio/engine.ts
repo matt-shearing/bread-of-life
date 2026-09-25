@@ -51,14 +51,17 @@ export interface EngineHandlers {
   onPlay?: () => void;
   onPause?: () => void;
   onLoading?: (loading: boolean) => void;
-  /** Native queue only: the native player advanced to a new playlist index. */
+  /** Native queue only: the native player moved to a new playlist index (by itself or a skip). */
   onIndexChange?: (index: number) => void;
+  /** Native queue only: every index in the current queue that has played to its natural end
+   *  (never one that was skipped). Repeats the whole list each time; the controller dedupes. */
+  onFinished?: (indexes: number[]) => void;
   /** Native only: something outside the app (Android Auto, a voice request, the system's
    *  resume card) loaded a new queue, or the app started while one was already playing. */
   onExternalQueue?: (items: NativeQueueItem[], index: number) => void;
   /** Native only: the speed changed outside the app (the car's speed button). */
   onRate?: (rate: number) => void;
-  /** Native only: plan chapters finished in the car are waiting to be recorded. */
+  /** Native only: plan chapters or devotionals native heard to the end are waiting to be recorded. */
   onPendingCompletions?: (count: number) => void;
 }
 
@@ -198,6 +201,8 @@ class NativeEngine implements AudioEngine {
   private seenNativeGen = -1;
   private adopting = false;
   private rate = 1;
+  /** Length of native's `finished` list last passed on (it only grows within a queue). */
+  private finishedSeen = -1;
 
   constructor() {
     this.ready = (async () => {
@@ -277,9 +282,14 @@ class NativeEngine implements AudioEngine {
       this.wasPlaying = s.isPlaying;
       (s.isPlaying ? this.handlers.onPlay : this.handlers.onPause)?.();
     }
-    // The native player advanced to a new playlist item on its own (background-safe).
-    const index = s.index;
     if (this.adopting) return;
+    // Chapters heard to their end, before the index moves on, so they are marked in order.
+    if (Array.isArray(s.finished) && s.finished.length !== this.finishedSeen) {
+      this.finishedSeen = s.finished.length;
+      this.handlers.onFinished?.(s.finished);
+    }
+    // The native player moved to another playlist item (background-safe).
+    const index = s.index;
     if (typeof index === "number" && index !== this.idx) {
       this.idx = index;
       this.handlers.onIndexChange?.(index);
@@ -301,6 +311,7 @@ class NativeEngine implements AudioEngine {
       );
       if (!q || gen !== this.seenNativeGen || this.queueSwitching) return; // superseded
       this.idx = q.index;
+      this.finishedSeen = -1;
       if (q.items.length) this.handlers.onExternalQueue?.(q.items, q.index);
     } catch {
       /* keep what we had */
@@ -314,6 +325,7 @@ class NativeEngine implements AudioEngine {
     this.dur = 0;
     this.ended = false;
     this.idx = startIndex;
+    this.finishedSeen = -1;
     const gen = ++this.queueGen;
     this.queueSwitching = true;
     const settle = (snapshot?: unknown) => {
@@ -413,8 +425,13 @@ type NativeSnapshot = import("tauri-plugin-native-audio-api").NativeAudioState &
   /** Bumped by every queue change; with `queueOrigin`, tells the app of a car-started queue. */
   queueGeneration?: number;
   queueOrigin?: "app" | "car";
-  /** Plan chapters finished in the car, waiting for the app (take_car_completions). */
+  /** Plan chapters and devotionals native recorded as heard, waiting for the app
+   *  (take_car_completions). */
   pendingCompletions?: number;
+  /** Indexes of the current queue that played to their natural end (Media3's AUTO
+   *  transitions and the end of the playlist); skips never add to it. Reset with each
+   *  queue generation. */
+  finished?: number[];
 };
 
 /** What `desktop_audio_state` reports (see `src-tauri/src/desktop_audio.rs`). */

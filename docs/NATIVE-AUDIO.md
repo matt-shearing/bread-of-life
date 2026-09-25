@@ -113,10 +113,21 @@ and the GrapheneOS set-up are in `docs/MOBILE.md` ("Android Auto").
 - **Queues from the car** go through the session, so the `ForwardingPlayer` sees
   `setMediaItems` and marks the queue `queueOrigin = "car"` with a new `queueGeneration`. The
   app adopts such a queue (`get_queue`) instead of reading its indexes against its own queue,
-  and does not mark anything read from it. Instead, a plan chapter that plays to its end in a
-  car queue is stored natively and collected by the app (`take_car_completions`, then
-  `ack_car_completions` after `setChapterDone`). The progress checkpoint was not reused: it
-  holds one position, and completions need a queue that survives until the app next runs.
+  and does not mark anything read from it.
+- **What was heard.** Only a chapter that plays to its natural end counts. Native tells the two
+  apart by Media3's transition reason: `AUTO` (and the end of the playlist) is heard; `SEEK` is
+  a skip, whether it came from the app, the car's Next or "Next reading", or the lock screen's
+  buttons. Each state event carries `finished`, every index of the current queue generation
+  that ended naturally, so the app marks exactly those (once each), even when a run of them
+  happened while the WebView was frozen and arrives as one late event. Separately, native
+  stores every plan chapter and car devotional (`plan/…`, `dev/…`) that ends naturally,
+  whoever loaded the queue: the app may be gone, frozen, or holding a queue it adopted from the
+  car and then replaced. The app collects them when an event reports `pendingCompletions`, when
+  it returns to the foreground and at start (`take_car_completions`, then `ack_car_completions`
+  after `setChapterDone` / `setDevotionDone`; the "car" in the names is historical). Recording
+  is idempotent, so a chapter the app also marked itself does no harm. The progress checkpoint
+  was not reused: it holds one position, and completions need a queue that survives until the
+  app next runs.
 - **Buttons**: custom session commands for back 30 s, next reading and speed
   (`CarCommands`). Previous/next move a whole chapter when the command comes from Android Auto
   and 10 s otherwise (earphones, lock screen).

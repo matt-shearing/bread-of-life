@@ -46,6 +46,37 @@ export async function renderDeviceSpeech(
   }
 }
 
+let availableCheck: Promise<boolean> | null = null;
+let checkedAt = 0;
+/** Re-ask after a "no" this often: the listener may have gone off to install an engine. */
+const RECHECK_NO_MS = 30_000;
+
+/**
+ * Does this phone have a text-to-speech engine that starts? Some ship none (GrapheneOS, for
+ * one), and then the phone's voice must not be offered. A "yes" is kept for the session.
+ * When the check itself cannot run (an older build without the command), assume yes, as
+ * before; rendering reports a missing voice on its own.
+ */
+export function deviceTtsAvailable(): Promise<boolean> {
+  if (!deviceTtsSupported) return Promise.resolve(false);
+  if (availableCheck && Date.now() - checkedAt < RECHECK_NO_MS) return availableCheck;
+  checkedAt = Date.now();
+  const check = (async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const r = await invoke<{ available: boolean }>("plugin:device-tts|is_available");
+      return r?.available !== false;
+    } catch {
+      return true;
+    }
+  })();
+  availableCheck = check;
+  void check.then((ok) => {
+    if (ok) checkedAt = Number.POSITIVE_INFINITY; // a yes never needs asking again
+  });
+  return check;
+}
+
 /** A file:// URI the native player can open (it cannot read Tauri's asset:// scheme). */
 export function fileUri(path: string): string {
   return `file://${encodeURI(path)}`;

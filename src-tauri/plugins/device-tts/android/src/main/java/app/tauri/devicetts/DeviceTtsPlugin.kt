@@ -2,6 +2,7 @@ package app.tauri.devicetts
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -28,6 +29,8 @@ private const val CACHE_DIR = "device-tts"
 /** Rendered readings kept in the cache; a reading is about 7 MB of 24 kHz WAV. */
 private const val KEEP_FILES = 4
 private const val LEAD_SILENCE_SEC = 0.25
+/** How long `isAvailable` waits for an installed engine to start. */
+private const val AVAILABILITY_TIMEOUT_SEC = 5L
 
 @InvokeArg
 class SegmentArg {
@@ -54,6 +57,9 @@ private data class WavFormat(val channels: Int, val sampleRate: Int, val bitsPer
 }
 
 private class WavData(val format: WavFormat, val bytes: ByteArray)
+
+/** The engine did not say whether it started within the time allowed. */
+private class EngineTimeout : IllegalStateException("The phone's voice took too long to start")
 
 /** One utterance to synthesise and the silence after it. */
 private class Piece(val text: String, val pause: Double)
@@ -95,6 +101,46 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
                 invoke.reject(t.message ?: "Text-to-speech failed")
             }
         }
+    }
+
+    /**
+     * `{}` → `{ available, engines }`: can this phone read aloud? Some phones ship no
+     * text-to-speech engine at all (GrapheneOS, for one), and then Listen must not offer
+     * the phone's voice. First a cheap look for any installed engine (no binding); when there
+     * is one, start it and wait a few seconds for it to say it is ready.
+     */
+    // Kotlin @Command names are camelCase; the JS command is `is_available`.
+    @Command
+    fun isAvailable(invoke: Invoke) {
+        val engines = runCatching {
+            appContext.packageManager
+                .queryIntentServices(Intent(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE), 0)
+                .mapNotNull { it.serviceInfo?.packageName }
+                .distinct()
+        }.getOrDefault(emptyList())
+        if (engines.isEmpty()) {
+            invoke.resolve(availability(false, engines))
+            return
+        }
+        worker.execute {
+            val ok = try {
+                engine(AVAILABILITY_TIMEOUT_SEC)
+                true
+            } catch (_: EngineTimeout) {
+                // Installed but slow to start (the first bind can be): offer it; a real
+                // failure still shows when the reading is rendered.
+                true
+            } catch (t: Throwable) {
+                Log.w(TAG, "no usable text-to-speech engine", t)
+                false
+            }
+            invoke.resolve(availability(ok, engines))
+        }
+    }
+
+    private fun availability(available: Boolean, engines: List<String>) = JSObject().apply {
+        put("available", available)
+        put("engines", org.json.JSONArray(engines))
     }
 
     /* ------------------------------------------------------------------------------ */
@@ -162,7 +208,7 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     /** Start the engine once and wait for it; called on the worker thread. */
-    private fun engine(): TextToSpeech {
+    private fun engine(timeoutSec: Long = 15): TextToSpeech {
         tts?.let { return it }
         val latch = CountDownLatch(1)
         var status = TextToSpeech.ERROR
@@ -171,7 +217,11 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
             status = s
             latch.countDown()
         }
-        if (!latch.await(15, TimeUnit.SECONDS) || status != TextToSpeech.SUCCESS) {
+        if (!latch.await(timeoutSec, TimeUnit.SECONDS)) {
+            engine.shutdown()
+            throw EngineTimeout()
+        }
+        if (status != TextToSpeech.SUCCESS) {
             engine.shutdown()
             throw IllegalStateException("This phone has no text-to-speech voice available")
         }

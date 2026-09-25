@@ -56,18 +56,45 @@ Object.defineProperty(globalThis, "navigator", {
   configurable: true,
 });
 
-/** The native side: a monotonic clock, the playlist index, and a gate on set_queue. */
+/**
+ * The native side: a monotonic clock, the playlist index, the queue generation, the
+ * indexes that finished NATURALLY in this generation (Media3's AUTO transitions and the
+ * end of the playlist; see NativeAudioRuntime.finishedIndexes), and a gate on set_queue.
+ */
 const native = {
   clock: 1000,
   index: 0,
+  gen: 0,
+  finished: [],
   gate: Promise.resolve(),
   snapshot(index = native.index) {
-    return { status: "playing", currentTime: 1, duration: 60, isPlaying: true, buffering: false, rate: 1, index, capturedAtMs: ++native.clock };
+    return {
+      status: "playing", currentTime: 1, duration: 60, isPlaying: true, buffering: false, rate: 1, index,
+      capturedAtMs: ++native.clock, queueGeneration: native.gen, queueOrigin: "app", finished: [...native.finished],
+    };
+  },
+  /** The current chapter ran to its end and ExoPlayer moved on by itself. */
+  advance() {
+    native.finished.push(native.index);
+    native.index++;
+    return native.snapshot();
+  },
+  /** A skip: the car's Next / "Next reading", the lock screen's button, the app's next. */
+  skipTo(i) {
+    native.index = i;
+    return native.snapshot();
+  },
+  /** The last chapter ran to its end: the playlist is over. */
+  end() {
+    native.finished.push(native.index);
+    return { ...native.snapshot(), status: "ended", isPlaying: false };
   },
   async invoke(cmd, args) {
     await native.gate; // the round trip to native takes time
     if (cmd === "plugin:native-audio|set_queue") {
       native.index = args.startIndex;
+      native.gen++;
+      native.finished = [];
       globalThis.__nativeEmit(native.snapshot()); // setQueue() ends with emitState()
       return native.snapshot(); // ...and the command resolves with getState()
     }
@@ -130,7 +157,7 @@ test("jumping back in the queue marks nothing read and lands on the chosen chapt
   assert.ok(c.isCurrentChapter("GEN", 2), "the player shows the chapter jumped to");
 
   // Real advancement after the jump still marks the chapter that finished.
-  globalThis.__nativeEmit(native.snapshot(2));
+  globalThis.__nativeEmit(native.advance());
   assert.deepEqual(marked, [1]);
   c.stop();
 });
@@ -185,8 +212,66 @@ test("a spoken devotional (one file track) is marked complete when the native pl
   assert.equal(setQueueArgs.items[0].title, devo.title);
   globalThis.__nativeEmit(native.snapshot(0));
   assert.deepEqual(done, [], "not complete while playing");
-  globalThis.__nativeEmit({ ...native.snapshot(0), status: "ended", isPlaying: false });
+  globalThis.__nativeEmit(native.end());
   assert.deepEqual(done, [0], "finishing the reading marks it complete");
+  c.stop();
+});
+
+/* ------------------------- skips versus natural advances ------------------------- */
+
+test("the car's Next reading (or the lock screen's) on the app's plan queue marks nothing read", async () => {
+  const marked = [];
+  c.playQueue(tracks, { startIndex: 0, onComplete: (_t, k) => marked.push(k) });
+  await tick();
+  globalThis.__nativeEmit(native.snapshot(0));
+  // 10 s into Genesis 1, NativeAudioRuntime.nextReading() -> exo.seekTo(3, 0): a SEEK transition.
+  globalThis.__nativeEmit(native.skipTo(3));
+  assert.deepEqual(marked, [], "Genesis 1-3 were skipped, not heard");
+  assert.ok(c.isCurrentChapter("GEN", 4), "the mini-player follows the skip");
+  // The car's plain Next (seekToNextMediaItem) is a skip too.
+  globalThis.__nativeEmit(native.skipTo(4));
+  assert.deepEqual(marked, []);
+  // Genesis 5 then plays to its end: that one is heard.
+  globalThis.__nativeEmit(native.advance());
+  assert.deepEqual(marked, [4]);
+  c.stop();
+});
+
+test("a background run of advances and skips, delivered as one late event, marks exactly the chapters heard", async () => {
+  const marked = [];
+  c.playQueue(tracks, { startIndex: 0, onComplete: (_t, k) => marked.push(k) });
+  await tick();
+  globalThis.__nativeEmit(native.snapshot(0));
+  // The WebView is frozen: Genesis 1 and 2 finish, the car skips Genesis 3-4, Genesis 5 finishes.
+  native.advance();
+  native.advance();
+  native.skipTo(4);
+  const last = native.advance();
+  // Only the newest state reaches JS when the app comes back.
+  globalThis.__nativeEmit(last);
+  assert.deepEqual(marked, [0, 1, 4]);
+  assert.ok(c.isCurrentChapter("GEN", 6));
+  // Later events repeat the same list; nothing is marked twice.
+  globalThis.__nativeEmit(native.snapshot());
+  assert.deepEqual(marked, [0, 1, 4]);
+  // The last chapter ends: it is marked once, and the skipped ones still are not.
+  globalThis.__nativeEmit(native.end());
+  globalThis.__nativeEmit({ ...native.snapshot(), status: "ended", isPlaying: false });
+  assert.deepEqual(marked, [0, 1, 4, 5]);
+  c.stop();
+});
+
+test("after a jump, a chapter heard before it is not marked again and the new queue's advances still mark", async () => {
+  const marked = [];
+  c.playQueue(tracks, { startIndex: 0, onComplete: (_t, k) => marked.push(k) });
+  await tick();
+  globalThis.__nativeEmit(native.advance()); // Genesis 1 heard
+  assert.deepEqual(marked, [0]);
+  // Jump to Genesis 4 with ticks from the old queue (carrying its list) still in flight.
+  await jumpWithStaleTicks(3, [1]);
+  assert.deepEqual(marked, [0]);
+  globalThis.__nativeEmit(native.advance()); // Genesis 4 heard
+  assert.deepEqual(marked, [0, 3]);
   c.stop();
 });
 

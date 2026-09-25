@@ -3,8 +3,9 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { devotionalById, getDevotionDay, type DevotionReading } from "@/data/devotional";
 import { setDevotionDone } from "@/db/repos";
 import { buildSpeechScript, type DevotionSlot, type SpeechSegment } from "@/lib/devotionalSpeech";
-import { deviceTtsSupported, fileUri, renderDeviceSpeech } from "@/lib/deviceTts";
+import { deviceTtsAvailable, deviceTtsSupported, fileUri, renderDeviceSpeech } from "@/lib/deviceTts";
 import { playQueue, type Track } from "./controller";
+import { carDevotionalId, devotionDoneId } from "./devotionalIds";
 import { estimateSpeechSeconds, pickVoice, speechSynthesisSupported, speechVoices } from "./speechEngine";
 
 /**
@@ -145,7 +146,8 @@ function useOnline(): boolean {
 let webVoice: Promise<boolean> | null = null;
 /** Can this platform read aloud without a recording? */
 function deviceVoiceAvailable(): Promise<boolean> {
-  if (deviceTtsSupported) return Promise.resolve(true);
+  // Android: only when a text-to-speech engine is installed and starts.
+  if (deviceTtsSupported) return deviceTtsAvailable();
   if (!speechSynthesisSupported()) return Promise.resolve(false);
   // WebKitGTK can expose speechSynthesis with no voices behind it.
   webVoice ??= speechVoices().then((v) => pickVoice(v) != null);
@@ -162,11 +164,13 @@ export async function listenModeFor(day: string, slot: DevotionSlot, entryText: 
   if (await deviceVoiceAvailable()) {
     return { kind: "device", estimateSec: estimateSpeechSeconds(buildSpeechScript(day, slot, { ref, text: entryText })) };
   }
+  // On Android the fix is in the listener's hands: install a text-to-speech engine.
+  const hint = deviceTtsSupported ? " Install a text-to-speech app, such as RHVoice or eSpeak NG from F-Droid, to hear it read aloud." : "";
   return {
     kind: "unavailable",
     reason: online
-      ? "No recording for this day yet, and this device has no voice to read it."
-      : "Needs internet: this device has no voice to read it offline.",
+      ? `No recording for this day yet, and this device has no voice to read it.${hint}`
+      : `Needs internet: this device has no voice to read it offline.${hint}`,
   };
 }
 
@@ -256,7 +260,7 @@ export async function playDevotional({ devotionalId, day, index, reading, mode }
     },
   };
   const subtitle = (voice: string) => [reading.ref, voice].filter(Boolean).join(" · ");
-  const onComplete = () => void setDevotionDone(`${devotionalId}:${day}:${index}`, true);
+  const onComplete = () => void setDevotionDone(devotionDoneId(devotionalId, day, index), true);
 
   if (m.kind === "recording") {
     playQueue([{ ...base, src: m.url, subtitle: subtitle("C. H. Spurgeon") }], { onComplete });
@@ -312,7 +316,7 @@ export async function carDevotionals(now = new Date()): Promise<CarDevotional[]>
     const item = manifest[`${slot}/${day}`];
     if (!item) continue;
     out.push({
-      id: `${SPOKEN_DEVOTIONAL_ID}:${day}:${slot === "morning" ? "m" : "e"}`,
+      id: carDevotionalId(SPOKEN_DEVOTIONAL_ID, day, slot),
       label: slot === "morning" ? "Morning" : "Evening",
       title: devotionalTrackTitle(slot, day),
       subtitle: "C. H. Spurgeon",

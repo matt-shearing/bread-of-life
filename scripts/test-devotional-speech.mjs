@@ -111,3 +111,16 @@ test("long sentences split under the chunk limit", () => {
   for (const c of chunks) assert.ok(c.length <= 280, `chunk of ${c.length}`);
   assert.equal(chunks.join(" "), long);
 });
+
+test("a devotional heard in the car maps back to the app's completion key", async () => {
+  const { carDevotionalId, parseCarDevotionalId, devotionDoneId } = await import(
+    new URL("../src/audio/devotionalIds.ts", import.meta.url).href
+  );
+  const id = carDevotionalId("spurgeon-morning-evening", "09-25", "evening");
+  assert.equal(id, "spurgeon-morning-evening:09-25:e");
+  assert.deepEqual(parseCarDevotionalId(id), { devotionalId: "spurgeon-morning-evening", day: "09-25", slot: "evening" });
+  assert.deepEqual(parseCarDevotionalId("spurgeon-morning-evening:02-29:m")?.slot, "morning");
+  assert.equal(parseCarDevotionalId("spurgeon-morning-evening:09-25"), null);
+  assert.equal(parseCarDevotionalId("ch/JHN/3"), null);
+  assert.equal(devotionDoneId("spurgeon-morning-evening", "09-25", 1), "spurgeon-morning-evening:09-25:1");
+});

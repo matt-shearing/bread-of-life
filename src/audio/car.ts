@@ -8,10 +8,15 @@
  * 1. A snapshot of what the car cannot work out for itself (today's plan day with its
  *    readings and audio, devotional audio, the narrator), pushed with `set_car_snapshot`
  *    whenever any of it changes. Native keeps it in SharedPreferences.
- * 2. Plan chapters that finished while playing from the car. Native queues them; the app
- *    collects them at start and whenever native says some are waiting
- *    (`take_car_completions`), records them exactly as the guided reader does
- *    (`setChapterDone`), then acknowledges them (`ack_car_completions`).
+ * 2. Plan chapters and devotionals that played to their end. Native queues every one,
+ *    whoever loaded the queue (the car, the app, or the app's own earlier session), because
+ *    the app may not be there to hear it: swiped away, frozen in the background, or holding
+ *    a queue it adopted from the car. The app collects them at start, when it comes back to
+ *    the foreground, and whenever a state event says some are waiting
+ *    (`take_car_completions`; the "car" in the command names is historical), records them
+ *    exactly as the guided reader and the Listen button do (`setChapterDone`,
+ *    `setDevotionDone`), then acknowledges them (`ack_car_completions`). Recording is
+ *    idempotent, so a chapter the app also marked itself does no harm.
  *
  * The Bible tree (books, chapters, their URLs) is built natively from the same URL pattern
  * as src/audio/audioUrl.ts, so it needs nothing from here.
@@ -19,12 +24,14 @@
 import { useEffect } from "react";
 import { liveQuery } from "dexie";
 import { db } from "@/db";
-import { setChapterDone } from "@/db/repos";
+import { setChapterDone, setDevotionDone } from "@/db/repos";
 import { getAnyPlan } from "@/data/plans";
+import { devotionalById, getDevotionDay } from "@/data/devotional";
 import { translationById } from "@/data/bible";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { setNativeCompletionsHandler } from "./controller";
+import { devotionDoneId, parseCarDevotionalId } from "./devotionalIds";
 import { chapterAudioUrl, DEFAULT_AUDIO_TRANSLATION, DEFAULT_NARRATOR } from "./audioUrl";
 import { groupDayReadings, groupIndexByReading } from "./readingGroups";
 
@@ -163,38 +170,70 @@ function schedulePush() {
 
 interface NativeCompletion {
   seq: number;
-  planId: string;
-  planDay: number;
-  planReadingIndex: number;
+  /** Absent on entries written before devotionals were recorded: those are plan chapters. */
+  kind?: "plan" | "devotional";
+  planId?: string;
+  planDay?: number;
+  planReadingIndex?: number;
+  /** The car's devotional id, "spurgeon-morning-evening:09-25:m". */
+  devotionalId?: string;
   completedAt: number;
 }
 
-let draining: Promise<void> | null = null;
+/** Record one completion. Idempotent: the same entry recorded twice changes nothing. */
+async function recordCompletion(c: NativeCompletion): Promise<void> {
+  if (c.kind === "devotional") {
+    const car = c.devotionalId ? parseCarDevotionalId(c.devotionalId) : null;
+    if (!car) return;
+    // Its index in the day, found by label (Morning is 0 only when the day has one).
+    const day = await getDevotionDay(devotionalById(car.devotionalId), car.day).catch(() => undefined);
+    const label = car.slot === "morning" ? "Morning" : "Evening";
+    const found = day?.readings.findIndex((r) => r.label === label) ?? -1;
+    const id = devotionDoneId(car.devotionalId, car.day, found >= 0 ? found : car.slot === "morning" ? 0 : 1);
+    // Keep the first completion time if the app already marked it.
+    if (!(await db.devotions.get(id))) await setDevotionDone(id, true);
+    return;
+  }
+  if (c.planId == null || c.planDay == null || c.planReadingIndex == null) return;
+  const plan = await getAnyPlan(c.planId);
+  const total = plan?.days[c.planDay]?.length ?? 0;
+  if (plan && total > 0 && c.planReadingIndex < total) {
+    await setChapterDone(c.planId, c.planDay, c.planReadingIndex, true, total);
+  }
+  // A plan that no longer exists has nothing to record; it is dropped all the same.
+}
 
-/** Record plan chapters finished in the car, then tell native they are safe to forget. */
-export function drainCarCompletions(): Promise<void> {
+let draining: Promise<void> | null = null;
+/** Asked again while a drain was running: run once more after it, for what arrived since. */
+let drainAgain = false;
+
+/** Record what native heard to the end, then tell native those entries are safe to forget. */
+export function drainNativeCompletions(): Promise<void> {
   if (!carSupported) return Promise.resolve();
-  draining ??= (async () => {
+  if (draining) {
+    drainAgain = true;
+    return draining;
+  }
+  draining = (async () => {
     try {
       const call = await invoke();
       const { items } = await call<{ items: NativeCompletion[] }>("plugin:native-audio|take_car_completions");
       if (!items?.length) return;
       let upTo = 0;
       for (const c of items) {
-        const plan = await getAnyPlan(c.planId);
-        const total = plan?.days[c.planDay]?.length ?? 0;
-        if (plan && total > 0 && c.planReadingIndex < total) {
-          await setChapterDone(c.planId, c.planDay, c.planReadingIndex, true, total);
-        }
-        // A plan that no longer exists has nothing to record; drop it all the same.
+        await recordCompletion(c);
         upTo = Math.max(upTo, c.seq);
       }
       await call("plugin:native-audio|ack_car_completions", { upTo });
     } catch (e) {
-      console.warn("car: completions not collected", e);
+      console.warn("audio: completions not collected", e);
     }
   })().finally(() => {
     draining = null;
+    if (drainAgain) {
+      drainAgain = false;
+      void drainNativeCompletions();
+    }
   });
   return draining;
 }
@@ -213,15 +252,15 @@ export function useCarSync(): void {
 
   useEffect(() => {
     if (!carSupported) return;
-    setNativeCompletionsHandler(() => void drainCarCompletions());
-    void drainCarCompletions();
+    setNativeCompletionsHandler(() => void drainNativeCompletions());
+    void drainNativeCompletions();
     const sub = liveQuery(() => db.plans.toArray()).subscribe({
       next: () => schedulePush(),
       error: (e) => console.error("car: plan watch failed", e),
     });
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void drainCarCompletions();
+        void drainNativeCompletions();
         schedulePush();
       }
     };

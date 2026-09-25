@@ -100,14 +100,22 @@ function activate(e: AudioEngine) {
 
 // HTML5: single-advance guard (a native engine drives its own advancement).
 let advancing = false;
-// Native queue: how far through the queue we've marked read (exclusive index).
-let markedUpTo = 0;
+// Native queue: the indexes already reported as heard to the end, so each is marked once.
+let heard = new Set<number>();
 
-/** Mark tracks [markedUpTo, upto) read — the native player has advanced past them. */
-function markThrough(upto: number) {
-  for (let k = markedUpTo; k < upto && k < state.queue.length; k++) {
+/**
+ * Native queue: mark read the tracks native says ran to their end. Only natural ends count:
+ * a skip (the app's jump, the car's Next or "Next reading", the lock screen's buttons)
+ * moves the index without adding to native's list, so reaching a chapter is never taken as
+ * having heard the ones before it. The list covers the whole queue generation, so a run of
+ * chapters that finished while the WebView was frozen arrives complete in one late event.
+ */
+function markHeard(indexes: number[]) {
+  for (const k of indexes) {
+    if (heard.has(k)) continue;
+    heard.add(k);
     const t = state.queue[k];
-    if (onTrackComplete) {
+    if (t && onTrackComplete) {
       try {
         onTrackComplete(t, k); // e.g. mark the plan reading read
       } catch {
@@ -115,7 +123,6 @@ function markThrough(upto: number) {
       }
     }
   }
-  if (upto > markedUpTo) markedUpTo = upto;
 }
 
 /** HTML5 only: mark the current track read + step to the next one. */
@@ -149,6 +156,7 @@ function handlersFor(e: AudioEngine): EngineHandlers {
     onDuration: live(h.onDuration),
     onLoading: live(h.onLoading),
     onIndexChange: live(h.onIndexChange),
+    onFinished: live(h.onFinished),
     onExternalQueue: live(h.onExternalQueue),
     onRate: live(h.onRate),
     onPendingCompletions: live(h.onPendingCompletions),
@@ -171,15 +179,15 @@ const sharedHandlers: EngineHandlers = {
   },
   onDuration: (d) => set({ duration: d }),
   onLoading: (b) => set({ loading: b }),
-  // NATIVE queue: ExoPlayer advanced to the next chapter itself (works in the background;
-  // these events batch and apply when JS resumes if the app was backgrounded). Mark the
-  // chapters we passed read and update the mini-player.
+  // NATIVE queue: the player moved to another chapter, by itself or by a skip (works in the
+  // background; these events batch and apply when JS resumes). Only the mini-player follows;
+  // what was heard arrives separately through onFinished.
   onIndexChange: (index) => {
-    markThrough(index);
     set({ index, currentTime: 0, duration: 0 });
     const t = state.queue[index];
     if (t) setMediaMetadata(t);
   },
+  onFinished: (indexes) => markHeard(indexes),
   // Android Auto (or the system's resume card) loaded a queue the app did not: take it as
   // ours so the mini-player and Now Playing show it. Its plan chapters are recorded by
   // native (they reach the app through take_car_completions), so nothing marks here.
@@ -187,7 +195,7 @@ const sharedHandlers: EngineHandlers = {
     const queue = items.map(trackFromNative);
     onTrackComplete = null;
     advancing = false;
-    markedUpTo = index;
+    heard = new Set();
     set({ queue, index: Math.max(0, Math.min(index, queue.length - 1)), currentTime: 0, duration: 0 });
     const t = queue[index];
     if (t) setMediaMetadata(t);
@@ -196,16 +204,13 @@ const sharedHandlers: EngineHandlers = {
   onPendingCompletions: (count) => onNativeCompletions?.(count),
   onEnded: () => {
     set({ playing: false });
-    if (engine.supportsNativeQueue) {
-      markThrough(state.queue.length); // whole playlist finished — mark the rest read
-    } else {
-      advanceQueue(); // HTML5: one track ended, step forward
-    }
+    // Native: the last track's natural end arrives in onFinished like every other.
+    if (!engine.supportsNativeQueue) advanceQueue(); // HTML5: one track ended, step forward
   },
 };
 mainEngine.handlers = handlersFor(mainEngine);
 
-/** Plan chapters finished in Android Auto are waiting to be recorded (see src/audio/car.ts). */
+/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/car.ts). */
 let onNativeCompletions: ((count: number) => void) | null = null;
 export function setNativeCompletionsHandler(fn: ((count: number) => void) | null) {
   onNativeCompletions = fn;
@@ -327,7 +332,7 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
   set({ queue: tracks });
   activate(engineFor(tracks[start]));
   if (engine.supportsNativeQueue) {
-    markedUpTo = start; // don't mark anything before where we start
+    heard = new Set(); // a new queue: native's list starts empty with it
     set({ index: start, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(tracks[start]);
     engine.loadQueue(tracks.map(toEngineTrack), start);
@@ -378,9 +383,9 @@ export function jumpTo(index: number) {
   if (index < 0 || index >= state.queue.length) return;
   if (engine.supportsNativeQueue) {
     // The native player holds the whole playlist; `load` would replace it with one
-    // track. Re-hand it the same playlist starting at `index` instead, and only mark
-    // chapters read from here on (skipping ahead is not listening).
-    markedUpTo = index;
+    // track. Re-hand it the same playlist starting at `index` instead. Native starts a new
+    // list of chapters heard with it (skipping ahead is not listening).
+    heard = new Set();
     set({ index, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(state.queue[index]);
     engine.loadQueue(state.queue.map(toEngineTrack), index);
@@ -412,7 +417,7 @@ export function stop() {
   if (ms) ms.metadata = null;
   onTrackComplete = null;
   advancing = false;
-  markedUpTo = 0;
+  heard = new Set();
   set({ ...EMPTY, rate: state.rate }); // the chosen speed outlives the queue
 }
 

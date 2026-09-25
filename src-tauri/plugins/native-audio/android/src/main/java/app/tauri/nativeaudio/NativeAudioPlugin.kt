@@ -87,8 +87,17 @@ data class NativeAudioState(
     val queueGeneration: Long = 0,
     /** "app" when the app loaded the queue, "car" when Android Auto (or any other controller) did. */
     val queueOrigin: String = "app",
-    /** Plan chapters finished from the car that the app has not collected yet. */
+    /** Plan chapters and devotionals heard to the end that the app has not collected yet. */
     val pendingCompletions: Int = 0,
+    /**
+     * Indexes of the current queue that played to their NATURAL end (an AUTO transition, or
+     * the end of the playlist), in the order they finished. A skip — the app's next, the car's
+     * Next or "Next reading", the lock screen's buttons — moves the index without adding here,
+     * so the app never takes reaching a chapter as having heard the ones before it. Covers the
+     * whole queue generation, so a run of chapters heard while the WebView was frozen reaches
+     * the app complete in whichever event it sees next.
+     */
+    val finished: List<Int> = emptyList(),
 )
 
 data class NativeAudioProgressCheckpoint(
@@ -197,6 +206,8 @@ object NativeAudioRuntime {
     private var carLibrary: CarLibrary? = null
     private var queueGeneration = 0L
     private var queueOrigin = "app"
+    /** See [NativeAudioState.finished]. Cleared with every new queue. */
+    private val finishedIndexes = LinkedHashSet<Int>()
     /** The item now current, and whether it has actually started playing (for Recent). */
     private var currentItemId: String? = null
     private var recordedStartOf: String? = null
@@ -243,7 +254,10 @@ object NativeAudioRuntime {
                 synchronized(lock) {
                     appContext?.let { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
                     // The last chapter of the queue finished.
-                    player?.currentMediaItem?.let { recordCompletionLocked(it) }
+                    player?.let { p ->
+                        p.currentMediaItem?.let { recordCompletionLocked(it) }
+                        if (p.currentMediaItemIndex >= 0) finishedIndexes.add(p.currentMediaItemIndex)
+                    }
                     persistLastPlayedLocked(force = true)
                 }
             }
@@ -258,11 +272,15 @@ object NativeAudioRuntime {
                 synchronized(lock) { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
             }
             synchronized(lock) {
-                // The chapter before this one ran to its end (not a skip): a plan reading heard.
+                // The chapter before this one ran to its end (not a skip): heard. Every other
+                // reason (SEEK: a skip from anywhere; PLAYLIST_CHANGED: a new queue) is not.
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     val exo = player
-                    val previous = exo?.let { p -> (p.currentMediaItemIndex - 1).takeIf { it >= 0 }?.let { p.getMediaItemAt(it) } }
-                    previous?.let { recordCompletionLocked(it) }
+                    val previousIndex = exo?.let { it.currentMediaItemIndex - 1 }?.takeIf { it >= 0 }
+                    if (exo != null && previousIndex != null && previousIndex < exo.mediaItemCount) {
+                        finishedIndexes.add(previousIndex)
+                        recordCompletionLocked(exo.getMediaItemAt(previousIndex))
+                    }
                 }
                 currentItemId = mediaItem?.mediaId
                 if (player?.isPlaying == true) recordStartLocked()
@@ -929,6 +947,7 @@ object NativeAudioRuntime {
     private fun onAppQueueLocked() {
         queueGeneration++
         queueOrigin = "app"
+        finishedIndexes.clear()
         currentItemId = null
         recordedStartOf = null
     }
@@ -938,6 +957,7 @@ object NativeAudioRuntime {
         synchronized(lock) {
             queueGeneration++
             queueOrigin = "car"
+            finishedIndexes.clear()
             currentStoryId = null
             pendingSeekState = null
             lastError = null
@@ -988,17 +1008,25 @@ object NativeAudioRuntime {
     }
 
     /**
-     * A chapter finished. When the queue came from the car, the app did not load it and will not
-     * hear about it, so a plan reading is queued here for the app to record at its next start.
+     * An item played to its end. A plan chapter or a devotional is queued here for the app to
+     * record, whoever loaded the queue: the app may be gone (swiped away, the activity destroyed
+     * while the service plays on), frozen in the background, or looking after a queue it adopted
+     * from the car and has since replaced. The app records each one idempotently, so one it also
+     * marked itself does no harm. It collects them when a state event says some are waiting
+     * (every event carries the count) and at its next start.
      */
     private fun recordCompletionLocked(item: MediaItem) {
-        if (queueOrigin != "car") return
-        val parsed = MediaIds.parse(item.mediaId) as? MediaIds.Parsed.PlanTrack ?: return
         val store = carLibrary?.store ?: return
-        store.addCompletion(parsed, item.mediaId)
-        store.markTodayTrackDone(parsed.planId, parsed.day, parsed.readingIndex)
+        when (val parsed = MediaIds.parse(item.mediaId)) {
+            is MediaIds.Parsed.PlanTrack -> {
+                store.addCompletion(parsed, item.mediaId)
+                store.markTodayTrackDone(parsed.planId, parsed.day, parsed.readingIndex)
+                notifyLibraryChanged(MediaIds.TAB_TODAY)
+            }
+            is MediaIds.Parsed.Devotional -> store.addDevotionalCompletion(parsed, item.mediaId)
+            else -> return
+        }
         debugLog("queue", "completed ${item.mediaId} (for the app)")
-        notifyLibraryChanged(MediaIds.TAB_TODAY)
     }
 
     private fun notifyLibraryChanged(parentId: String) {
@@ -1155,6 +1183,7 @@ object NativeAudioRuntime {
             queueGeneration = queueGeneration,
             queueOrigin = queueOrigin,
             pendingCompletions = carLibrary?.store?.pendingCompletionCount() ?: 0,
+            finished = finishedIndexes.toList(),
         )
     }
 
@@ -1383,7 +1412,8 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
             .onFailure { invoke.reject(it.message ?: "setCarSnapshot failed") }
     }
 
-    /** Plan chapters finished while playing from the car, oldest first. Kept until acknowledged. */
+    /** Plan chapters and devotionals heard to the end, oldest first, whatever loaded the queue
+     *  (the "car" in the name is historical). Kept until acknowledged. */
     @Command
     fun takeCarCompletions(invoke: Invoke) {
         runCatching { NativeAudioRuntime.carCompletions(activity.applicationContext) }
@@ -1469,6 +1499,7 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         payload.put("queueGeneration", state.queueGeneration)
         payload.put("queueOrigin", state.queueOrigin)
         payload.put("pendingCompletions", state.pendingCompletions)
+        payload.put("finished", org.json.JSONArray(state.finished))
         if (!state.error.isNullOrBlank()) payload.put("error", state.error)
         return payload
     }
