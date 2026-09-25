@@ -189,3 +189,73 @@ test("a spoken devotional (one file track) is marked complete when the native pl
   assert.deepEqual(done, [0], "finishing the reading marks it complete");
   c.stop();
 });
+
+/* --------------------------------- Android Auto --------------------------------- */
+
+test("the app's queue tells native each chapter's media id and reading group", async () => {
+  const sent = [];
+  const orig = native.invoke;
+  native.invoke = async (cmd, args) => {
+    if (cmd === "plugin:native-audio|set_queue") sent.push(args);
+    return orig(cmd, args);
+  };
+  const day = [
+    { ho: "GEN", chapter: 1, src: "https://audio.bible.helloao.org/api/BSB/GEN/1/audio/david.mp3", title: "Genesis 1", subtitle: "BSB", planId: "soul-food", planDay: 4, planReadingIndex: 0, readingGroup: 0 },
+    { ho: "MAT", chapter: 1, src: "https://audio.bible.helloao.org/api/BSB/MAT/1/audio/david.mp3", title: "Matthew 1", subtitle: "BSB", planId: "soul-food", planDay: 4, planReadingIndex: 1, readingGroup: 1 },
+    { ho: "JHN", chapter: 3, src: "https://audio.bible.helloao.org/api/BSB/JHN/3/audio/david.mp3", title: "John 3", subtitle: "BSB" },
+    { ho: "JHN", chapter: 3, src: "/missler/john.mp3#t=120", title: "Missler", subtitle: "Missler Inspired" },
+  ];
+  c.playQueue(day, { startIndex: 0 });
+  await tick();
+  native.invoke = orig;
+  const items = sent[0].items;
+  assert.equal(items[0].mediaId, "plan/soul-food/4/0/GEN/1");
+  assert.equal(items[0].group, 0);
+  assert.equal(items[1].mediaId, "plan/soul-food/4/1/MAT/1");
+  assert.equal(items[1].group, 1);
+  assert.equal(items[2].mediaId, "ch/JHN/3");
+  assert.equal(items[3].mediaId, undefined, "Missler audio is not a Bible chapter");
+  c.stop();
+});
+
+test("a queue started from the car is adopted, and marks nothing in the app's queue", async () => {
+  const marked = [];
+  c.playQueue(tracks, { startIndex: 0, onComplete: (_t, k) => marked.push(k) });
+  await tick();
+  globalThis.__nativeEmit(native.snapshot(0));
+
+  // The car plays John 3 onwards: native swaps the queue and reports it as "car".
+  const carQueue = [3, 4, 5].map((ch) => ({
+    mediaId: `ch/JHN/${ch}`,
+    src: `https://audio.bible.helloao.org/api/BSB/JHN/${ch}/audio/david.mp3`,
+    title: `John ${ch}`,
+    subtitle: "Berean Standard Bible · David",
+    ho: "JHN",
+    chapter: ch,
+  }));
+  const orig = native.invoke;
+  native.invoke = async (cmd, args) => {
+    if (cmd === "plugin:native-audio|get_queue") return { items: carQueue, index: 1, queueGeneration: 99, queueOrigin: "car" };
+    return orig(cmd, args);
+  };
+  // Its index (1) must not be read as "the day's queue advanced past Genesis 1".
+  globalThis.__nativeEmit({ ...native.snapshot(1), queueGeneration: 99, queueOrigin: "car" });
+  await tick();
+  assert.deepEqual(marked, [], "nothing in the old queue was listened to");
+  assert.ok(c.isCurrentChapter("JHN", 4), "the mini-player shows the car's chapter");
+
+  // The car's queue advancing later marks nothing either: native records plan chapters itself.
+  globalThis.__nativeEmit({ ...native.snapshot(2), queueGeneration: 99, queueOrigin: "car" });
+  assert.deepEqual(marked, []);
+  assert.ok(c.isCurrentChapter("JHN", 5));
+  native.invoke = orig;
+  c.stop();
+});
+
+test("native saying car completions are waiting reaches the handler", async () => {
+  let seen = 0;
+  c.setNativeCompletionsHandler((n) => (seen = n));
+  globalThis.__nativeEmit({ ...native.snapshot(0), pendingCompletions: 2 });
+  assert.equal(seen, 2);
+  c.setNativeCompletionsHandler(null);
+});

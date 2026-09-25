@@ -14,6 +14,7 @@
     "verify:plans": "node scripts/verify-plans.mjs",
     "test:reminders": "node scripts/test-reading-reminders.mjs",
     "test:devotional-speech": "node scripts/test-devotional-speech.mjs",
+    "test:audio-url": "node --test-reporter=spec scripts/test-audio-url.mjs",
     "test:audio": "node --test-reporter=spec scripts/test-audio-queue.mjs",
     "build:crossrefs": "node scripts/build-crossrefs.mjs",
     "build:strongs": "node scripts/build-strongs.mjs",

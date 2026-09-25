@@ -1,3 +1,4 @@
+import type { CarDevotional } from "./car";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { devotionalById, getDevotionDay, type DevotionReading } from "@/data/devotional";
 import { setDevotionDone } from "@/db/repos";
@@ -293,4 +294,30 @@ export function formatListenDuration(mode: ListenMode): string {
   }
   if (mode.kind === "device") return `about ${Math.max(1, Math.round(mode.estimateSec / 60))} min`;
   return "";
+}
+
+/* -------------------------------- Android Auto -------------------------------- */
+
+/**
+ * Today's Morning and Evening recordings for the car's Devotional tab. Only recordings:
+ * the phone's-voice fallback needs the app to render a file first, which the car can't
+ * ask for. Empty until the manifest has been reached once, so the tab stays hidden.
+ */
+export async function carDevotionals(now = new Date()): Promise<CarDevotional[]> {
+  const manifest = await loadDevotionalManifest();
+  if (!manifest) return [];
+  const day = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const out: CarDevotional[] = [];
+  for (const slot of ["morning", "evening"] as const) {
+    const item = manifest[`${slot}/${day}`];
+    if (!item) continue;
+    out.push({
+      id: `${SPOKEN_DEVOTIONAL_ID}:${day}:${slot === "morning" ? "m" : "e"}`,
+      label: slot === "morning" ? "Morning" : "Evening",
+      title: devotionalTrackTitle(slot, day),
+      subtitle: "C. H. Spurgeon",
+      src: `${DEVOTIONAL_AUDIO_BASE}/${item.path}`,
+    });
+  }
+  return out;
 }

@@ -7,6 +7,8 @@ import { NowPlaying } from "@/components/audio/NowPlaying";
 import { useUI } from "@/store/ui";
 import { useAutoTheme } from "@/lib/useAutoTheme";
 import { useReadingReminders } from "@/lib/useReadingReminders";
+import { registerCarDevotionalSource, useCarSync } from "@/audio/car";
+import { carDevotionals } from "@/audio/devotionalAudio";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import {
@@ -52,6 +54,13 @@ export function AppShell() {
   // Daily-reading reminders: re-planned on start, return to the app, completion
   // (here or synced in) and settings changes; in-app checks on desktop/browser.
   useReadingReminders();
+
+  // Android Auto: keep the car's Today tab current and collect chapters finished in the car.
+  useCarSync();
+  useEffect(() => {
+    registerCarDevotionalSource(() => carDevotionals());
+    return () => registerCarDevotionalSource(null);
+  }, []);
 
   useEffect(() => {
     maybeNotifyPrayers(notifyPrayers);

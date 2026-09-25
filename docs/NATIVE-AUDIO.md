@@ -90,3 +90,41 @@ after `adb shell setprop log.tag.BoLAudio DEBUG`.
 **Tests.** `src-tauri/plugins/native-audio/android/src/test/.../HeadsetResumeTest.kt`
 (Robolectric) drives the real Media3 service with earphone-button intents. CI runs it after
 the APK build in `.github/workflows/android.yml`.
+
+## Android Auto (2026-09)
+
+The service is a Media3 `MediaLibraryService`, and the one session is a `MediaLibrarySession`,
+so Android Auto can browse the app and play from it without the app open. User-facing steps
+and the GrapheneOS set-up are in `docs/MOBILE.md` ("Android Auto").
+
+- **Declarations** (plugin `AndroidManifest.xml`, merged into the app): the
+  `com.google.android.gms.car.application` meta-data pointing at `res/xml/automotive_app_desc.xml`
+  (`<uses name="media"/>`); the service exported with the `MediaLibraryService`,
+  `MediaSessionService` and `android.media.browse.MediaBrowserService` actions; and
+  `CarArtworkProvider`. CI checks each of these in the built APK with `aapt`.
+- **Browse tree** (`CarLibrary.kt`): Today, Bible, Devotional (only when there is audio),
+  Recent. Media ids describe themselves (`ch/JHN/3`, `plan/<plan>/<day>/<reading>/<book>/<chapter>`,
+  `dev/<id>`), so any id can be turned back into a queue (`MediaIds` in `CarData.kt`).
+- **Data without the app**: the Bible comes from `BibleCatalog.kt` (books, chapter counts, and
+  the narration URL pattern shared with `src/audio/audioUrl.ts`; both are tested against
+  `src/audio/audio-url-cases.json`). Today and Devotional come from a snapshot the app pushes
+  (`set_car_snapshot`, built in `src/audio/car.ts`), kept in SharedPreferences. Recent and
+  Continue listening are recorded natively from what actually played.
+- **Queues from the car** go through the session, so the `ForwardingPlayer` sees
+  `setMediaItems` and marks the queue `queueOrigin = "car"` with a new `queueGeneration`. The
+  app adopts such a queue (`get_queue`) instead of reading its indexes against its own queue,
+  and does not mark anything read from it. Instead, a plan chapter that plays to its end in a
+  car queue is stored natively and collected by the app (`take_car_completions`, then
+  `ack_car_completions` after `setChapterDone`). The progress checkpoint was not reused: it
+  holds one position, and completions need a queue that survives until the app next runs.
+- **Buttons**: custom session commands for back 30 s, next reading and speed
+  (`CarCommands`). Previous/next move a whole chapter when the command comes from Android Auto
+  and 10 s otherwise (earphones, lock screen).
+- **Voice**: `onSetMediaItems` receives the search query; `RefParser.kt` reads book names,
+  abbreviations, spoken ordinals and number words. "Resume" goes to `onPlaybackResumption`.
+- **Artwork**: amber tiles drawn natively and cached, served from
+  `content://<app id>.nativeaudio.artwork/...`. Tab icons are vector drawables.
+
+**Tests.** `AndroidAutoTest.kt` connects a Media3 `MediaBrowser` to the real session and
+browses, plays, searches and presses the custom buttons. `CarArtworkSamplesTest.kt` writes
+sample tiles to `build/car-artwork-samples/` (uploaded by CI).
