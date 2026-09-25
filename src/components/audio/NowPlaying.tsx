@@ -47,8 +47,9 @@ import { cn } from "@/lib/cn";
 
 /**
  * Now Playing — the full view behind the mini-player. A full-screen sheet on a phone
- * (swipe it down, press back, or tap the chevron to close) and a centred two-column
- * panel on a wider screen.
+ * (one column) and on a fold's unfolded inner screen or a small tablet (two columns:
+ * player beside the day's list); swipe it down, press back, or tap the chevron to
+ * close. On a large screen it is a centred panel over the dimmed page.
  *
  * It is an overlay, not a route. Opening it pushes `?np=1` onto the CURRENT location,
  * so the Android back button and browser back close it, while the page underneath
@@ -84,6 +85,14 @@ function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** Below `lg` the player is a full-screen sheet (phones, and a fold's near-square inner
+ *  screen, where a dimmed page around a floating panel only wastes room); from `lg` up
+ *  it is a floating panel. The sheet swipes down to close. */
+function isSheetLayout(): boolean {
+  return typeof window !== "undefined" && !window.matchMedia?.("(min-width: 1024px)").matches;
+}
+
+/** Below `md` the player and the list share one scroller (single column). */
 function isPhoneWidth(): boolean {
   return typeof window !== "undefined" && !window.matchMedia?.("(min-width: 768px)").matches;
 }
@@ -178,14 +187,14 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
 
   return (
     <div
-      className="fixed inset-0 z-40 md:flex md:items-center md:justify-center md:p-8"
+      className="fixed inset-0 z-40 lg:flex lg:items-center lg:justify-center lg:p-8"
       role="dialog"
       aria-modal="true"
       aria-label={`Now playing: ${track.title}`}
     >
       {/* Backdrop — only visible (and clickable) around the desktop panel. */}
       <div
-        className="absolute inset-0 hidden bg-black/40 backdrop-blur-sm motion-safe:animate-fade-in md:block"
+        className="absolute inset-0 hidden bg-black/40 backdrop-blur-sm motion-safe:animate-fade-in lg:block"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -194,9 +203,9 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
         ref={drag.sheetRef}
         className={cn(
           "relative flex h-full w-full flex-col overflow-hidden bg-background",
-          "motion-safe:animate-sheet-up md:motion-safe:animate-panel-in",
-          "md:h-[min(720px,calc(100dvh-4rem))] md:rounded-2xl md:border md:border-border md:shadow-2xl",
-          hasList ? "md:max-w-5xl" : "md:max-w-md",
+          "motion-safe:animate-sheet-up lg:motion-safe:animate-panel-in",
+          "lg:h-[min(720px,calc(100dvh-4rem))] lg:rounded-2xl lg:border lg:border-border lg:shadow-2xl",
+          hasList ? "lg:max-w-5xl" : "lg:max-w-md",
         )}
       >
         {/* Warm amber glow from the top — the app's primary, nothing new. */}
@@ -207,10 +216,10 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
 
         {/* Top bar: the grab handle + close. Dragging here pulls the sheet down. */}
         <div
-          className="relative shrink-0 touch-none select-none px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] md:touch-auto md:pt-3"
+          className="relative shrink-0 touch-none select-none px-3 pt-[calc(env(safe-area-inset-top)+0.5rem)] lg:touch-auto lg:pt-3"
           {...drag.handleProps}
         >
-          <div className="mx-auto mb-1 h-1.5 w-10 rounded-full bg-muted-foreground/30 md:hidden" aria-hidden="true" />
+          <div className="mx-auto mb-1 h-1.5 w-10 rounded-full bg-muted-foreground/30 lg:hidden" aria-hidden="true" />
           <div className="flex items-center gap-2">
             <button
               ref={closeRef}
@@ -218,8 +227,8 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
               aria-label="Close Now Playing"
               className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <ChevronDown className="md:hidden" style={{ width: 24, height: 24 }} />
-              <X className="hidden md:block" style={{ width: 20, height: 20 }} />
+              <ChevronDown className="lg:hidden" style={{ width: 24, height: 24 }} />
+              <X className="hidden lg:block" style={{ width: 20, height: 20 }} />
             </button>
             <div className="min-w-0 flex-1 text-center">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-700 dark:text-primary-300">
@@ -242,7 +251,7 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
           data-np-scroll
           className={cn(
             "relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[calc(env(safe-area-inset-bottom)+1rem)]",
-            hasList && "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:overflow-hidden md:pb-0",
+            hasList && "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:overflow-hidden lg:pb-0",
           )}
         >
           {/* ------------------------------- player ------------------------------ */}
@@ -343,7 +352,7 @@ function Cover({
 } & HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className="relative aspect-square w-full max-w-[clamp(7.5rem,calc(100dvh-26rem),18rem)] touch-none select-none md:max-w-[18rem] md:touch-auto"
+      className="relative aspect-square w-full max-w-[clamp(7.5rem,calc(100dvh-26rem),18rem)] touch-none select-none md:max-w-[clamp(10rem,calc(100dvh-25rem),22rem)] lg:max-w-[18rem] lg:touch-auto"
       {...rest}
     >
       <div
@@ -855,9 +864,9 @@ function useScrollCurrentIntoView(key: unknown) {
 }
 
 /**
- * Swipe-down-to-close for the phone sheet. Drag from the top bar or the cover; let go
+ * Swipe-down-to-close for the full-screen sheet (phone or unfolded fold). Drag from the top bar or the cover; let go
  * past ~a fifth of the screen (or with a quick flick) and the sheet closes, otherwise
- * it springs back. Off on wider screens, where the panel is a centred dialog.
+ * it springs back. Off from `lg` up, where the player is a centred panel.
  */
 function useSwipeDown(onClose: () => void) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -873,7 +882,7 @@ function useSwipeDown(onClose: () => void) {
 
   const handleProps = {
     onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
-      if (!isPhoneWidth() || (e.target as HTMLElement).closest("button")) return;
+      if (!isSheetLayout() || (e.target as HTMLElement).closest("button")) return;
       start.current = { y: e.clientY, t: performance.now(), id: e.pointerId };
       dy.current = 0;
       e.currentTarget.setPointerCapture(e.pointerId);
