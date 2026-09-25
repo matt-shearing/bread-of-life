@@ -1,0 +1,4 @@
+# Python dependencies for scripts/build-devotional-audio.py (install into a venv, not system Python).
+kokoro-onnx==0.6.1
+onnxruntime==1.30.0
+soundfile>=0.12

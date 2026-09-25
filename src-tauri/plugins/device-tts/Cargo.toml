@@ -1,0 +1,19 @@
+[package]
+name = "tauri-plugin-device-tts"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+build = "build.rs"
+links = "tauri-plugin-device-tts"
+description = "Android text-to-speech rendered to a WAV file, for Bread of Life's spoken devotionals when no recording is available"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "tauri_plugin_device_tts"
+path = "src/lib.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

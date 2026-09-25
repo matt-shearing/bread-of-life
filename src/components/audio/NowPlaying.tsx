@@ -23,6 +23,8 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
+  Sunrise,
+  Sunset,
   X,
 } from "lucide-react";
 import {
@@ -38,6 +40,8 @@ import {
   type Track,
 } from "@/audio/controller";
 import { groupDayReadings, type ReadingGroup } from "@/audio/readingGroups";
+import { playDevotionalReading } from "@/audio/devotionalAudio";
+import { mmdd } from "@/data/devotional";
 import { getAnyPlan, type Plan } from "@/data/plans";
 import { db } from "@/db";
 import { bookByHo, refRange } from "@/lib/osis";
@@ -133,7 +137,8 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
   const goTo = useUI((s) => s.goTo);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const isDay = track.planId != null && track.planDay != null;
+  const devo = track.devotional;
+  const isDay = !devo && track.planId != null && track.planDay != null;
   const day = useDayReadings(isDay ? track.planId! : null, isDay ? track.planDay! : null);
 
   // Escape closes; focus lands on the close control and returns on the way out.
@@ -169,7 +174,9 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
   }, [isDay, queue, index, track]);
 
   function openInReader() {
-    if (isDay) {
+    if (devo) {
+      navigate(`/devotional?day=${devo.day}&r=${devo.index}`, { replace: true });
+    } else if (isDay) {
       const r = track.planReadingIndex != null ? `?reading=${track.planReadingIndex}` : "";
       navigate(`/guided/${track.planId}/${track.planDay}${r}`, { replace: true });
     } else {
@@ -180,9 +187,13 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
 
   const book = bookByHo(track.ho);
   const group = day.groups?.[track.readingGroup ?? -1];
-  const context = isDay
-    ? [day.plan?.name, `Day ${(track.planDay ?? 0) + 1}`].filter(Boolean).join(" · ")
-    : track.subtitle;
+  const context = devo
+    ? "Morning and Evening · C. H. Spurgeon"
+    : isDay
+      ? [day.plan?.name, `Day ${(track.planDay ?? 0) + 1}`].filter(Boolean).join(" · ")
+      : track.subtitle;
+  // While today's Morning reading plays, offer the Evening one (nothing more: no list).
+  const eveningLater = devo?.slot === "morning" && devo.day === mmdd();
   const hasList = isDay ? (day.groups?.length ?? 0) > 0 : queue.length > 1;
 
   return (
@@ -232,14 +243,14 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
             </button>
             <div className="min-w-0 flex-1 text-center">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-700 dark:text-primary-300">
-                {isDay ? "Daily reading" : "Now playing"}
+                {devo ? `${devo.slot === "morning" ? "Morning" : "Evening"} devotional` : isDay ? "Daily reading" : "Now playing"}
               </div>
               <div className="truncate text-xs text-muted-foreground">{context}</div>
             </div>
             <button
               onClick={openInReader}
-              aria-label={isDay ? "Open today's reading" : `Open ${track.title} in the Bible`}
-              title={isDay ? "Open today's reading" : "Open in the Bible"}
+              aria-label={devo ? "Open the devotional" : isDay ? "Open today's reading" : `Open ${track.title} in the Bible`}
+              title={devo ? "Open the devotional" : isDay ? "Open today's reading" : "Open in the Bible"}
               className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <BookOpen style={{ width: 20, height: 20 }} />
@@ -256,13 +267,17 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
         >
           {/* ------------------------------- player ------------------------------ */}
           <section className="flex flex-col items-center px-6 pb-6 pt-2 md:justify-center md:overflow-y-auto md:px-10 md:py-8">
-            <Cover
-              bookName={book?.name ?? track.ho}
-              chapter={track.chapter}
-              kicker={group?.kicker ?? (book?.testament === "NT" ? "New Testament" : "Old Testament")}
-              playing={playing}
-              {...drag.handleProps}
-            />
+            {devo ? (
+              <DevotionalCover slot={devo.slot} day={devo.day} reference={devo.ref} playing={playing} {...drag.handleProps} />
+            ) : (
+              <Cover
+                bookName={book?.name ?? track.ho}
+                chapter={track.chapter}
+                kicker={group?.kicker ?? (book?.testament === "NT" ? "New Testament" : "Old Testament")}
+                playing={playing}
+                {...drag.handleProps}
+              />
+            )}
 
             <div className="mt-6 w-full max-w-sm text-center">
               <h2 className="font-serif text-2xl font-bold leading-tight">{track.title}</h2>
@@ -306,6 +321,15 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
             {/* Secondary: speed + next reading */}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               {canSetRate && <SpeedControl />}
+              {eveningLater && (
+                <button
+                  onClick={() => void playDevotionalReading(devo.devotionalId, devo.day, 1)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card/70 px-3.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Sunset style={{ width: 16, height: 16 }} className="text-primary-600 dark:text-primary-400" />
+                  Later today: Evening
+                </button>
+              )}
               {isDay && (
                 <button
                   onClick={() => nextReadingIndex >= 0 && jumpTo(nextReadingIndex)}
@@ -376,6 +400,59 @@ function Cover({
           {chapter}
         </div>
         <div className="mt-3 h-4">{playing && <EqBars className="text-primary-600 dark:text-primary-400" />}</div>
+      </div>
+    </div>
+  );
+}
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** The devotional's "artwork": sunrise or sunset, the date, and the key reference. */
+function DevotionalCover({
+  slot,
+  day,
+  reference,
+  playing,
+  ...rest
+}: {
+  slot: "morning" | "evening";
+  day: string;
+  reference: string;
+  playing: boolean;
+} & HTMLAttributes<HTMLDivElement>) {
+  const [m, d] = day.split("-").map(Number);
+  const Icon = slot === "morning" ? Sunrise : Sunset;
+  return (
+    <div
+      className="relative aspect-square w-full max-w-[clamp(7.5rem,calc(100dvh-26rem),18rem)] touch-none select-none md:max-w-[clamp(10rem,calc(100dvh-25rem),22rem)] lg:max-w-[18rem] lg:touch-auto"
+      {...rest}
+    >
+      <div
+        className={cn(
+          "absolute inset-0 rounded-[28px] bg-primary/25 blur-2xl transition-opacity duration-700 dark:bg-primary/20",
+          playing ? "opacity-100" : "opacity-40",
+        )}
+        aria-hidden="true"
+      />
+      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[28px] border border-primary-200/70 bg-gradient-to-br from-primary-50 via-primary-100 to-primary-200 text-primary-900 shadow-xl dark:border-primary-500/20 dark:from-[hsl(30_22%_17%)] dark:via-[hsl(28_20%_14%)] dark:to-[hsl(26_18%_11%)] dark:text-primary-100">
+        <Icon
+          className="absolute -bottom-6 -right-6 text-primary-600/10 dark:text-primary-300/10"
+          style={{ width: 150, height: 150 }}
+          aria-hidden="true"
+        />
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-700/80 dark:text-primary-300/80">
+          <Icon style={{ width: 14, height: 14 }} aria-hidden="true" />
+          {slot === "morning" ? "Morning" : "Evening"}
+        </div>
+        <div className="mt-1 font-serif text-[5.5rem] font-bold leading-none tabular-nums text-primary-700 dark:text-primary-400">
+          {d}
+        </div>
+        <div className="font-serif text-xl font-bold leading-tight">{MONTHS[m - 1]}</div>
+        {reference && <div className="mt-1 px-4 text-center text-sm text-primary-800/80 dark:text-primary-200/80">{reference}</div>}
+        <div className="mt-2 h-4">{playing && <EqBars className="text-primary-600 dark:text-primary-400" />}</div>
       </div>
     </div>
   );

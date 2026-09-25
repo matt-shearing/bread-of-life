@@ -41,8 +41,9 @@ const STUBS = {
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier in STUBS) return { url: STUBS[specifier], shortCircuit: true };
-    if (specifier === "./engine" && context.parentURL?.endsWith("/src/audio/controller.ts")) {
-      return next("./engine.ts", context);
+    // The audio sources import their siblings without an extension, as Vite allows.
+    if (/^\.\/\w+$/.test(specifier) && context.parentURL?.includes("/src/audio/")) {
+      return next(`${specifier}.ts`, context);
     }
     return next(specifier, context);
   },
@@ -158,5 +159,33 @@ test("rapid jumps: only the newest set_queue's answer is applied", async () => {
   native.gate = Promise.resolve();
   assert.ok(c.isCurrentChapter("GEN", 3), "ends on the last chapter chosen");
   assert.deepEqual(marked, []);
+  c.stop();
+});
+
+test("a spoken devotional (one file track) is marked complete when the native player ends", async () => {
+  const done = [];
+  const devo = {
+    ho: "",
+    chapter: 0,
+    src: "file:///data/user/0/app/cache/device-tts/morning-09-25-abc.wav",
+    title: "Morning — 25 September · Spurgeon",
+    subtitle: "Romans 3:26 · Phone's voice",
+    devotional: { devotionalId: "spurgeon-morning-evening", day: "09-25", slot: "morning", index: 0, ref: "Romans 3:26", voice: "device" },
+  };
+  let setQueueArgs = null;
+  const invoke = native.invoke;
+  native.invoke = async (cmd, args) => {
+    if (cmd === "plugin:native-audio|set_queue") setQueueArgs = args;
+    return invoke(cmd, args);
+  };
+  c.playQueue([devo], { onComplete: (t) => done.push(t.devotional.index) });
+  await tick();
+  native.invoke = invoke;
+  assert.equal(setQueueArgs.items[0].src, devo.src, "the file:// URI goes to the native queue untouched");
+  assert.equal(setQueueArgs.items[0].title, devo.title);
+  globalThis.__nativeEmit(native.snapshot(0));
+  assert.deepEqual(done, [], "not complete while playing");
+  globalThis.__nativeEmit({ ...native.snapshot(0), status: "ended", isPlaying: false });
+  assert.deepEqual(done, [0], "finishing the reading marks it complete");
   c.stop();
 });
