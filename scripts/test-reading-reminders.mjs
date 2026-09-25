@@ -106,9 +106,9 @@ test(`[${TZ}] a streak of one day is not mentioned; no estimate means no length`
 });
 
 test(`[${TZ}] after 2 pm, not done: the 2 pm one is left in the shade, 8 pm still comes`, () => {
-  const s = state({ now: at(2026, 9, 25, 15, 0) });
-  const { schedule, cancel } = planReadingReminders(s);
   const two = reminderId("2026-09-25", 0);
+  const s = state({ now: at(2026, 9, 25, 15, 0), delivered: new Set([two]) });
+  const { schedule, cancel } = planReadingReminders(s);
   const eight = reminderId("2026-09-25", 1);
   assert.equal(`${schedule[0].dayKey} ${hhmm(schedule[0].at)}`, "2026-09-25 20:00");
   assert.equal(schedule[0].id, eight);
@@ -126,7 +126,7 @@ test(`[${TZ}] reading done at 3 pm: today's remaining reminder is cancelled, tom
   assert.deepEqual(tomorrow.map((r) => hhmm(r.at)), ["14:00", "20:00"]);
   assert.equal(tomorrow[0].title, "Keep your 13-day streak going");
   // Two days out, the streak is not known: no streak line.
-  const later = schedule.find((r) => r.dayKey === "2026-09-27");
+  const later = planReadingReminders({ ...s, windowDays: 3 }).schedule.find((r) => r.dayKey === "2026-09-27");
   assert.equal(later.title, "Today’s reading");
   assert.equal(schedule.length, 2 * (READING_WINDOW_DAYS - 1));
 });
@@ -138,7 +138,7 @@ test(`[${TZ}] done in the morning before any reminder: no reminders today at all
 });
 
 test(`[${TZ}] after 8 pm, not done: nothing new today, both of today's kept`, () => {
-  const s = state({ now: at(2026, 9, 25, 21, 0) });
+  const s = state({ now: at(2026, 9, 25, 21, 0), delivered: new Set([reminderId("2026-09-25", 0), reminderId("2026-09-25", 1)]) });
   const { schedule, cancel } = planReadingReminders(s);
   assert.equal(schedule[0].dayKey, "2026-09-26");
   assert.ok(!cancel.includes(reminderId("2026-09-25", 0)));
@@ -218,7 +218,7 @@ test(`[${TZ}] reminders are at LOCAL clock times on LOCAL days`, () => {
 
 test(`[${TZ}] across a daylight-saving change the reminders keep their clock time`, () => {
   // New York leaves daylight saving on 1 Nov 2026; Perth has none. Either way: 14:00 and 20:00.
-  const s = state({ now: at(2026, 10, 30, 9, 0) });
+  const s = state({ now: at(2026, 10, 30, 9, 0), windowDays: 7 });
   const { schedule } = planReadingReminders(s);
   assert.ok(schedule.every((r) => ["14:00", "20:00"].includes(hhmm(r.at))));
   assert.deepEqual(
@@ -353,4 +353,143 @@ test(`[${TZ}] a tap opens the right screen, warm or cold, reading or older remin
   assert.equal(deepLinkFor({ extra: { deepLink: "/memory" } }, byId), "/memory");
   assert.equal(deepLinkFor({ actionId: "tap", notification: null }, byId), null);
   assert.equal(deepLinkFor({ id: 42 }, byId), null);
+});
+
+/* ---- review fixes (2026-09-25): stale alarms, repeating reminders, upgrade, reboot ---- */
+const rr = await import("../src/lib/readingReminders.ts");
+let daily = null;
+try {
+  daily = await import("../src/lib/dailyReminders.ts");
+} catch {
+  /* missing before the fix: the tests below fail on it */
+}
+/** What notify.ts records after applying a plan: everything scheduled or kept. */
+const applied = (plan) => [...plan.schedule, ...(plan.keep ?? [])].map((r) => ({ id: r.id, at: r.at }));
+
+test(`[${TZ}] moving a slot to a time already past today cancels its old alarm`, () => {
+  const now = at(2026, 9, 25, 15, 0);
+  const two = reminderId("2026-09-25", 0);
+  const eight = reminderId("2026-09-25", 1);
+  const delivered = new Set([two]); // the 2 pm one fired and is in the shade
+  const before = planReadingReminders(state({ now, delivered }));
+  assert.ok(before.schedule.some((r) => r.id === eight), "8 pm is scheduled before the edit");
+  // At 3 pm the user moves the second time from 8 pm to 1 pm (already past).
+  const slots = [
+    { time: "14:00", enabled: true },
+    { time: "13:00", enabled: true },
+  ];
+  const after = planReadingReminders(state({ now, slots, delivered, previous: applied(before) }));
+  assert.ok(!after.schedule.some((r) => r.id === eight));
+  assert.ok(after.cancel.includes(eight), "the old 8 pm alarm must be cancelled");
+  assert.ok(!after.cancel.includes(two), "2 pm fired and is showing: left in the shade");
+});
+
+test(`[${TZ}] a past reminder is kept only if it is showing or was last planned at or before now`, () => {
+  const now = at(2026, 9, 25, 15, 0);
+  const two = reminderId("2026-09-25", 0);
+  // No sign it ever fired (not showing, never planned): nothing to keep, so cancel.
+  assert.ok(planReadingReminders(state({ now, delivered: new Set() })).cancel.includes(two));
+  // active() unavailable, but the last plan had it at 2 pm: it fired, keep it.
+  const morning = planReadingReminders(state({ now: at(2026, 9, 25, 10, 0) }));
+  assert.ok(!planReadingReminders(state({ now, previous: applied(morning) })).cancel.includes(two));
+  // ...and a third reconcile still knows, because kept ones are recorded too.
+  const mid = planReadingReminders(state({ now, previous: applied(morning) }));
+  assert.ok(!planReadingReminders(state({ now: now + 3_600_000, previous: applied(mid) })).cancel.includes(two));
+});
+
+test(`[${TZ}] the rolling window is a week, so reminders keep coming if the app is not opened`, () => {
+  assert.equal(READING_WINDOW_DAYS, 7);
+  const slots = ["06:00", "12:00", "18:00", "22:00"].map((time) => ({ time, enabled: true }));
+  const { schedule, cancel } = planReadingReminders(state({ now: at(2026, 9, 25, 5, 0), slots }));
+  assert.ok(schedule.every((r) => r.at < at(2026, 10, 2, 0, 0)), "nothing past the week");
+  // Every day of the week is covered, so reminders keep coming with the app unopened.
+  for (let d = 25; d <= 30; d++) assert.ok(schedule.some((r) => r.id === reminderId(`2026-09-${d}`, 3)), `${d}`);
+  assert.ok(schedule.some((r) => r.id === reminderId("2026-10-01", 0)));
+  assert.ok(schedule.every((r) => !cancel.includes(r.id)));
+});
+
+test(`[${TZ}] upgrade: the reading reminder time chosen before v0.4 is kept`, () => {
+  assert.equal(typeof rr.migrateReminderPrefs, "function", "migrateReminderPrefs exists");
+  const m = rr.migrateReminderPrefs({ notifyPlan: true, reminderTime: "07:15", activePlanId: "p" }, 0);
+  assert.deepEqual(m.readingReminderSlots, [
+    { time: "07:15", enabled: true },
+    { time: "20:00", enabled: true },
+  ]);
+  assert.equal(m.reminderTime, "07:15", "memory / prayers keep sharing it");
+  // Their time already was 8 pm: one reminder, not two at the same minute.
+  assert.deepEqual(rr.migrateReminderPrefs({ notifyPlan: true, reminderTime: "20:00" }, 0).readingReminderSlots, [
+    { time: "20:00", enabled: true },
+  ]);
+  // Reading reminder was off: nothing chosen, so the defaults apply.
+  assert.equal(rr.migrateReminderPrefs({ notifyPlan: false, reminderTime: "07:15" }, 0).readingReminderSlots, undefined);
+  // A blob that already has slots (a v0.4 pre-release) is left alone.
+  const slots = [{ time: "09:00", enabled: false }];
+  assert.deepEqual(rr.migrateReminderPrefs({ notifyPlan: true, reminderTime: "07:15", readingReminderSlots: slots }, 0).readingReminderSlots, slots);
+  // A bad old time falls back to the defaults rather than a broken slot.
+  assert.equal(rr.migrateReminderPrefs({ notifyPlan: true, reminderTime: "nope" }, 0).readingReminderSlots, undefined);
+  // Already migrated: untouched.
+  assert.equal(rr.migrateReminderPrefs({ notifyPlan: true, reminderTime: "07:15" }, 1).readingReminderSlots, undefined);
+});
+
+const DAILY = [
+  { kind: "devotion", enabled: true, time: "07:00", title: "Devotional", body: "b", largeBody: "lb" },
+  { kind: "memory", enabled: true, time: "21:00", title: "Memory", body: "b", largeBody: "lb" },
+  { kind: "prayers", enabled: false, time: "21:00", title: "Pray", body: "b", largeBody: "lb" },
+];
+
+test(`[${TZ}] devotional / memory / prayer reminders are rolling one-offs, not repeating alarms`, () => {
+  assert.ok(daily, "src/lib/dailyReminders.ts exists");
+  const now = at(2026, 9, 25, 10, 0);
+  const { schedule, cancel } = daily.planDailyReminders({ now, reminders: DAILY, windowDays: 2 });
+  // 7 am today is past; 9 pm today is not. A two-day window, prayers off.
+  assert.deepEqual(
+    schedule.map((r) => `${r.kind} ${r.dayKey} ${hhmm(r.at)}`),
+    ["memory 2026-09-25 21:00", "devotion 2026-09-26 07:00", "memory 2026-09-26 21:00"],
+  );
+  assert.ok(schedule.every((r) => r.at > now));
+  assert.deepEqual(schedule.map((r) => r.deepLink), ["/memory", "/devotional", "/memory"]);
+  // The old repeating alarms (8801-8804) are always cancelled, and so are prayers.
+  for (const id of [8801, 8802, 8803, 8804]) assert.ok(cancel.includes(id), `${id}`);
+  for (const d of ["2026-09-25", "2026-09-26", "2026-09-27"]) assert.ok(cancel.includes(daily.dailyReminderId("prayers", d)));
+  // Nothing scheduled is also cancelled; re-planning gives the same ids.
+  assert.ok(schedule.every((r) => !cancel.includes(r.id)));
+  assert.deepEqual(daily.planDailyReminders({ now: now + 60_000, reminders: DAILY, windowDays: 2 }).schedule.map((r) => r.id), schedule.map((r) => r.id));
+  // What reaches the plugin is an exact, allow-while-idle one-off (setExactAndAllowWhileIdle),
+  // never the `interval` schedule the plugin re-arms with a plain setExact.
+  const p = JSON.parse(JSON.stringify(toPluginPayload(daily.toNative(schedule[0]), "c", "a")));
+  checkStrictShape(p, "daily one-off");
+  assert.deepEqual(Object.keys(p.schedule), ["at"]);
+  assert.equal(p.schedule.at.repeating, false);
+  assert.equal(p.schedule.at.allowWhileIdle, true);
+});
+
+test(`[${TZ}] daily reminders: today's fired one stays in the shade only if it is showing`, () => {
+  assert.ok(daily, "src/lib/dailyReminders.ts exists");
+  const now = at(2026, 9, 25, 10, 0);
+  const id = daily.dailyReminderId("devotion", "2026-09-25");
+  assert.ok(daily.planDailyReminders({ now, reminders: DAILY, delivered: new Set() }).cancel.includes(id));
+  const kept = daily.planDailyReminders({ now, reminders: DAILY, delivered: new Set([id]) });
+  assert.ok(!kept.cancel.includes(id));
+  assert.deepEqual(kept.keep.map((k) => k.id), [id]);
+  // Switched off: everything goes, the shade included.
+  const off = daily.planDailyReminders({ now, reminders: DAILY.map((r) => ({ ...r, enabled: false })), delivered: new Set([id]) });
+  assert.equal(off.schedule.length, 0);
+  assert.ok(off.cancel.includes(id));
+});
+
+test(`[${TZ}] daily reminder ids: unique, inside a Java int, clear of reading ids, tap opens the screen`, () => {
+  assert.ok(daily, "src/lib/dailyReminders.ts exists");
+  const seen = new Set();
+  for (let i = 0; i < 366; i++) {
+    const key = localDayKey(at(2026, 1, 1, 12) + i * 86_400_000);
+    for (const kind of ["devotion", "memory", "prayers"]) {
+      const id = daily.dailyReminderId(kind, key);
+      assert.ok(!seen.has(id));
+      seen.add(id);
+      assert.ok(id < 2 ** 31 && (id < READING_ID_BASE || id >= READING_ID_BASE + 10_000) && id > 8804);
+    }
+  }
+  assert.equal(deepLinkFor({ id: daily.dailyReminderId("devotion", "2026-09-25") }), "/devotional");
+  assert.equal(deepLinkFor({ id: daily.dailyReminderId("memory", "2026-09-25") }), "/memory");
+  assert.equal(deepLinkFor({ id: daily.dailyReminderId("prayers", "2026-09-25") }), "/prayers");
 });

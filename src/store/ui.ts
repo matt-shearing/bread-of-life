@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { localDayKey, yesterdayKey } from "@/lib/day";
 import { normalizeThemeMode, resolveTheme } from "@/lib/theme";
-import { DEFAULT_READING_SLOTS, MAX_READING_SLOTS, type ReminderSlot } from "@/lib/readingReminders";
+import { DEFAULT_READING_SLOTS, MAX_READING_SLOTS, migrateReminderPrefs, type ReminderSlot } from "@/lib/readingReminders";
 import type { ResolvedTheme, ThemeLocation, ThemeMode } from "@/lib/theme";
 
 /**
@@ -285,6 +285,13 @@ export const useUI = create<UIState>()(
     }),
     {
       name: "bol-ui",
+      /**
+       * 1: reading reminders became time slots (v0.4). A blob from before that keeps the
+       * reading reminder time the user chose (`migrateReminderPrefs`).
+       */
+      version: 1,
+      migrate: (persisted, version) =>
+        migrateReminderPrefs(persisted as Record<string, unknown>, version) as unknown as UIState,
       /**
        * `resolvedTheme` is derived, but it is also the first thing painted, so we
        * seed it here — synchronously, while localStorage is being read — rather
