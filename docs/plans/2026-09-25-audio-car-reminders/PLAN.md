@@ -135,9 +135,24 @@ Reminders already exist (`src/lib/notify.ts`, OS-scheduled through
 
 ## 4. Android Auto
 
-Android Auto does not let a media app draw its own screens. The car shows a standard media
-template, and the app supplies a **browse tree** (menus of playable and browsable items) plus
-the usual transport controls. So "a car-optimised menu" means designing that tree well.
+Bread of Life gets its own icon and full-screen app in the Android Auto launcher, as NewPipe
+and Pocket Casts do. Android Auto draws a media app's screens from Google's templates (only
+navigation apps draw freely, and only on the map), so the work is to use those templates well:
+
+- up to four **browse tabs** across the top (Today, Bible, Devotional, Recent), using the
+  content-style hints (`DESCRIPTION_EXTRAS_KEY_CONTENT_STYLE_BROWSABLE_HINT` / `…_PLAYABLE_HINT`)
+  for grid tiles or lists as suits each level;
+- **artwork** on every item (generated tiles showing the book name and chapter number in the
+  app's amber style, and one for the devotional), served through a content provider or bundled
+  as bitmaps;
+- **custom playback buttons** through Media3 `CommandButton`s on the session: Next reading,
+  back 30 s, playback speed;
+- the **queue** exposed, so the car shows what is coming up in the day's reading;
+- **voice search** (below).
+
+GrapheneOS: Android Auto needs sandboxed Google Play and the Android Auto app, plus
+GrapheneOS's Android Auto permission toggles under Settings, Apps, Sandboxed Google Play. The
+release notes must spell out those steps as well as the "Unknown sources" step.
 
 - Switch the service from `MediaSessionService` to `MediaLibraryService` and implement
   `MediaLibrarySession.Callback` (`onGetLibraryRoot`, `onGetChildren`, `onGetItem`,
