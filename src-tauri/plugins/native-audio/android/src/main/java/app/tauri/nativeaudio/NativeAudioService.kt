@@ -50,11 +50,25 @@ class NativeAudioService : MediaSessionService() {
         // Hand the session to Media3 now rather than waiting for a controller to bind: this is
         // what connects Media3's notification controller, which drives the foreground state.
         NativeAudioRuntime.mediaSession()?.let { addSession(it) }
+        // Media3 catches a refused foreground start (Android 12+) and only logs it. Record it
+        // too: if a stricter OS build (e.g. GrapheneOS) ever refuses the promotion after an
+        // earphone press, this is the line that will say so.
+        setListener(object : MediaSessionService.Listener {
+            override fun onForegroundServiceStartNotAllowedException() {
+                NativeAudioRuntime.debugLog("service", "foreground start NOT allowed by the system")
+            }
+        })
         NativeAudioRuntime.onServiceCreated(this)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return NativeAudioRuntime.mediaSession()
+    }
+
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        // Media3's default: post the notification and enter/leave the foreground. Logged only.
+        NativeAudioRuntime.debugLog("service", "notification update foreground=$startInForegroundRequired")
+        super.onUpdateNotification(session, startInForegroundRequired)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -71,6 +85,7 @@ class NativeAudioService : MediaSessionService() {
 
     override fun onDestroy() {
         NativeAudioRuntime.debugLog("service", "onDestroy")
+        clearListener()
         NativeAudioRuntime.mediaSession()?.let { session ->
             // The session belongs to NativeAudioRuntime, not to this service instance. Detach it
             // so the next service instance can adopt it cleanly.

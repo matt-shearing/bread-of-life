@@ -638,7 +638,7 @@ object NativeAudioRuntime {
         ): Boolean {
             @Suppress("DEPRECATION")
             val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-            val keyName = key?.let { KeyEvent.keyCodeToString(it.keyCode) } ?: "none"
+            val keyName = key?.let { mediaKeyName(it.keyCode) } ?: "none"
             val action = when (key?.action) {
                 KeyEvent.ACTION_DOWN -> "down"
                 KeyEvent.ACTION_UP -> "up"
@@ -712,6 +712,19 @@ object NativeAudioRuntime {
             appIconBitmap = bitmap
             return bitmap
         }
+    }
+
+    private fun mediaKeyName(keyCode: Int): String = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "PLAY_PAUSE"
+        KeyEvent.KEYCODE_HEADSETHOOK -> "HEADSETHOOK"
+        KeyEvent.KEYCODE_MEDIA_PLAY -> "PLAY"
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> "PAUSE"
+        KeyEvent.KEYCODE_MEDIA_STOP -> "STOP"
+        KeyEvent.KEYCODE_MEDIA_NEXT -> "NEXT"
+        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "PREVIOUS"
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "FAST_FORWARD"
+        KeyEvent.KEYCODE_MEDIA_REWIND -> "REWIND"
+        else -> "key#$keyCode"
     }
 
     private fun playWhenReadyReasonName(reason: Int): String = when (reason) {
