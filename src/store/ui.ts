@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { localDayKey, yesterdayKey } from "@/lib/day";
 import { normalizeThemeMode, resolveTheme } from "@/lib/theme";
+import { DEFAULT_READING_SLOTS, MAX_READING_SLOTS, type ReminderSlot } from "@/lib/readingReminders";
 import type { ResolvedTheme, ThemeLocation, ThemeMode } from "@/lib/theme";
 
 /**
@@ -103,10 +104,14 @@ export interface UIState {
   setNotifyDevotion: (v: boolean) => void;
   setDevotionTime: (t: string) => void;
 
-  // reading-plan daily reminder (defaults ON when a plan is enrolled)
+  // Daily-reading reminders (defaults ON when a plan is enrolled). PER DEVICE: neither
+  // this switch nor the times are mirrored to the synced `settings` table, so the phone
+  // can nag at 2 pm while the desktop stays quiet. See src/lib/readingReminders.ts.
   notifyPlan: boolean;
   setNotifyPlan: (v: boolean) => void;
-  // shared clock time for the memory / prayers / plan daily reminders
+  readingReminderSlots: ReminderSlot[];
+  setReadingReminderSlots: (slots: ReminderSlot[]) => void;
+  // shared clock time for the memory / prayers daily reminders
   reminderTime: string; // "HH:MM"
   setReminderTime: (t: string) => void;
 
@@ -248,6 +253,8 @@ export const useUI = create<UIState>()(
 
       notifyPlan: false,
       setNotifyPlan: (v) => set({ notifyPlan: v }),
+      readingReminderSlots: DEFAULT_READING_SLOTS,
+      setReadingReminderSlots: (slots) => set({ readingReminderSlots: slots.slice(0, MAX_READING_SLOTS) }),
       reminderTime: "08:00",
       setReminderTime: (t) => set({ reminderTime: t }),
 

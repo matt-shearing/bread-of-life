@@ -65,6 +65,25 @@ async function loadVersification(): Promise<Versification> {
 }
 
 /**
+ * How many verses a day's readings cover (a verse range counts its verses, a whole
+ * chapter its BSB verse count). Null if the versification data is unavailable. Used for
+ * the reminder's "takes about N minutes".
+ */
+export async function countVerses(readings: Reading[]): Promise<number | null> {
+  const vc = await loadVersification().catch(() => ({}) as Versification);
+  let total = 0;
+  for (const r of readings) {
+    if (r.vStart && r.vEnd) total += Math.max(0, r.vEnd - r.vStart + 1);
+    else {
+      const n = vc[r.ho]?.[r.chapter - 1];
+      if (!n) return null;
+      total += n;
+    }
+  }
+  return total;
+}
+
+/**
  * Give each chapter (by verse count) a share of `portions` total, minimum one
  * each, summing to exactly `portions`. Every chapter gets 1, then the remaining
  * portions are handed out largest-remainder style in proportion to verse count —

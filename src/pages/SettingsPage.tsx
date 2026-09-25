@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { X } from "lucide-react";
 import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
@@ -15,6 +16,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/compo
 import { cn } from "@/lib/cn";
 import { effectiveLocation, requestDeviceLocation, type ThemeMode } from "@/lib/theme";
 import { sunTimes } from "@/lib/sun";
+import { MAX_READING_SLOTS, type ReminderSlot } from "@/lib/readingReminders";
 
 /** The four ways the theme can be decided, in the order they're offered. */
 const THEME_MODES: { id: ThemeMode; label: string; hint: string }[] = [
@@ -55,8 +57,6 @@ export function SettingsPage() {
     setDevotionTime,
     notifyMemory,
     setNotifyMemory,
-    notifyPlan,
-    setNotifyPlan,
     reminderTime,
     setReminderTime,
     ai,
@@ -239,28 +239,7 @@ export function SettingsPage() {
                 </p>
               </div>
 
-              <div className="mt-4 border-t border-border pt-4">
-                <Row label="Reading plan reminder">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (notifyPlan) {
-                        setNotifyPlan(false);
-                      } else {
-                        await enablePrayerNotifications();
-                        setNotifyPlan(true);
-                      }
-                    }}
-                  >
-                    {notifyPlan ? "On" : "Off"}
-                  </Button>
-                </Row>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  A daily reminder to keep up with your reading plan. Turned on automatically when you
-                  start a plan.
-                </p>
-              </div>
+              <ReadingReminderSettings />
 
               <div className="mt-4 border-t border-border pt-4">
                 <Row label="Reminder time">
@@ -272,9 +251,9 @@ export function SettingsPage() {
                   />
                 </Row>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  When your prayer, memory-verse and reading-plan reminders arrive each day. In the
-                  installed app these are scheduled with your device, so they can reach you even when
-                  Bread of Life isn’t open.
+                  When your prayer and memory-verse reminders arrive each day. In the Android app
+                  these are scheduled with your phone, so they can reach you even when Bread of Life
+                  isn’t open.
                 </p>
               </div>
             </CardContent>
@@ -532,6 +511,102 @@ function SunLocation() {
         Only ever used to work out sunrise and sunset. It stays on this device — it isn’t synced and
         isn’t sent anywhere.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Daily-reading reminders: a switch plus up to four clock times, each of which can be
+ * turned off. Stored per device (see src/store/syncedPrefs.ts).
+ */
+function ReadingReminderSettings() {
+  const notifyPlan = useUI((s) => s.notifyPlan);
+  const setNotifyPlan = useUI((s) => s.setNotifyPlan);
+  const slots = useUI((s) => s.readingReminderSlots);
+  const setSlots = useUI((s) => s.setReadingReminderSlots);
+  const activePlanId = useUI((s) => s.activePlanId);
+
+  const update = (i: number, patch: Partial<ReminderSlot>) =>
+    setSlots(slots.map((slot, j) => (j === i ? { ...slot, ...patch } : slot)));
+
+  return (
+    <div className="mt-4 border-t border-border pt-4" data-testid="reading-reminders">
+      <Row label="Daily reading reminders">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={notifyPlan}
+          onClick={async () => {
+            if (notifyPlan) {
+              setNotifyPlan(false);
+            } else {
+              await enablePrayerNotifications();
+              setNotifyPlan(true);
+            }
+          }}
+        >
+          {notifyPlan ? "On" : "Off"}
+        </Button>
+      </Row>
+      <p className="mt-2 text-xs text-muted-foreground">
+        A reminder to do today’s reading if you haven’t yet. Once it’s done, the rest of today’s
+        reminders are skipped. When you’re on a reading streak of two days or more, the reminder
+        says so. These times apply to this device only.
+      </p>
+
+      {notifyPlan && (
+        <div className="mt-3 space-y-2">
+          {slots.map((slot, i) => (
+            <div key={i} className="flex max-w-xs items-center gap-2" data-testid="reading-reminder-slot">
+              <input
+                type="time"
+                aria-label={`Reminder ${i + 1} time`}
+                value={slot.time}
+                onChange={(e) => e.target.value && update(i, { time: e.target.value })}
+                className={cn(
+                  "h-9 rounded-md border border-input bg-background px-2 text-sm",
+                  !slot.enabled && "text-muted-foreground line-through",
+                )}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={`Reminder ${i + 1} ${slot.enabled ? "on" : "off"}`}
+                aria-pressed={slot.enabled}
+                onClick={() => update(i, { enabled: !slot.enabled })}
+              >
+                {slot.enabled ? "On" : "Off"}
+              </Button>
+              {slots.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto h-8 w-8"
+                  aria-label={`Remove reminder ${i + 1}`}
+                  title="Remove this time"
+                  onClick={() => setSlots(slots.filter((_, j) => j !== i))}
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </Button>
+              )}
+            </div>
+          ))}
+          {slots.length < MAX_READING_SLOTS && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSlots([...slots, { time: "18:00", enabled: true }])}
+            >
+              Add a time
+            </Button>
+          )}
+          {!activePlanId && (
+            <p className="text-xs text-muted-foreground">
+              Start a reading plan on the Plans page and these reminders will begin.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

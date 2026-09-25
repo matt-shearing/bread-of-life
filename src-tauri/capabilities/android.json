@@ -1,7 +1,7 @@
 {
   "identifier": "android",
-  "description": "Android-only permissions: the All files access (MANAGE_EXTERNAL_STORAGE) bridge.",
+  "description": "Android-only permissions: the All files access (MANAGE_EXTERNAL_STORAGE) bridge and the reading-reminder glue.",
   "platforms": ["android"],
   "windows": ["main"],
-  "permissions": ["all-files:default"]
+  "permissions": ["all-files:default", "reminders:default"]
 }

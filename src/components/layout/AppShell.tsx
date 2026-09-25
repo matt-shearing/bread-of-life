@@ -5,6 +5,7 @@ import { MobileNav } from "./MobileNav";
 import { MiniPlayer } from "@/components/audio/MiniPlayer";
 import { useUI } from "@/store/ui";
 import { useAutoTheme } from "@/lib/useAutoTheme";
+import { useReadingReminders } from "@/lib/useReadingReminders";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
 import {
@@ -22,7 +23,6 @@ export function AppShell() {
   const notifyDevotion = useUI((s) => s.notifyDevotion);
   const devotionTime = useUI((s) => s.devotionTime);
   const notifyMemory = useUI((s) => s.notifyMemory);
-  const notifyPlan = useUI((s) => s.notifyPlan);
   const reminderTime = useUI((s) => s.reminderTime);
 
   // The single writer of `resolvedTheme`: watches prefers-color-scheme in system
@@ -41,12 +41,16 @@ export function AppShell() {
     void initNotificationRouting((path) => navigate(path));
   }, [navigate]);
 
-  // Native app: keep the OS daily-reminder SCHEDULES in sync with the toggles/time
-  // (fires even when unfocused/closed). No-op in a browser — the foreground checks
-  // below cover app-open reminders there instead.
+  // Android/iOS: keep the OS daily-reminder SCHEDULES in sync with the toggles/time
+  // (fires even when closed). No-op on desktop and in a browser — the foreground
+  // checks below cover app-open reminders there instead.
   useEffect(() => {
-    void syncReminderSchedules({ notifyDevotion, devotionTime, notifyMemory, notifyPrayers, notifyPlan, reminderTime });
-  }, [notifyDevotion, devotionTime, notifyMemory, notifyPrayers, notifyPlan, reminderTime]);
+    void syncReminderSchedules({ notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime });
+  }, [notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime]);
+
+  // Daily-reading reminders: re-planned on start, return to the app, completion
+  // (here or synced in) and settings changes; in-app checks on desktop/browser.
+  useReadingReminders();
 
   useEffect(() => {
     maybeNotifyPrayers(notifyPrayers);
