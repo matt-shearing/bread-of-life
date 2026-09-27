@@ -3,8 +3,9 @@ import type { DevotionSlot } from "@/lib/devotionalSpeech";
 /**
  * The two names a spoken devotional reading goes by.
  *
- * - Its completion key in the app (`db.devotions`): "<devotional>:<MM-DD>:<index>", where
- *   the index is the reading's position in its day (0 = Morning, 1 = Evening).
+ * - Its completion key in the app (`db.devotions`): "<devotional>:<YYYY-MM-DD>:<index>",
+ *   where the index is the reading's position in its day (0 = Morning, 1 = Evening). See
+ *   src/lib/devotionDone.ts, which also places a "MM-DD" day in its year.
  * - Its id in the car's Devotional tab (and so in native's `dev/…` media id):
  *   "<devotional>:<MM-DD>:m" or ":e".
  *
@@ -12,9 +13,7 @@ import type { DevotionSlot } from "@/lib/devotionalSpeech";
  * the first. Pure, so scripts/test-devotional-speech.mjs can check the round trip.
  */
 
-export function devotionDoneId(devotionalId: string, day: string, index: number): string {
-  return `${devotionalId}:${day}:${index}`;
-}
+export { devotionDoneId } from "../lib/devotionDone.ts";
 
 export function carDevotionalId(devotionalId: string, day: string, slot: DevotionSlot): string {
   return `${devotionalId}:${day}:${slot === "morning" ? "m" : "e"}`;

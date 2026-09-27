@@ -7,6 +7,7 @@ import type { Devotional, DevotionDay, DevotionReading } from "@/data/devotional
 import { Button } from "@/components/ui";
 import { ListenButton } from "./ListenButton";
 import { cn } from "@/lib/cn";
+import { devotionDoneId } from "@/lib/devotionDone";
 
 function labelIcon(label: string) {
   if (label === "Morning") return <Sunrise style={{ width: 15, height: 15 }} />;
@@ -30,7 +31,7 @@ export function DevotionView({
   onOpenVerse: (e: DevotionReading) => void;
 }) {
   const reading = day.readings[Math.min(index, day.readings.length - 1)];
-  const doneId = `${dev.id}:${dayKey}:${index}`;
+  const doneId = devotionDoneId(dev.id, dayKey, index);
   const done = useLiveQuery(() => db.devotions.get(doneId), [doneId]);
   const isDone = !!done;
 
