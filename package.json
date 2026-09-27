@@ -24,7 +24,8 @@
     "tauri:build": "tauri build",
     "android:init": "tauri android init",
     "android:dev": "tauri android dev",
-    "android:build": "tauri android build --apk"
+    "android:build": "tauri android build --apk",
+    "test:backup": "node --test-reporter=spec scripts/test-backup.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.1.0",
@@ -48,6 +49,7 @@
     "clsx": "^2.1.1",
     "dexie": "^4.0.10",
     "dexie-react-hooks": "^1.1.7",
+    "fflate": "0.8.3",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -63,6 +65,7 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "fake-indexeddb": "6.2.5",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",

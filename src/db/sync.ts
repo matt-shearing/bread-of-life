@@ -60,6 +60,13 @@ const KEY_PATH: Record<SyncedTable, string> = {
 };
 const isSynced = (t: string): t is SyncedTable => (SYNCED as readonly string[]).includes(t);
 
+/** The user-data tables (everything that syncs), and each one's primary key. Backup
+ *  and restore (src/lib/backup.ts) cover exactly this set, so a table added to sync is
+ *  backed up too without anyone remembering to list it twice. */
+export const SYNCED_TABLES: readonly SyncedTable[] = SYNCED;
+export const SYNCED_KEY_PATH: Readonly<Record<SyncedTable, string>> = KEY_PATH;
+export type { SyncedTable };
+
 let applyingRemote = false;
 let hooksInstalled = false;
 
@@ -278,6 +285,38 @@ async function backfillIfNeeded(): Promise<void> {
   await runBackfill();
   await setState({ backfilledFor: s.email });
   scheduleSync();
+}
+
+/* ------------------------------ restore from backup -------------------------- */
+
+/**
+ * Write rows restored from a backup file, then queue exactly those rows for upload.
+ *
+ * `work` runs inside one read-write transaction over every synced table and returns
+ * the rows it wrote. The CRUD hooks are paused while it runs, for the same reason they
+ * are paused for a pull: they would stamp each row's `updatedAt` as "now", and then a
+ * month-old backup would beat edits made since on another device the moment it
+ * uploaded. Keeping the row's own `updatedAt` lets the server's last-write-wins sort
+ * it out properly. The outbox entries are written by hand afterwards, as the
+ * first-sign-in backfill does, so a restored row still reaches the account.
+ */
+export async function importRows(work: () => Promise<{ table: SyncedTable; id: string }[]>): Promise<number> {
+  const tables = SYNCED.map((t) => db.table(t));
+  let written: { table: SyncedTable; id: string }[] = [];
+  applyingRemote = true;
+  try {
+    written = await db.transaction("rw", tables, work);
+  } finally {
+    applyingRemote = false;
+  }
+  if (written.length) {
+    const now = Date.now();
+    await db.outbox.bulkPut(
+      written.map((w) => ({ key: `${w.table}:${w.id}`, table: w.table as string, id: w.id, op: "upsert" as const, at: now })),
+    );
+    scheduleSync();
+  }
+  return written.length;
 }
 
 /* ---------------------------------- engine ----------------------------------- */

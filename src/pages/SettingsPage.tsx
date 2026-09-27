@@ -1,7 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
 import { X } from "lucide-react";
-import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
 import { enablePrayerNotifications } from "@/lib/notify";
@@ -10,6 +8,7 @@ import { SyncSettings } from "@/components/settings/SyncSettings";
 import { E2ESettings } from "@/components/settings/E2ESettings";
 import { MisslerSettings } from "@/components/settings/MisslerSettings";
 import { AudioDebugLog } from "@/components/settings/AudioDebugLog";
+import { DataSettings } from "@/components/settings/DataSettings";
 import { version as APP_VERSION } from "../../package.json";
 import { PROVIDERS } from "@/ai/client";
 import type { AIProvider } from "@/store/ui";
@@ -64,16 +63,7 @@ export function SettingsPage() {
     setAI,
   } = useUI();
   const aiMeta = PROVIDERS[ai.provider];
-  const counts = useLiveQuery(
-    async () => ({
-      highlights: await db.highlights.count(),
-      notes: await db.notes.count(),
-      prayers: await db.prayers.count(),
-      journal: await db.journal.count(),
-    }),
-    [],
-    { highlights: 0, notes: 0, prayers: 0, journal: 0 },
-  );
+
 
   return (
     <div className="h-full overflow-y-auto">
@@ -343,18 +333,7 @@ export function SettingsPage() {
 
           <E2ESettings />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Your data</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-sm text-muted-foreground">
-              <p>{counts.highlights} highlights · {counts.notes} notes · {counts.prayers} prayers · {counts.journal} journal entries</p>
-              <p className="pt-2 text-xs">
-                Everything is stored locally on this device (offline-first). Scripture is the Berean
-                Standard Bible, public domain (CC0).
-              </p>
-            </CardContent>
-          </Card>
+          <DataSettings />
 
           <Card>
             <CardHeader>
