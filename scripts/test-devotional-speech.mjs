@@ -122,5 +122,6 @@ test("a devotional heard in the car maps back to the app's completion key", asyn
   assert.deepEqual(parseCarDevotionalId("spurgeon-morning-evening:02-29:m")?.slot, "morning");
   assert.equal(parseCarDevotionalId("spurgeon-morning-evening:09-25"), null);
   assert.equal(parseCarDevotionalId("ch/JHN/3"), null);
-  assert.equal(devotionDoneId("spurgeon-morning-evening", "09-25", 1), "spurgeon-morning-evening:09-25:1");
+  const heard = new Date(2026, 8, 25, 20, 30).getTime();
+  assert.equal(devotionDoneId("spurgeon-morning-evening", "09-25", 1, heard), "spurgeon-morning-evening:2026-09-25:1");
 });

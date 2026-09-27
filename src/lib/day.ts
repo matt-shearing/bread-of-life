@@ -16,7 +16,21 @@ export function localDayKey(ts: number = Date.now()): string {
   return `${y}-${m}-${day}`;
 }
 
-/** The local-day key for the day before `ts` (defaults to now). */
+/**
+ * The local-day key for the day before `ts` (defaults to now). Calendar arithmetic, not
+ * "minus 24 hours": on the day after a daylight-saving change a local day is 23 or 25
+ * hours long, and subtracting 24 hours can land two days back or on the same day.
+ */
 export function yesterdayKey(ts: number = Date.now()): string {
-  return localDayKey(ts - 86_400_000);
+  const d = new Date(ts);
+  return localDayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 12).getTime());
+}
+
+/**
+ * Days since 1970-01-01 counted in LOCAL calendar days: the same number from local
+ * midnight to local midnight. For anything that rotates daily (the verse of the day).
+ */
+export function localDayNumber(ts: number = Date.now()): number {
+  const d = new Date(ts);
+  return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
 }

@@ -25,6 +25,7 @@ import { RichEditor } from "@/components/journal/RichEditor";
 import { htmlToText } from "@/lib/htmlToText";
 import { VersePicker } from "@/components/bible/VersePicker";
 import { cn } from "@/lib/cn";
+import { safeJournalHtml } from "@/lib/safeHtml";
 
 function osisToLabel(osis: string) {
   const p = parseOsis(osis);
@@ -292,7 +293,7 @@ function EntryReadView({
         {htmlToText(entry.body) ? (
           <div
             className="prose-journal max-h-[45vh] overflow-y-auto text-sm"
-            dangerouslySetInnerHTML={{ __html: entry.body }}
+            dangerouslySetInnerHTML={{ __html: safeJournalHtml(entry.body) }}
           />
         ) : (
           <p className="text-sm italic text-muted-foreground">No text yet — tap Edit to write.</p>

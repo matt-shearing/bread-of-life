@@ -41,11 +41,13 @@ async function loadFile(file: string): Promise<Record<string, any>> {
   if (hit) return hit;
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/devotional/${file}.json`);
-    const data = res.ok ? await res.json() : {};
+    if (!res.ok) return {};
+    const data = await res.json();
     cache.set(file, data);
     return data;
   } catch {
-    cache.set(file, {});
+    // Not cached: a failed fetch (offline, a flaky asset read) is retried next time
+    // instead of showing "not available" until the app restarts.
     return {};
   }
 }

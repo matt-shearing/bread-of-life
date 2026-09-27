@@ -20,7 +20,9 @@
  * the current Bible location, the AI config (it holds an API key, which must
  * never leave the device in the clear), and the daily-reading reminder switch and
  * times (`notifyPlan`, `readingReminderSlots`): whether and when to be nagged is a
- * choice per device. Reading COMPLETION does sync (the `plans` table), which is what
+ * choice per device. The Missler library path (`misslerLibraryPath`, a settings row of
+ * its own) is a folder on one device and never syncs either: only the settings keys
+ * allow-listed in src/db/syncSchema.ts travel. Reading COMPLETION does sync (the `plans` table), which is what
  * lets a reading finished on the desktop silence the phone. `ui.notifyPlan` used to be
  * synced; any old row for it is now ignored.
  */
@@ -81,9 +83,9 @@ function applyRows(rows: { key: string; value: unknown }[]): void {
 /**
  * Publish any synced pref the account has never stored — this is what carries a plan
  * chosen before sync existed (or before this account was signed in) up to the server.
- * Runs only after a completed sync round, so the account's own values have already
- * landed and a freshly-installed device adopts them rather than overwriting them with
- * its defaults. Nullish values are skipped: "no plan yet" is the absence of a
+ * Runs only after a sync round whose pull caught up with the server (a failed or
+ * partial round doesn't count), so the account's own values have all landed and a
+ * freshly-installed device adopts them rather than overwriting them with its defaults. Nullish values are skipped: "no plan yet" is the absence of a
  * preference, not a preference worth pushing.
  */
 async function seedMissing(): Promise<void> {
@@ -126,8 +128,9 @@ export function startPrefSync(): void {
     }
   });
 
-  const offRound = onSyncRound(() => {
-    offRound(); // first completed round only
+  const offRound = onSyncRound(({ caughtUp }) => {
+    if (!caughtUp) return;
+    offRound(); // the first round that pulled everything the account holds
     void seedMissing().catch((e) => console.error("pref sync: seed failed", e));
   });
   stopRoundListener = offRound;

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { isDueToday } from "@/db/repos";
 import { localDayKey } from "@/lib/day";
+import { devotionDoneId } from "@/lib/devotionDone";
 import { getAnyPlan, countVerses } from "@/data/plans";
 import { useUI } from "@/store/ui";
 import { readingDayKeys, readingStreak } from "@/lib/streak";
@@ -73,8 +74,6 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   if (Notification.permission === "denied") return false;
   return (await Notification.requestPermission()) === "granted";
 }
-/** Back-compat alias — existing callers use this name. */
-export const enablePrayerNotifications = ensureNotificationPermission;
 
 // Android needs an explicit channel (8+) for notifications to present richly, and an
 // action type for the "Go now" button. Both are registered once at startup.
@@ -219,7 +218,7 @@ function dailyReminders(s: ReminderSettings): DailyReminder[] {
  * with the reading reminders, so this is the same reconcile (which reads the current
  * settings from the store). No-op off mobile.
  */
-export function syncReminderSchedules(_s?: ReminderSettings): Promise<void> {
+export function syncReminderSchedules(): Promise<void> {
   return reconcileReadingReminders();
 }
 
@@ -412,7 +411,7 @@ export async function initNotificationRouting(navigate: (path: string) => void):
   }
 }
 
-/* --------------------- foreground checks (browser / dev only) ----------------- */
+/* ------------------- foreground checks (desktop app and browser) --------------- */
 // On Android/iOS the OS schedules above own delivery, so these return early there to
 // avoid double-notifying. In a browser and in the DESKTOP app (whose notification
 // plugin cannot schedule) they are how reminders arrive while the app is open.
@@ -420,7 +419,7 @@ export async function initNotificationRouting(navigate: (path: string) => void):
 let prayersNotifiedThisSession = false;
 let memoryNotifiedThisSession = false;
 
-/** Devotional reminder: at/after the set time each day, fire once (browser only). */
+/** Devotional reminder: at/after the set time each day, fire once (desktop app and browser). */
 export async function maybeNotifyDevotion(enabled: boolean, timeHHMM: string): Promise<void> {
   if (osSchedulesReminders || !enabled || typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const now = new Date();
@@ -428,15 +427,17 @@ export async function maybeNotifyDevotion(enabled: boolean, timeHHMM: string): P
   if (now.getHours() * 60 + now.getMinutes() < hh * 60 + mm) return; // not time yet
   const todayKey = localDayKey();
   if (localStorage.getItem("bol-devotion-notified") === todayKey) return;
-  const slot = now.getHours() < 17 ? "m" : "e";
+  // Morning reading before 5 pm, Evening after: the key the devotional screens and
+  // the audio player write when a reading is finished (src/lib/devotionDone.ts).
+  const index = now.getHours() < 17 ? 0 : 1;
   const md = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const already = await db.devotions.get(`${md}:${slot}`);
+  const already = await db.devotions.get(devotionDoneId(useUI.getState().devotionalId, md, index, now.getTime()));
   localStorage.setItem("bol-devotion-notified", todayKey);
   if (already) return;
   await sendNow("Bread of Life", "Time for your Morning & Evening devotional.", "/devotional");
 }
 
-/** Memory-verse nudge, once/session/day when cards are due (browser only). */
+/** Memory-verse nudge, once/session/day when cards are due (desktop app and browser). */
 export async function maybeNotifyMemory(enabled: boolean): Promise<void> {
   if (osSchedulesReminders || memoryNotifiedThisSession || !enabled) return;
   memoryNotifiedThisSession = true;
@@ -449,7 +450,7 @@ export async function maybeNotifyMemory(enabled: boolean): Promise<void> {
   await sendNow("Bread of Life", `${due} verse${due === 1 ? "" : "s"} to hide in your heart today — visit Memory Lane.`, "/memory");
 }
 
-/** Due-prayers nudge, once per launch (browser only). */
+/** Due-prayers nudge, once per launch (desktop app and browser). */
 export async function maybeNotifyPrayers(enabled: boolean): Promise<void> {
   if (osSchedulesReminders || prayersNotifiedThisSession || !enabled) return;
   prayersNotifiedThisSession = true;

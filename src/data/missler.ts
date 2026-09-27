@@ -4,7 +4,10 @@
  * The library is built by `~/dev/missler-commentary` from Matt's own copies of
  * Chuck Missler's teaching. It is copyrighted, so NOTHING here is ever bundled in
  * the app or synced — the app reads it at runtime from a folder the user points at
- * in Settings (`misslerLibraryPath`). An empty path means the feature is off.
+ * in Settings (`misslerLibraryPath`). An empty path means the feature is off. The path
+ * is a device-local settings row: sync leaves it out (src/db/syncSchema.ts). Versions
+ * before v0.5 did sync it, which is why an Android device drops a desktop path on
+ * upgrade (src/db/index.ts, version 10).
  *
  * Two runtimes:
  *  - **Desktop (Tauri)** — JSON is read with `@tauri-apps/plugin-fs` and audio is

@@ -74,6 +74,15 @@ a bug** (opens prefilled GitHub issues). ~40MB static data bundled; fully offlin
   Server: `deploy/sync-server/` (Node built-in `node:sqlite`, per-record LWW, tombstones, scrypt pw;
   Docker + Caddy bundle; also self-hostable). **VERIFIED** end-to-end: 2 real webkit2gtk instances (2×
   WebKitWebDriver) synced bidirectionally + deletes through the LIVE prod server.
+- **v0.5 sync review fixes (2026-09-27, branch `fix/sync-data-review`)**: the Dexie hooks and the
+  `applyingRemote` flag are gone. A DBCore middleware (`src/db/syncTracking.ts`) stamps `updatedAt`
+  monotonically and queues the outbox entry inside the write's own transaction; pulls apply in an
+  `untracked()` transaction. The push only clears entries unchanged since they were sent, and with the
+  v0.4.0 server only once a pull shows the server holds them. Plan progress merges per day (`dayAt`),
+  deletes obey last-write-wins, pulls page until caught up, pushes are chunked, undecryptable rows are
+  held in `syncHeld`, settings sync by allow-list (`src/db/syncSchema.ts`). The server gained per-row
+  rejections, a stamp clamp, token expiry/revocation, password change and account deletion, all
+  advertised in `/health` `features` and optional for clients. Tests: `pnpm test:sync`, `pnpm test:sync-server`.
 - **Known sync gap (being fixed on `feat/sync-onboarding`)**: only NEW edits enqueue via hooks; data created
   BEFORE sign-in never uploaded (Matt hit this — an early phone prayer didn't reach desktop). The
   "Link this device" full backfill (enqueue all local rows on first sign-in) fixes it.

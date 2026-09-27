@@ -48,7 +48,7 @@ export function AppShell() {
   // (fires even when closed). No-op on desktop and in a browser — the foreground
   // checks below cover app-open reminders there instead.
   useEffect(() => {
-    void syncReminderSchedules({ notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime });
+    void syncReminderSchedules(); // reads the settings from the store; the deps below trigger it
   }, [notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime]);
 
   // Daily-reading reminders: re-planned on start, return to the app, completion

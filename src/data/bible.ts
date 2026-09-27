@@ -5,6 +5,7 @@
  */
 import { BOOKS, toBbcccvvv, toOsis, type BookMeta } from "@/lib/osis";
 import { db } from "@/db";
+import { localDayNumber } from "@/lib/day";
 
 export interface VerseItem {
   t: "v";
@@ -160,29 +161,35 @@ export interface SearchHit {
   bbcccvvv: number;
 }
 
-let allVersesCache: SearchHit[] | null = null;
+let allVersesCache: Promise<SearchHit[]> | null = null;
 
 async function loadAllVerses(): Promise<SearchHit[]> {
-  if (allVersesCache) return allVersesCache;
-  const out: SearchHit[] = [];
-  for (const b of BOOKS) {
-    const book = await loadBook(b.ho);
-    for (const ch of book.chapters) {
-      for (const it of ch.items) {
-        if (it.t === "v") {
-          out.push({
-            ho: b.ho,
-            chapter: ch.number,
-            verse: it.n,
-            text: it.text,
-            bbcccvvv: toBbcccvvv(b.ho, ch.number, it.n),
-          });
+  // Books load in parallel, and concurrent searches share one load.
+  allVersesCache ??= Promise.all(BOOKS.map((b) => loadBook(b.ho).then((book) => ({ b, book }))))
+    .then((books) => {
+      const out: SearchHit[] = [];
+      for (const { b, book } of books) {
+        for (const ch of book.chapters) {
+          for (const it of ch.items) {
+            if (it.t === "v") {
+              out.push({
+                ho: b.ho,
+                chapter: ch.number,
+                verse: it.n,
+                text: it.text,
+                bbcccvvv: toBbcccvvv(b.ho, ch.number, it.n),
+              });
+            }
+          }
         }
       }
-    }
-  }
-  allVersesCache = out;
-  return out;
+      return out;
+    })
+    .catch((e) => {
+      allVersesCache = null; // a failed load is retried by the next search
+      throw e;
+    });
+  return allVersesCache;
 }
 
 /** Full-text search across the bundled BSB. All query words must appear;
@@ -221,7 +228,9 @@ export async function verseOfTheDay(): Promise<{
   verse: number;
   text: string;
 }> {
-  const dayNum = Math.floor(Date.now() / 86_400_000);
+  // The LOCAL calendar day, so the verse changes at local midnight (a UTC day number
+  // changed it at 08:00 in Perth).
+  const dayNum = localDayNumber();
   const pick = VOTD[dayNum % VOTD.length];
   const ch = await getChapter(pick.ho, pick.ch);
   const v = ch ? verses(ch).find((x) => x.n === pick.v) : undefined;

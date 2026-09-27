@@ -10,7 +10,7 @@ services:
     environment:
       - PORT=4000
       - DB_PATH=/app/data/sync.db
-      - TOKEN_SECRET=${TOKEN_SECRET}
+      - TOKEN_SECRET=${TOKEN_SECRET:?set TOKEN_SECRET in .env (openssl rand -hex 32)}
     volumes:
       - sync-data:/app/data
     expose:
@@ -36,6 +36,7 @@ services:
       - ACME_EMAIL=${ACME_EMAIL}
       - RATE_EVENTS=${RATE_EVENTS:-300}
       - RATE_WINDOW=${RATE_WINDOW:-1m}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1/32}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

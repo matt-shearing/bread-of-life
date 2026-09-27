@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { COMMENTARY_SOURCES } from "@/data/commentary";
-import { enablePrayerNotifications } from "@/lib/notify";
+import { ensureNotificationPermission } from "@/lib/notify";
 import { requestFeature, reportBug } from "@/lib/feedback";
 import { SyncSettings } from "@/components/settings/SyncSettings";
 import { E2ESettings } from "@/components/settings/E2ESettings";
@@ -173,7 +173,7 @@ export function SettingsPage() {
                       // Best-effort OS permission, but always flip on — on webviews
                       // where the Notification API is unavailable/denied the toggle
                       // must still switch, or it looks stuck.
-                      await enablePrayerNotifications();
+                      await ensureNotificationPermission();
                       setNotifyPrayers(true);
                     }
                   }}
@@ -202,7 +202,7 @@ export function SettingsPage() {
                         if (notifyDevotion) {
                           setNotifyDevotion(false);
                         } else {
-                          await enablePrayerNotifications();
+                          await ensureNotificationPermission();
                           setNotifyDevotion(true);
                         }
                       }}
@@ -226,7 +226,7 @@ export function SettingsPage() {
                       if (notifyMemory) {
                         setNotifyMemory(false);
                       } else {
-                        await enablePrayerNotifications();
+                        await ensureNotificationPermission();
                         setNotifyMemory(true);
                       }
                     }}
@@ -542,7 +542,7 @@ function ReadingReminderSettings() {
             if (notifyPlan) {
               setNotifyPlan(false);
             } else {
-              await enablePrayerNotifications();
+              await ensureNotificationPermission();
               setNotifyPlan(true);
             }
           }}

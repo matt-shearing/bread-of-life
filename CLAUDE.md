@@ -11,17 +11,20 @@ and — the heart of it — an **answered-prayer log you can look back on**.
 - **Tauri 2** (Rust shell) · **Vite + React 18 + TypeScript** · **Tailwind + Radix** primitives.
 - **State:** Zustand for UI (`src/store/ui.ts`) — the ONLY UI store. Never add a second state system.
 - **Data:** Dexie/IndexedDB for user data (`src/db/`) behind a repository seam; static per-book JSON
-  for scripture (`public/bible/bsb/`, `src/data/bible.ts`). Local-first: the device is the source
-  of truth. **Optional** account sync (`src/db/sync.ts`, `src/store/syncedPrefs.ts`) talks to a small
-  relay in `deploy/sync-server/` (hosted or self-hosted), with opt-in E2E encryption of journal/
-  prayers/notes (`src/db/crypto.ts`). The app must work fully with sync off.
+  for scripture (`public/bible/bsb/`, `src/data/bible.ts`).
+- **Sync (optional, shipped):** an account on the hosted or a self-hosted server
+  (`deploy/sync-server/`) syncs the Dexie tables by delta sync (`src/db/sync.ts`). A Dexie
+  middleware (`src/db/syncTracking.ts`) stamps and queues every write; what syncs is listed in
+  `src/db/syncSchema.ts`. Journal, prayers and notes can be end-to-end encrypted. Test with
+  `pnpm test:sync` and `pnpm test:sync-server`; client changes must keep working with the
+  server version in production (the tests run against v0.4.0's server too).
 - **Verse identity:** OSIS + BBCCCVVV everywhere (`src/lib/osis.ts`).
 
 ## Ground rules
 1. Ship the emotional core (prayer, warm reader) before anything clever.
 2. One stack, one state system, one data source. No pivots.
 3. Real data end-to-end — never mock verses.
-4. Offline-first, local-first. Sync/accounts are a deliberate *later* decision.
+4. Offline-first, local-first. Everything works without an account; sync is opt-in.
 5. Keep it warm and uncluttered (amber, Merriweather scripture, whitespace).
 
 ## Commands
@@ -50,4 +53,4 @@ and — the heart of it — an **answered-prayer log you can look back on**.
 
 ## Roadmap (see brief §9)
 SQLite swap → Strong's + cross-refs → Matt's own commentary corpus (from `~/dev/commentary-parser`)
-→ reading plans + devotionals → local `sqlite-vec` AI study companion → optional sync.
+→ reading plans + devotionals → local `sqlite-vec` AI study companion. (Optional sync has shipped.)

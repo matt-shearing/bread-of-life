@@ -20,6 +20,7 @@ import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
 import { refLabel, refRange } from "@/lib/osis";
 import { localDayKey } from "@/lib/day";
 import { readingDayKeys, readingStreak } from "@/lib/streak";
+import { devotionDoneId } from "@/lib/devotionDone";
 import { useUI } from "@/store/ui";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
@@ -376,8 +377,8 @@ function DevotionTile() {
     });
   }, [dev, key]);
 
-  const done0 = useLiveQuery(() => db.devotions.get(`${dev.id}:${key}:0`), [dev.id, key]);
-  const done1 = useLiveQuery(() => db.devotions.get(`${dev.id}:${key}:1`), [dev.id, key]);
+  const done0 = useLiveQuery(() => db.devotions.get(devotionDoneId(dev.id, key, 0)), [dev.id, key]);
+  const done1 = useLiveQuery(() => db.devotions.get(devotionDoneId(dev.id, key, 1)), [dev.id, key]);
 
   if (!day || !day.readings.length) return null;
   const reading = day.readings[Math.min(index, day.readings.length - 1)];

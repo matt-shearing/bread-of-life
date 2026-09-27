@@ -261,13 +261,25 @@ function stampCompletion(
   return next;
 }
 
+/** `dayAt` with `day` stamped now (after any earlier stamp): see PlanProgress.dayAt. */
+function stampDay(prev: Record<number, number> | undefined, day: number): Record<number, number> {
+  return { ...(prev ?? {}), [day]: Math.max(Date.now(), (prev?.[day] ?? 0) + 1) };
+}
+
 export async function setDayDone(planId: string, day: number, done: boolean) {
   // Transactional for the same reason as setChapterDone below: this races the
   // narration's own mark-read writes.
   await db.transaction("rw", db.plans, async () => {
     const p = await db.plans.get(planId);
     if (!p) {
-      if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day], completedAt: { [day]: Date.now() } });
+      if (done)
+        await db.plans.add({
+          planId,
+          startedAt: Date.now(),
+          completedDays: [day],
+          completedAt: { [day]: Date.now() },
+          dayAt: stampDay(undefined, day),
+        });
       return;
     }
     const set = new Set(p.completedDays);
@@ -276,6 +288,7 @@ export async function setDayDone(planId: string, day: number, done: boolean) {
     await db.plans.update(planId, {
       completedDays: [...set].sort((a, b) => a - b),
       completedAt: stampCompletion(p.completedAt, p.completedDays, day, done),
+      dayAt: stampDay(p.dayAt, day),
     });
   });
 }
@@ -322,6 +335,7 @@ export async function setChapterDone(
       completedDays: [...days].sort((a, b) => a - b),
       chapterProgress,
       completedAt: stampCompletion(base.completedAt, base.completedDays, day, days.has(day)),
+      dayAt: stampDay(base.dayAt, day),
     };
     if (existing) await db.plans.update(planId, next);
     else await db.plans.add(next);
