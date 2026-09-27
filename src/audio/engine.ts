@@ -16,9 +16,15 @@
  * `selectEngine()` picks one; nothing else in the app changes.
  */
 import { isLinuxDesktop, isTauri, isTauriAndroid } from "@/lib/platform";
-import { nativeAudio, type NativeQueueItem, type NativeSnapshot } from "./nativeAudio";
+import {
+  nativeAudio,
+  type NativeQueueItem,
+  type NativeSleepTimer,
+  type NativeSleepTimerArg,
+  type NativeSnapshot,
+} from "./nativeAudio";
 
-export type { NativeQueueItem } from "./nativeAudio";
+export type { NativeQueueItem, NativeSleepTimer, NativeSleepTimerArg } from "./nativeAudio";
 
 export interface EngineTrack {
   src: string;
@@ -62,6 +68,9 @@ export interface EngineHandlers {
   onPendingCompletions?: (count: number) => void;
   /** A media key or desktop media widget asked for something (Linux desktop). */
   onRemote?: (command: RemoteCommand) => void;
+  /** Native sleep timer only: the timer native runs changed (set, fired, cleared by a new
+   *  queue, or set from Android Auto's button). Null: no timer. */
+  onSleepTimer?: (timer: NativeSleepTimer | null) => void;
 }
 
 export interface AudioEngine {
@@ -95,6 +104,12 @@ export interface AudioEngine {
   duration(): number;
   /** Stop and forget the track (and, on native, the whole queue). */
   release(): void;
+  /** Output volume, 0–1: the sleep timer's fade. Engines without it pause without a fade. */
+  setVolume?(volume: number): void;
+  /** True if the engine runs the sleep timer itself (Android: in the playback service, which
+   *  keeps going while JS is frozen in the background). Otherwise the controller runs it. */
+  readonly supportsNativeSleepTimer?: boolean;
+  setSleepTimer?(timer: NativeSleepTimerArg | null): void;
 }
 
 /** HTML5 `<audio>` engine — the default (browser, and macOS/Windows Tauri, whose webviews
@@ -151,6 +166,9 @@ export class Html5Engine implements AudioEngine {
     const a = this.audio();
     a.currentTime = Math.max(0, Math.min(seconds, a.duration || seconds));
   }
+  setVolume(volume: number) {
+    this.audio().volume = Math.max(0, Math.min(1, volume));
+  }
   currentTime() {
     return this.el?.currentTime ?? 0;
   }
@@ -180,7 +198,13 @@ class NativeEngine implements AudioEngine {
   readonly usesWebMediaSession = false;
   readonly supportsNativeQueue = true;
   readonly supportsRate = true;
+  readonly supportsNativeSleepTimer = true;
   handlers: EngineHandlers = {};
+  /** The sleep timer last passed on, as a comparable key ("" = none). */
+  private sleepKey = "";
+  /** `set_sleep_timer` calls in flight: until the reply, events captured before the command
+   *  landed would undo the timer the controller shows, so their timer is not passed on. */
+  private sleepPending = 0;
   /** The state listener is registered. */
   private listening: Promise<boolean>;
   /** `initialize` has run (created on the first playback command). */
@@ -319,6 +343,7 @@ class NativeEngine implements AudioEngine {
       this.wasPlaying = s.isPlaying;
       (s.isPlaying ? this.handlers.onPlay : this.handlers.onPause)?.();
     }
+    this.applySleepTimer(s);
     if (this.adopting) return;
     // Chapters heard to their end, before the index moves on, so they are marked in order.
     if (Array.isArray(s.finished) && s.finished.length !== this.finishedSeen) {
@@ -337,6 +362,36 @@ class NativeEngine implements AudioEngine {
     } else if (s.status !== "ended") {
       this.ended = false;
     }
+  }
+
+  /** Pass native's sleep timer on when it changed (not on every tick). */
+  private applySleepTimer(s: NativeSnapshot, force = false) {
+    if (!("sleepTimer" in s) || (this.sleepPending > 0 && !force)) return;
+    const t = s.sleepTimer ?? null;
+    const key = t ? `${t.mode}:${t.mode === "time" ? (t.endsAtEpochMs ?? "") : ""}` : "";
+    if (key === this.sleepKey && !force) return;
+    this.sleepKey = key;
+    this.handlers.onSleepTimer?.(t);
+  }
+
+  setSleepTimer(timer: NativeSleepTimerArg | null) {
+    if (!this.hasQueue) return;
+    this.sleepPending++;
+    void this.ready().then(async (ok) => {
+      try {
+        if (!ok) return;
+        const snapshot = await nativeAudio.setSleepTimer(timer);
+        this.sleepPending--;
+        if (snapshot) this.applySleepTimer(snapshot, this.sleepPending === 0);
+      } catch {
+        this.sleepPending--;
+        // Native refused or failed: show what it runs now, not what was asked for.
+        this.sleepKey = "?";
+        this.resync();
+      } finally {
+        if (this.sleepPending < 0) this.sleepPending = 0;
+      }
+    });
   }
 
   /** Fetch the native queue and hand it to the controller as its own. */
@@ -476,6 +531,7 @@ class NativeEngine implements AudioEngine {
     this.resetTrack(0);
     this.wasPlaying = false;
     this.finishedSeen = -1;
+    this.sleepKey = ""; // native's stop clears its timer
     // Whatever the old queue still reports is stale; stop moves native's generation on.
     if (this.seenNativeGen >= 0) this.minGen = Math.max(this.minGen, this.seenNativeGen + 1);
     this.loadSeq++;
@@ -672,6 +728,11 @@ class TauriDesktopEngine implements AudioEngine {
     this.cur = position;
     this.keepPolling();
     this.run((invoke) => invoke("desktop_audio_seek", { position }));
+  }
+  /** Rust keeps the volume across tracks until it is set again. */
+  setVolume(volume: number) {
+    const v = Math.round(Math.max(0, Math.min(1, volume)) * 100) / 100;
+    this.run((invoke) => invoke("desktop_audio_volume", { volume: v }));
   }
   currentTime() {
     return this.cur;

@@ -1,6 +1,6 @@
 import { useRef, useSyncExternalStore } from "react";
 import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack, type RemoteCommand } from "./engine";
-import type { NativeQueueItem } from "./nativeAudio";
+import type { NativeQueueItem, NativeSleepTimer, NativeSleepTimerArg } from "./nativeAudio";
 import { WebSpeechEngine } from "./speechEngine";
 import { parseChapterAudioUrl } from "./audioUrl";
 import { carDevotionalId } from "./devotionalIds";
@@ -71,9 +71,35 @@ export interface AudioState {
   loading: boolean;
   /** Playback speed (1 = normal). Only changeable when `canSetRate` is true. */
   rate: number;
+  /** The sleep timer, or null when none is set. See setSleepTimer. */
+  sleep: SleepTimer | null;
 }
 
-const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0, duration: 0, loading: false, rate: 1 };
+/**
+ * A sleep timer: pause at a time (`endsAt`, epoch ms), at the end of the chapter playing,
+ * or at the end of the reading playing (a plan day's passage, which can span chapters).
+ * The last SLEEP_FADE_MS fade out; playback then PAUSES, so Play carries on from there.
+ */
+export type SleepTimer = { kind: "time"; endsAt: number } | { kind: "chapter" } | { kind: "reading" };
+
+/** What the listener chooses: minutes from now, or the end of the chapter or reading. */
+export type SleepChoice = { minutes: number } | { endOf: "chapter" | "reading" };
+
+/** The minutes offered in Now Playing. */
+export const SLEEP_MINUTES = [5, 10, 15, 30, 45, 60] as const;
+/** The fade before the pause. Native uses the same length (SLEEP_FADE_MS in the plugin). */
+export const SLEEP_FADE_MS = 10_000;
+
+const EMPTY: AudioState = {
+  queue: [],
+  index: -1,
+  playing: false,
+  currentTime: 0,
+  duration: 0,
+  loading: false,
+  rate: 1,
+  sleep: null,
+};
 
 let state: AudioState = EMPTY;
 const listeners = new Set<() => void>();
@@ -170,6 +196,7 @@ function handlersFor(e: AudioEngine): EngineHandlers {
     onPendingCompletions: live(h.onPendingCompletions),
     onEnded: live(h.onEnded),
     onRemote: live(h.onRemote),
+    onSleepTimer: live(h.onSleepTimer),
   };
 }
 
@@ -186,6 +213,7 @@ const sharedHandlers: EngineHandlers = {
   onTime: (t) => {
     set({ currentTime: t });
     syncPositionState();
+    checkSleep(); // timeupdate keeps coming in a background tab, where timers are throttled
   },
   onDuration: (d) => set({ duration: d }),
   onLoading: (b) => set({ loading: b }),
@@ -212,10 +240,17 @@ const sharedHandlers: EngineHandlers = {
   },
   onRate: (rate) => set({ rate }),
   onPendingCompletions: (count) => onNativeCompletions?.(count),
+  onSleepTimer: (t) => {
+    const next = sleepFromNative(t);
+    if (!sameSleep(next, state.sleep)) set({ sleep: next });
+  },
   onEnded: () => {
     set({ playing: false });
     // Native: the last track's natural end arrives in onFinished like every other.
-    if (!engine.supportsNativeQueue) advanceQueue(); // HTML5: one track ended, step forward
+    if (engine.supportsNativeQueue) return;
+    // A sleep timer that ends with this chapter (or reading): stop at the boundary.
+    if (sleepEndsWithCurrentTrack()) pauseAtBoundary();
+    else advanceQueue(); // HTML5: one track ended, step forward
   },
   // Media keys and the desktop's media widget (Linux MPRIS, from Rust).
   onRemote: (c: RemoteCommand) => {
@@ -358,6 +393,8 @@ function loadIndex(index: number, autoplay: boolean) {
  *  on HTML5 the controller steps through track by track. */
 export function playQueue(tracks: Track[], opts?: { startIndex?: number; onComplete?: TrackCompleteHandler }) {
   if (!tracks.length) return;
+  // A new queue starts without a sleep timer (native clears its own with set_queue).
+  clearSleep();
   onTrackComplete = opts?.onComplete ?? null;
   const start = Math.max(0, Math.min(opts?.startIndex ?? 0, tracks.length - 1));
   set({ queue: tracks });
@@ -441,6 +478,7 @@ export function seekBy(delta: number) {
   seekTo(engine.currentTime() + delta);
 }
 export function stop() {
+  clearSleep(); // native's stop clears its own
   engine.release();
   setMediaPlaybackState("none");
   const ms = mediaSession();
@@ -449,6 +487,151 @@ export function stop() {
   advancing = false;
   heard = new Set();
   set({ ...EMPTY, rate: state.rate }); // the chosen speed outlives the queue
+}
+
+/* -------------------------------- sleep timer --------------------------------- */
+
+/*
+ * On Android the timer runs natively (`set_sleep_timer`): the WebView's timers are frozen in
+ * the background, while the playback service keeps running. Everywhere else it runs here,
+ * checked on every time update (which a playing <audio> element keeps firing in a background
+ * tab) and on a one-second interval (which covers a paused player).
+ */
+
+let sleepInterval: ReturnType<typeof setInterval> | null = null;
+/** The volume the JS timer last set (1 = untouched). */
+let sleepVolume = 1;
+
+function sameSleep(a: SleepTimer | null, b: SleepTimer | null): boolean {
+  if (!a || !b) return a === b;
+  return a.kind === b.kind && (a.kind !== "time" || a.endsAt === (b as { endsAt: number }).endsAt);
+}
+
+function sleepFromNative(t: NativeSleepTimer | null): SleepTimer | null {
+  if (!t) return null;
+  if (t.mode === "item") return { kind: "chapter" };
+  if (t.mode === "group") return { kind: "reading" };
+  if (typeof t.endsAtEpochMs === "number") return { kind: "time", endsAt: t.endsAtEpochMs };
+  if (typeof t.remainingMs === "number") return { kind: "time", endsAt: Date.now() + t.remainingMs };
+  return null;
+}
+
+function sleepToNative(t: SleepTimer | null): NativeSleepTimerArg | null {
+  if (!t) return null;
+  if (t.kind === "chapter") return { endOfItem: true };
+  if (t.kind === "reading") return { endOfGroup: true };
+  return { atEpochMs: Math.round(t.endsAt) };
+}
+
+/** Is queue[index] the last chapter of its reading (or not part of a plan day's reading)? */
+export function isLastOfReading(queue: Track[], index: number): boolean {
+  const t = queue[index];
+  if (!t || t.readingGroup == null) return true;
+  const n = queue[index + 1];
+  return !n || n.readingGroup !== t.readingGroup || n.planId !== t.planId || n.planDay !== t.planDay;
+}
+
+/** Whether "End of this reading" means more than "End of this chapter": a plan day's queue. */
+export function hasReadings(s: AudioState): boolean {
+  return s.queue[s.index]?.readingGroup != null;
+}
+
+/**
+ * Milliseconds until the sleep timer pauses playback, or null when that is not known yet (a
+ * chapter whose length is unknown, or a reading with chapters still to come). At normal speed
+ * for the time left in a chapter, so 1.5× speed ends a chapter sooner.
+ */
+export function sleepRemainingMs(s: AudioState, now = Date.now()): number | null {
+  const t = s.sleep;
+  if (!t) return null;
+  if (t.kind === "time") return Math.max(0, t.endsAt - now);
+  if (t.kind === "reading" && !isLastOfReading(s.queue, s.index)) return null;
+  if (!(s.duration > 0)) return null;
+  return Math.max(0, ((s.duration - s.currentTime) / (s.rate > 0 ? s.rate : 1)) * 1000);
+}
+
+function sleepEndsWithCurrentTrack(): boolean {
+  const t = state.sleep;
+  if (!t || t.kind === "time") return false;
+  return t.kind === "chapter" || isLastOfReading(state.queue, state.index);
+}
+
+function setEngineVolume(v: number) {
+  if (Math.abs(v - sleepVolume) < 0.01 && !(v === 1 && sleepVolume !== 1)) return;
+  sleepVolume = v;
+  engine.setVolume?.(v);
+}
+
+/** Forget the timer and put the volume back. Native's own timer is cleared by the caller. */
+function clearSleep() {
+  if (sleepInterval !== null) clearInterval(sleepInterval);
+  sleepInterval = null;
+  if (sleepVolume !== 1) {
+    sleepVolume = 1;
+    engine.setVolume?.(1);
+  }
+  if (state.sleep) set({ sleep: null });
+}
+
+/** JS timer: fade as the end nears, and pause when it comes. */
+function checkSleep() {
+  const t = state.sleep;
+  if (!t || engine.supportsNativeSleepTimer) return;
+  const remaining = sleepRemainingMs(state);
+  if (t.kind === "time" && remaining !== null && remaining <= 0) {
+    // Pause first, then restore the volume: the engine applies them in that order.
+    if (state.playing) pause();
+    clearSleep();
+    return;
+  }
+  if (t.kind !== "time" && !sleepEndsWithCurrentTrack()) return setEngineVolume(1);
+  setEngineVolume(remaining === null ? 1 : Math.max(0, Math.min(1, remaining / SLEEP_FADE_MS)));
+}
+
+/** The chapter (or reading) the timer ends with has just ended: record it as heard, load the
+ *  next chapter paused (so Play carries on with it), and clear the timer. */
+function pauseAtBoundary() {
+  const finished = state.queue[state.index];
+  const idx = state.index;
+  if (finished && onTrackComplete) {
+    try {
+      onTrackComplete(finished, idx);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  if (idx < state.queue.length - 1) {
+    loadIndex(idx + 1, false);
+    // Nothing asked the next chapter to play, so nothing will say it has stopped loading.
+    set({ loading: false, playing: false });
+  }
+  clearSleep();
+}
+
+/**
+ * Start, replace or cancel (null) the sleep timer. It pauses (never stops) playback after a
+ * fade, keeps going while the app is in the background, and is cleared by stop and by a new
+ * queue. "reading" is the end of a plan day's passage; outside a plan day it is the chapter.
+ */
+export function setSleepTimer(choice: SleepChoice | null) {
+  if (!state.queue.length) return;
+  let next: SleepTimer | null = null;
+  if (choice && "minutes" in choice) {
+    if (!Number.isFinite(choice.minutes) || choice.minutes <= 0) return;
+    next = { kind: "time", endsAt: Date.now() + Math.round(choice.minutes * 60_000) };
+  } else if (choice) {
+    next = { kind: choice.endOf === "reading" && hasReadings(state) ? "reading" : "chapter" };
+  }
+  if (mainEngine.supportsNativeSleepTimer) {
+    set({ sleep: next });
+    mainEngine.setSleepTimer?.(sleepToNative(next));
+    return;
+  }
+  clearSleep();
+  if (!next) return;
+  set({ sleep: next });
+  sleepInterval = setInterval(checkSleep, 1000);
+  checkSleep();
 }
 
 /* ---------------------------------- react ------------------------------------ */

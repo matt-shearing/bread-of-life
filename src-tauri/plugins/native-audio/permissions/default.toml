@@ -13,6 +13,7 @@ permissions = [
   "allow-stop",
   "allow-seek-to",
   "allow-set-rate",
+  "allow-set-sleep-timer",
   "allow-get-state",
   "allow-get-debug-log",
   "allow-set-car-snapshot",

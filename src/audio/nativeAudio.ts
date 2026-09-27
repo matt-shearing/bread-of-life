@@ -32,6 +32,21 @@ export interface NativeSnapshot {
   /** Indexes of the current queue that played to their natural end; skips never add to it.
    *  Reset with each queue generation. */
   finished?: number[];
+  /** The sleep timer native is running, or null when there is none (see `setSleepTimer`). */
+  sleepTimer?: NativeSleepTimer | null;
+}
+
+/** What `set_sleep_timer` takes: pause at a wall-clock time, at the end of the current
+ *  item, or at the end of the current reading (the last chapter of its group). */
+export type NativeSleepTimerArg = { atEpochMs: number } | { endOfItem: true } | { endOfGroup: true };
+
+/** The sleep timer in native's state. `remainingMs` is left out when native cannot know it
+ *  (an item whose duration is not known yet, or a reading with chapters still to come). */
+export interface NativeSleepTimer {
+  mode: "time" | "item" | "group";
+  /** "time" only: when playback pauses (the end of the fade). */
+  endsAtEpochMs?: number;
+  remainingMs?: number;
 }
 
 /** A queue item as the app sends it. */
@@ -103,6 +118,9 @@ export const nativeAudio = {
   previous: () => call<NativeSnapshot>("previous"),
   seekTo: (position: number) => call<NativeSnapshot>("seek_to", { position }),
   setRate: (rate: number) => call<NativeSnapshot>("set_rate", { rate }),
+  /** Start, replace or (with null) cancel the sleep timer. Native fades the last 10 s, then
+   *  pauses; it runs in the playback service, so it fires with the app in the background. */
+  setSleepTimer: (timer: NativeSleepTimerArg | null) => call<NativeSnapshot>("set_sleep_timer", timer ?? {}),
   getQueue: () => call<{ items: NativeQueueItem[]; index: number; queueGeneration: number }>("get_queue"),
   setCarSnapshot: (json: string) => call("set_car_snapshot", { json }),
   takeCompletions: () => call<{ items: NativeCompletion[] }>("take_completions"),

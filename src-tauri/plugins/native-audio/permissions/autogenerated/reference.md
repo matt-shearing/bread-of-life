@@ -16,6 +16,7 @@ Default permissions for the plugin
 - `allow-stop`
 - `allow-seek-to`
 - `allow-set-rate`
+- `allow-set-sleep-timer`
 - `allow-get-state`
 - `allow-get-debug-log`
 - `allow-set-car-snapshot`
@@ -446,6 +447,32 @@ Enables the set_rate command without any pre-configured scope.
 <td>
 
 Denies the set_rate command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-set-sleep-timer`
+
+</td>
+<td>
+
+Enables the set_sleep_timer command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-set-sleep-timer`
+
+</td>
+<td>
+
+Denies the set_sleep_timer command without any pre-configured scope.
 
 </td>
 </tr>

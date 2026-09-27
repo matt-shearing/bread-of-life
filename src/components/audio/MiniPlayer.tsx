@@ -2,6 +2,7 @@ import { Headphones, Loader2, Pause, Play, SkipBack, SkipForward, X } from "luci
 import { useAudioSelector, toggle, next, prev, stop, seekTo } from "@/audio/controller";
 import { formatClock as fmt } from "@/lib/day";
 import { useOpenNowPlaying } from "./NowPlaying";
+import { SleepBadge } from "./SleepTimer";
 
 
 /**
@@ -55,6 +56,7 @@ export function MiniPlayer() {
             <span className="flex items-center gap-1.5">
               <span className="truncate text-sm font-medium">{track.title}</span>
               {multi && <span className="shrink-0 text-xs text-muted-foreground">{position}</span>}
+              <SleepBadge />
             </span>
             <span className="block truncate text-xs text-muted-foreground">
               {track.subtitle} · {fmt(currentTime)} / {fmt(duration)}

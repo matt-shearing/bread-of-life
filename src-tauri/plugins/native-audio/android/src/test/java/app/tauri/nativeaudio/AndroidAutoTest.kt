@@ -255,7 +255,7 @@ class AndroidAutoTest {
     fun customButtons_reachTheSession() {
         NativeAudioRuntime.setCarSnapshot(context, snapshotJson())
         val b = connect()
-        assertEquals(listOf("Back 30 seconds", "Next reading", "Speed 1×"), b.customLayout.map { it.displayName.toString() })
+        assertEquals(listOf("Back 30 seconds", "Next reading", "Speed 1×", "Sleep timer"), b.customLayout.map { it.displayName.toString() })
 
         b.setMediaItem(MediaItem.Builder().setMediaId(MediaIds.TODAY_ALL).build())
         b.prepare()
@@ -282,6 +282,14 @@ class AndroidAutoTest {
         await(b.sendCustomCommand(SessionCommand(SessionCommands.SPEED, Bundle.EMPTY), Bundle.EMPTY))
         assertEquals(1.2f, player.playbackParameters.speed, 0.001f)
         runMainLooperUntil { b.customLayout.any { it.displayName.toString() == "Speed 1.2×" } }
+
+        // The sleep timer steps off → 15 min → 30 min → end of chapter → off, and says so.
+        for ((label, mode) in listOf("Sleep: 15 min" to "time", "Sleep: 30 min" to "time", "Sleep: end of chapter" to "item", "Sleep timer" to null)) {
+            assertEquals(SessionResult.RESULT_SUCCESS, await(b.sendCustomCommand(SessionCommand(SessionCommands.SLEEP, Bundle.EMPTY), Bundle.EMPTY)).resultCode)
+            runMainLooperUntil { b.customLayout.any { it.displayName.toString() == label } }
+            assertEquals(label, mode, NativeAudioRuntime.getState(context).sleepTimer?.mode)
+        }
+        assertTrue("still playing: the car's button only sets the timer", player.isPlaying)
     }
 
     @Test

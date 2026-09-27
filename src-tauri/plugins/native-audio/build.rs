@@ -15,6 +15,7 @@ const COMMANDS: &[&str] = &[
     "stop",
     "seek_to",
     "set_rate",
+    "set_sleep_timer",
     "get_state",
     "get_debug_log",
     "set_car_snapshot",

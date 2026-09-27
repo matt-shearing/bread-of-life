@@ -25,6 +25,8 @@ internal object SessionCommands {
     const val NEXT_READING = "app.tauri.nativeaudio.NEXT_READING"
     const val BACK_30 = "app.tauri.nativeaudio.BACK_30"
     const val SPEED = "app.tauri.nativeaudio.SPEED"
+    /** The sleep timer: off → 15 min → 30 min → end of chapter → off. */
+    const val SLEEP = "app.tauri.nativeaudio.SLEEP"
 
     /**
      * The playback speeds, slowest first: the car's speed button steps up through them and
@@ -37,6 +39,7 @@ internal object SessionCommands {
         SessionCommand(NEXT_READING, Bundle.EMPTY),
         SessionCommand(BACK_30, Bundle.EMPTY),
         SessionCommand(SPEED, Bundle.EMPTY),
+        SessionCommand(SLEEP, Bundle.EMPTY),
     )
 
     /** The next speed up, wrapping from the fastest to the slowest. A speed not in the list
@@ -48,7 +51,8 @@ internal object SessionCommands {
     }
 
     @OptIn(UnstableApi::class)
-    fun layout(speed: Float): ImmutableList<CommandButton> {
+    /** [sleep]: what the running sleep timer is ("15 min", "end of chapter"), or null for none. */
+    fun layout(speed: Float, sleep: String?): ImmutableList<CommandButton> {
         val speedIcon = when {
             kotlin.math.abs(speed - 0.8f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_0_8
             kotlin.math.abs(speed - 1.2f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_1_2
@@ -70,6 +74,12 @@ internal object SessionCommands {
             CommandButton.Builder(speedIcon)
                 .setDisplayName("Speed ${formatSpeed(speed)}")
                 .setSessionCommand(SessionCommand(SPEED, Bundle.EMPTY))
+                .build(),
+            // Media3 has no timer icon: a moon of our own.
+            CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+                .setCustomIconResId(R.drawable.bol_sleep_timer)
+                .setDisplayName(if (sleep == null) "Sleep timer" else "Sleep: $sleep")
+                .setSessionCommand(SessionCommand(SLEEP, Bundle.EMPTY))
                 .build(),
         )
     }
@@ -97,7 +107,7 @@ internal class LibrarySessionCallback(
             .build()
         return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
             .setAvailableSessionCommands(commands)
-            .setCustomLayout(SessionCommands.layout(session.player.playbackParameters.speed))
+            .setCustomLayout(NativeAudioRuntime.customLayout(session.player.playbackParameters.speed))
             .build()
     }
 
@@ -139,6 +149,7 @@ internal class LibrarySessionCallback(
             SessionCommands.BACK_30 -> NativeAudioRuntime.seekBackBy(30_000L)
             SessionCommands.NEXT_READING -> NativeAudioRuntime.nextReading()
             SessionCommands.SPEED -> NativeAudioRuntime.cycleSpeed()
+            SessionCommands.SLEEP -> NativeAudioRuntime.cycleSleepTimer()
             else -> false
         }
         return Futures.immediateFuture(SessionResult(if (handled) SessionResult.RESULT_SUCCESS else SessionError.ERROR_NOT_SUPPORTED))

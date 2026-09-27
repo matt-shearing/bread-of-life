@@ -44,6 +44,7 @@ pub fn run() {
                 desktop_audio::desktop_audio_play,
                 desktop_audio::desktop_audio_pause,
                 desktop_audio::desktop_audio_seek,
+                desktop_audio::desktop_audio_volume,
                 desktop_audio::desktop_audio_stop,
                 desktop_audio::desktop_audio_state,
             ]);

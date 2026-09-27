@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-sleep-timer"
+description = "Enables the set_sleep_timer command without any pre-configured scope."
+commands.allow = ["set_sleep_timer"]
+
+[[permission]]
+identifier = "deny-set-sleep-timer"
+description = "Denies the set_sleep_timer command without any pre-configured scope."
+commands.deny = ["set_sleep_timer"]
