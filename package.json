@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"scripts/test-*.mjs\" scripts/verify-plans.mjs",
     "fetch:bible": "node scripts/fetch-bible.mjs",
     "build:versification": "node scripts/build-versification.mjs",
     "verify:plans": "node scripts/verify-plans.mjs",
