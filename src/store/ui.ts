@@ -278,7 +278,7 @@ export const useUI = create<UIState>()(
       syncPromptDismissed: false,
       dismissSyncPrompt: () => set({ syncPromptDismissed: true }),
 
-      ai: { provider: "anthropic", model: "claude-opus-4-8", apiKey: "", baseUrl: "" },
+      ai: { provider: "anthropic", model: "claude-opus-5", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),
       companionSeed: null,
       setCompanionSeed: (q) => set({ companionSeed: q }),

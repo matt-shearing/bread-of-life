@@ -17,10 +17,10 @@ export const PROVIDERS: Record<
   anthropic: {
     label: "Claude (Anthropic)",
     kind: "anthropic",
-    defaultModel: "claude-opus-4-8",
+    defaultModel: "claude-opus-5",
     needsKey: true,
     needsBaseUrl: false,
-    modelSuggestions: ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
+    modelSuggestions: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
     keyHint: "sk-ant-…",
   },
   openai: {

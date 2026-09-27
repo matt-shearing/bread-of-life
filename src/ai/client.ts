@@ -44,7 +44,8 @@ export async function streamCompanion(
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true",
     };
-    body = { model: config.model || meta.defaultModel, max_tokens: 2048, system, messages: history, stream: true };
+    // Opus 5 thinks by default and thinking counts against max_tokens, so leave room for the answer.
+    body = { model: config.model || meta.defaultModel, max_tokens: 16000, system, messages: history, stream: true };
   } else {
     const base = (config.baseUrl || meta.defaultBaseUrl || "").replace(/\/$/, "");
     if (!base) throw new Error("No base URL configured for this provider.");
