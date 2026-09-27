@@ -23,6 +23,39 @@ The terms below were read on 28 September 2026. Re-read them before changing a c
 Not available: the **LSB** has no public API (Three Sixteen Publishing licenses it by agreement), and
 the **NIV** is listed on API.Bible under a separate "unique" licence from Biblica.
 
+## Keys on several devices
+
+No key ships in the app. A user who reads on a phone and a desktop can enter each key once and
+turn on **Sync my keys to my other devices** (Settings → Bible translations, per device, off by
+default). Keys then travel only end-to-end encrypted, with the same data key as the journal:
+
+- The switch is offered only when the device is signed in, holds the account's encryption key and
+  the server lists the `apiKeys` feature. Otherwise one sentence says why keys stay on the device.
+  The v0.4.0 server has no such feature, so nothing about keys is sent to it.
+- Keys live in the synced `apiKeys` table (`src/store/keySync.ts` mirrors it with the UI store).
+  It is in `ALWAYS_ENCRYPTED_TABLES`: a row can only be written while the data key is present, a
+  push throws before sending anything readable (`assertNoPlaintextSecrets`), a pulled readable row
+  is dropped, the v0.5 server rejects one, and backups leave the table out.
+- A pulled key fills an empty slot, or replaces a key that was the synced one. A different key the
+  user entered on that device is kept, and the card offers "Use theirs here" or "Use this one
+  everywhere". Removing a key with the switch on removes it on every device that still uses it.
+  Turning the switch off stops sharing and leaves every key in place.
+- The AI companion key is not shared this way: it belongs to a provider and model chosen per device.
+- The list of chosen API.Bible texts is not shared either; after the key arrives, pick the texts once
+  on each device (the guided setup ticks NASB and AMP for you).
+
+## Guided setup
+
+Each provider has a "Help me get a key" dialog (from its card, and from the picker's locked rows):
+numbered steps with the sign-up links, a paste step that reads the clipboard when allowed, tidies and
+loosely checks the key, runs the same test read, and offers key sync. The step reached is remembered
+per device, because API.Bible approves accounts by hand. A second tab gives a prompt for the user's
+own browser-using AI agent (`agentPrompt` in `src/data/licensed/setupGuide.ts`): it must stop before
+accepting any terms or statement of faith and before entering personal details, leave email checks,
+CAPTCHAs and approval to the person, never pay, and return the key only to the user. Where the key
+appears after approval (the API.Bible dashboard, api.esv.org/account/, the NLT email) was not
+verified with a real account.
+
 ## ESV — api.esv.org
 
 Source: <https://api.esv.org/>.

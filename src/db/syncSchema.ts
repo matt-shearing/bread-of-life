@@ -16,6 +16,7 @@ export const SYNCED_TABLES = [
   "customPlans",
   "memory",
   "readingLog",
+  "apiKeys",
 ] as const;
 export type SyncedTable = (typeof SYNCED_TABLES)[number];
 
@@ -31,6 +32,7 @@ export const KEY_PATH: Record<SyncedTable, string> = {
   customPlans: "id",
   memory: "id",
   readingLog: "id",
+  apiKeys: "id",
 };
 
 /**
@@ -41,6 +43,7 @@ export const KEY_PATH: Record<SyncedTable, string> = {
  */
 export const TABLE_FEATURES: Partial<Record<SyncedTable, string>> = {
   readingLog: "readingLog",
+  apiKeys: "apiKeys",
 };
 
 export const isSyncedTable = (t: string): t is SyncedTable => (SYNCED_TABLES as readonly string[]).includes(t);
@@ -50,7 +53,16 @@ export const isSyncedTable = (t: string): t is SyncedTable => (SYNCED_TABLES as 
  * on (a data key is present). Only the record payload is encrypted; the server still
  * keys on the cleartext (table, id, updatedAt) for last-write-wins.
  */
-export const ENCRYPTED_TABLES: ReadonlySet<string> = new Set(["journal", "prayers", "notes"]);
+export const ENCRYPTED_TABLES: ReadonlySet<string> = new Set(["journal", "prayers", "notes", "apiKeys"]);
+
+/**
+ * Tables that are NEVER sent or accepted in the clear, whatever the account does: the
+ * user's own Bible API keys (src/store/keySync.ts). A row is written only while this
+ * device holds the data key, a push of one without it waits, the push refuses any
+ * plaintext payload (`assertNoPlaintextSecrets` in src/db/sync.ts), a pulled plaintext
+ * row is dropped, the v0.5 server refuses one, and backups leave the table out.
+ */
+export const ALWAYS_ENCRYPTED_TABLES: ReadonlySet<string> = new Set(["apiKeys"]);
 
 /**
  * The `settings` rows that belong to the ACCOUNT and so sync. Everything else in the

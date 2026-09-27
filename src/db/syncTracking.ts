@@ -1,5 +1,6 @@
 import type { DBCore, DBCoreMutateRequest, DBCoreMutateResponse, DBCoreTable, DBCoreTransaction, Middleware } from "dexie";
-import { KEY_PATH, isSyncedTable, syncsRow, type SyncedTable } from "./syncSchema";
+import { ALWAYS_ENCRYPTED_TABLES, KEY_PATH, isSyncedTable, syncsRow, type SyncedTable } from "./syncSchema";
+import { loadDataKey } from "./crypto";
 
 /**
  * Change tracking for sync, as a Dexie DBCore middleware.
@@ -109,6 +110,11 @@ function trackTable(table: DBCoreTable, outbox: DBCoreTable, name: SyncedTable):
       if (trans[NO_TRACK] || trans.mode === "versionchange") return table.mutate(req);
 
       if (req.type === "add" || req.type === "put") {
+        // A secret row is queued only while this device can encrypt it. Without the data
+        // key there is nothing to upload it with, so the write is refused outright.
+        if (ALWAYS_ENCRYPTED_TABLES.has(name) && !loadDataKey()) {
+          throw new Error(`sync: refusing to queue ${name} without end-to-end encryption`);
+        }
         const keys = req.values.map((v) => (v as Record<string, unknown>)?.[keyPath]);
         const prev = await table.getMany({ trans, keys });
         const floors = await recreateFloors(outbox, trans, name, keys, prev, req.values);

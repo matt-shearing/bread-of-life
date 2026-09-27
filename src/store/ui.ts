@@ -199,13 +199,30 @@ export interface UIState {
 
   /**
    * Your own keys for licensed Bible APIs (ESV, API.Bible), and the API.Bible texts
-   * you chose to show. Per device and never synced, like the AI key: see
+   * you chose to show. Per device, like the AI key; with `keySync` on, the keys (not the
+   * list) are also shared with the user's other devices, end-to-end encrypted only
+   * (src/store/keySync.ts). See
    * src/store/syncedPrefs.ts for what does travel.
    */
   bibleKeys: BibleKeys;
   setBibleKey: (provider: keyof BibleKeys, key: string) => void;
   apiBibleBibles: ApiBibleChoice[];
   setApiBibleBibles: (list: ApiBibleChoice[]) => void;
+  /**
+   * "Sync my keys to my other devices", per device and off until the user turns it on.
+   * The keys then travel only end-to-end encrypted (src/store/keySync.ts).
+   */
+  keySync: boolean;
+  setKeySync: (on: boolean) => void;
+  /**
+   * Per key, the value this device and the synced copy last agreed on, and where it came
+   * from ("other": adopted from another device). Lets key sync tell a key replaced or
+   * removed elsewhere from one the user set here. Written only by src/store/keySync.ts.
+   */
+  keySyncAgreed: Partial<Record<keyof BibleKeys, { value: string; from: "here" | "other" }>>;
+  /** Where each provider's guided key setup was left (per device; sign-up approval can take days). */
+  keySetupStep: Partial<Record<keyof BibleKeys, number>>;
+  setKeySetupStep: (provider: keyof BibleKeys, step: number | null) => void;
 
   // AI study companion
   ai: AIConfig;
@@ -407,6 +424,17 @@ export const useUI = create<UIState>()(
       setBibleKey: (provider, key) => set((s) => ({ bibleKeys: { ...s.bibleKeys, [provider]: key.trim() } })),
       apiBibleBibles: [],
       setApiBibleBibles: (list) => set({ apiBibleBibles: list }),
+      keySync: false,
+      setKeySync: (on) => set({ keySync: on }),
+      keySyncAgreed: {},
+      keySetupStep: {},
+      setKeySetupStep: (provider, step) =>
+        set((s) => {
+          const next = { ...s.keySetupStep };
+          if (step === null) delete next[provider];
+          else next[provider] = step;
+          return { keySetupStep: next };
+        }),
 
       ai: { provider: "anthropic", model: "claude-opus-5", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),

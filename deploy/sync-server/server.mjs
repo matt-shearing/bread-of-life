@@ -32,7 +32,8 @@ import { DatabaseSync } from "node:sqlite";
 
 const VERSION = "0.5.0";
 // "readingLog": stores the reading-log table (clients hold it back from servers without it).
-const FEATURES = ["rejected", "no-echo", "more", "refresh", "logout-all", "password", "delete-account", "clamp", "readingLog"];
+// "apiKeys": stores the user's own Bible API keys, which must arrive encrypted (see below).
+const FEATURES = ["rejected", "no-echo", "more", "refresh", "logout-all", "password", "delete-account", "clamp", "readingLog", "apiKeys"];
 
 const PORT = Number(process.env.PORT || 4000);
 const DB_PATH = process.env.DB_PATH || "/app/data/sync.db";
@@ -61,8 +62,14 @@ if (!TOKEN_SECRET) {
 /** The tables the app syncs. Anything else is refused. */
 const TABLES = new Set([
   "highlights", "notes", "prayers", "journal", "progress",
-  "settings", "plans", "devotions", "customPlans", "memory", "readingLog",
+  "settings", "plans", "devotions", "customPlans", "memory", "readingLog", "apiKeys",
 ]);
+/**
+ * Tables that must only ever hold end-to-end encrypted payloads: a row is exactly
+ * `{__enc: "<ciphertext>"}` (or a tombstone). Anything readable is refused, so a buggy
+ * or old client can never leave a user's API key on this server in the clear.
+ */
+const ALWAYS_ENCRYPTED = new Set(["apiKeys"]);
 /** Settings that describe one device and must never be stored (older apps sent them). */
 const DEVICE_LOCAL_SETTINGS = ["misslerLibraryPath"];
 
@@ -291,6 +298,10 @@ function invalidReason(c) {
   if (c.updatedAt != null && (typeof c.updatedAt !== "number" || !Number.isFinite(c.updatedAt) || c.updatedAt < 0)) return "invalid";
   if (!c.deleted && (c.data === null || typeof c.data !== "object" || Array.isArray(c.data))) return "invalid";
   if (c.table === "settings" && DEVICE_LOCAL_SETTINGS.includes(c.id)) return "device-local";
+  if (ALWAYS_ENCRYPTED.has(c.table) && !c.deleted) {
+    const keys = Object.keys(c.data);
+    if (keys.length !== 1 || typeof c.data.__enc !== "string" || c.data.__enc.length === 0) return "plaintext";
+  }
   return null;
 }
 

@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { RouteFallback } from "@/components/layout/RouteFallback";
 import { startSync } from "@/db/sync";
 import { startPrefSync } from "@/store/syncedPrefs";
+import { startKeySync } from "@/store/keySync";
 import { ensureAndroidDropFolder } from "@/data/missler";
 import { ensureReadingLogBackfill } from "@/db/readingLog";
 
@@ -82,6 +83,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 // Kick off sync AFTER render, guarded — it must never block the UI.
 setTimeout(() => {
   try {
+    // Before the first round, so the round that catches up can share the user's keys.
+    startKeySync();
     startSync();
     // Mirror account-level prefs (the active reading plan & friends) into the
     // synced `settings` table so they follow you between devices.

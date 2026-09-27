@@ -1,26 +1,22 @@
-import { useState, type ReactNode } from "react";
-import { ExternalLink, KeyRound } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ExternalLink, KeyRound, Wand2 } from "lucide-react";
 import { useUI, type ApiBibleChoice, type BibleKeys } from "@/store/ui";
 import { Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Switch } from "@/components/ui";
-import {
-  APIBIBLE_PREFIX,
-  ESV_TRANSLATION,
-  NLT_TRANSLATION,
-  apiBibleTranslation,
-  clearLicensedCache,
-  getLicensedChapter,
-  providerFetch,
-} from "@/data/licensed";
-import { listApiBibles, type ApiBibleSummary } from "@/data/licensed/apibible";
-import { knownApiBible, KNOWN_API_BIBLES } from "@/data/licensed/catalog";
-import { memoryCacheStore } from "@/data/licensed/cache";
-import { LicensedError, type LicensedFailure } from "@/data/licensed/types";
+import { APIBIBLE_PREFIX, ESV_TRANSLATION, NLT_TRANSLATION, apiBibleTranslation, clearLicensedCache } from "@/data/licensed";
+import type { ApiBibleSummary } from "@/data/licensed/apibible";
+import { knownApiBible } from "@/data/licensed/catalog";
+import type { SetupProvider } from "@/data/licensed/setupGuide";
 import { FREE_TRANSLATIONS, type Translation } from "@/data/bible";
+import { keySyncState, shareKeyHere, adoptSyncedKey, type KeyId } from "@/store/keySync";
+import { checkAndSaveKey, findAndSaveApiBible, useKeySyncInfo } from "./bibleKeyActions";
+import { KeySetupDialog } from "./KeySetupDialog";
+import { KeySyncOffer, KeySyncSwitch } from "./KeySyncOffer";
 
 /**
- * Your own keys for the publishers' Bible APIs. Each key stays on this device (like
- * the AI key) and is never synced; see src/data/licensed/ for what is fetched and how
- * little of it is kept.
+ * Your own keys for the publishers' Bible APIs. Each key stays on this device (like the
+ * AI key) unless you turn on "Sync my keys", which shares them with your other devices
+ * end-to-end encrypted only (src/store/keySync.ts). See src/data/licensed/ for what is
+ * fetched and how little of it is kept.
  */
 export function BibleKeysSettings() {
   return (
@@ -32,9 +28,11 @@ export function BibleKeysSettings() {
         <p className="text-sm text-muted-foreground">
           The BSB and {FREE_TRANSLATIONS.length - 1} other free translations need nothing: pick them in the Bible’s translation menu.
           Copyrighted translations are read from their publisher’s own service with a free key that you get
-          for yourself. Bread of Life never ships their text. Your keys stay on this device and are not synced.
-          Only a little of each licensed text is kept for offline reading, as its licence requires.
+          for yourself. Bread of Life never ships their text or a key. Only a little of each licensed text is kept for
+          offline reading, as its licence requires.
         </p>
+
+        <KeySyncSwitch />
 
         <ProviderKey
           provider="esv"
@@ -78,6 +76,45 @@ export function BibleKeysSettings() {
   );
 }
 
+/** "Help me get a key": opens the guided setup. */
+function SetupButton({ provider, show }: { provider: SetupProvider; show: boolean }) {
+  const [open, setOpen] = useState(false);
+  // The dialog stays mounted after its key is saved, so it can finish (and offer key sync).
+  return (
+    <>
+      {show && (
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <Wand2 size={14} aria-hidden /> Help me get a key
+        </Button>
+      )}
+      {open && <KeySetupDialog provider={provider} open={open} onOpenChange={setOpen} />}
+    </>
+  );
+}
+
+/** Where this key stands with the user's other devices; offers the choice when they differ. */
+function SyncedKeyStatus({ id }: { id: KeyId }) {
+  const { rows } = useKeySyncInfo();
+  const keySync = useUI((s) => s.keySync);
+  const bibleKeys = useUI((s) => s.bibleKeys);
+  const keySyncAgreed = useUI((s) => s.keySyncAgreed);
+  const st = keySyncState(id, { keySync, bibleKeys, keySyncAgreed }, rows.get(id));
+  if (st.kind === "from-other") return <p className="text-xs text-primary-700 dark:text-primary-300">Using the key from your other devices.</p>;
+  if (st.kind === "shared") return <p className="text-xs text-muted-foreground">Shared with your other devices, encrypted.</p>;
+  if (st.kind !== "conflict") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+      <span className="min-w-0 flex-1 basis-52">Your other devices use a different key. This device keeps its own until you choose.</span>
+      <Button size="sm" variant="outline" onClick={() => void adoptSyncedKey(id)}>
+        Use theirs here
+      </Button>
+      <Button size="sm" variant="ghost" onClick={() => void shareKeyHere(id)}>
+        Use this one everywhere
+      </Button>
+    </div>
+  );
+}
+
 function Link({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium text-primary-700 underline-offset-2 hover:underline dark:text-primary-400">
@@ -86,15 +123,6 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
     </a>
   );
 }
-
-const FAILURE_TEXT: Record<LicensedFailure, string> = {
-  "no-key": "Enter a key first.",
-  "bad-key": "The service did not accept this key.",
-  "not-licensed": "This key is not allowed to read that text.",
-  "rate-limited": "Too many requests just now. Try again in a minute.",
-  "not-found": "The service answered, but sent no verses.",
-  offline: "Could not reach the service. Check your connection.",
-};
 
 /** One provider's key: a password field, Save / Remove, and a test read of John 3. */
 function ProviderKey({
@@ -112,7 +140,10 @@ function ProviderKey({
 }) {
   const saved = useUI((s) => s.bibleKeys[provider]);
   const setBibleKey = useUI((s) => s.setBibleKey);
+  const keySync = useUI((s) => s.keySync);
   const [draft, setDraft] = useState(saved);
+  // A key that arrives from another device (or the guided setup) shows here too.
+  useEffect(() => setDraft(saved), [saved]);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -121,25 +152,18 @@ function ProviderKey({
     if (!key) return;
     setBusy(true);
     setStatus(null);
-    // A trial read of John 3, kept out of the cache.
-    const r = await getLicensedChapter(test, "JHN", 3, {
-      keys: { esv: "", nlt: "", apiBible: "", [provider]: key },
-      store: memoryCacheStore(),
-    });
+    setStatus(await checkAndSaveKey(provider, key));
     setBusy(false);
-    if (r.chapter) {
-      setBibleKey(provider, key);
-      setStatus({ ok: true, text: `Key saved. ${test.short} is now in the translation menu.` });
-    } else {
-      setStatus({ ok: false, text: `${FAILURE_TEXT[r.failure ?? "offline"]} The key was not saved.` });
-    }
   }
 
   async function remove() {
     setBibleKey(provider, "");
     setDraft("");
     await clearLicensedCache(test).catch(() => {});
-    setStatus({ ok: true, text: `Key removed, and the ${test.short} text kept on this device was deleted.` });
+    setStatus({
+      ok: true,
+      text: `Key removed, and the ${test.short} text kept on this device was deleted.${keySync ? " It is removed from your other devices too." : ""}`,
+    });
   }
 
   return (
@@ -179,6 +203,9 @@ function ProviderKey({
           {status.text}
         </p>
       )}
+      {status?.ok && saved && <KeySyncOffer />}
+      <SyncedKeyStatus id={provider} />
+      <SetupButton provider={provider} show={!saved} />
       <p className="text-xs text-muted-foreground">{terms}</p>
     </section>
   );
@@ -187,10 +214,12 @@ function ProviderKey({
 /** API.Bible: the key, then the English texts it can read, to add to the picker. */
 function ApiBibleKey() {
   const saved = useUI((s) => s.bibleKeys.apiBible);
+  const keySync = useUI((s) => s.keySync);
   const chosen = useUI((s) => s.apiBibleBibles);
   const setBibleKey = useUI((s) => s.setBibleKey);
   const setApiBibleBibles = useUI((s) => s.setApiBibleBibles);
   const [draft, setDraft] = useState(saved);
+  useEffect(() => setDraft(saved), [saved]);
   const [list, setList] = useState<ApiBibleSummary[] | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -200,29 +229,10 @@ function ApiBibleKey() {
     if (!key) return;
     setBusy(true);
     setStatus(null);
-    try {
-      const found = await listApiBibles(await providerFetch(), key);
-      // Texts people ask for (NASB, AMP, …) first, then the rest by name.
-      const rank = (b: ApiBibleSummary) => {
-        const i = KNOWN_API_BIBLES.findIndex((k) => k.id === b.id);
-        return i < 0 ? KNOWN_API_BIBLES.length : i;
-      };
-      found.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-      setList(found);
-      setBibleKey("apiBible", key);
-      const nasb = found.some((b) => b.id === KNOWN_API_BIBLES[0].id || b.id === KNOWN_API_BIBLES[1].id);
-      setStatus({
-        ok: true,
-        text: `Key saved. It can read ${found.length} English text${found.length === 1 ? "" : "s"}.${
-          nasb ? "" : " No NASB among them: add NASB 2020 or NASB 1995 to your Bibles on api.bible, then look again."
-        }`,
-      });
-    } catch (e) {
-      const why = e instanceof LicensedError ? e.failure : "offline";
-      setStatus({ ok: false, text: `${FAILURE_TEXT[why]} The key was not saved.` });
-    } finally {
-      setBusy(false);
-    }
+    const r = await findAndSaveApiBible(key);
+    if (r.ok && r.found) setList(r.found);
+    setStatus(r);
+    setBusy(false);
   }
 
   function toggle(b: ApiBibleSummary | ApiBibleChoice, on: boolean) {
@@ -242,7 +252,10 @@ function ApiBibleKey() {
     setApiBibleBibles([]);
     setDraft("");
     setList(null);
-    setStatus({ ok: true, text: "Key removed, and the API.Bible text kept on this device was deleted." });
+    setStatus({
+      ok: true,
+      text: `Key removed, and the API.Bible text kept on this device was deleted.${keySync ? " It is removed from your other devices too." : ""}`,
+    });
   }
 
   // Show what is chosen even before the list has been fetched this session.
@@ -291,6 +304,9 @@ function ApiBibleKey() {
           {status.text}
         </p>
       )}
+      {status?.ok && saved && <KeySyncOffer />}
+      <SyncedKeyStatus id="apiBible" />
+      <SetupButton provider="apiBible" show={!saved} />
       {saved && rows.length > 0 && (
         <div className="space-y-2 rounded-lg border border-border p-3" data-testid="apibible-list">
           <p className="text-xs font-medium">Show in the translation menu</p>

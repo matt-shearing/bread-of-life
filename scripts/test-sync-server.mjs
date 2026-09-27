@@ -71,6 +71,28 @@ test("push checks each row: a bad one is rejected and the rest apply", async () 
   assert.deepEqual((await serverRows(srv)).map((x) => x.id), ["ok.1", "ok.2"]);
 });
 
+test("API keys are stored only as ciphertext: a readable key row is refused", async () => {
+  const srv = await server();
+  const r0 = await fetch(`${srv.url}/health`).then((x) => x.json());
+  assert.ok(r0.features.includes("apiKeys"));
+  const token = await account(srv, "keys@x.org");
+  const at = Date.now();
+  const r = await post(srv, "/push", {
+    deviceId: "d1",
+    changes: [
+      { table: "apiKeys", id: "esv", updatedAt: at, deleted: false, data: { id: "esv", value: "PLAINKEY" } },
+      { table: "apiKeys", id: "nlt", updatedAt: at, deleted: false, data: { __enc: "abc", value: "PLAINKEY" } },
+      { table: "apiKeys", id: "apiBible", updatedAt: at, deleted: false, data: { __enc: "Y2lwaGVy" } },
+      { table: "apiKeys", id: "gone", updatedAt: at, deleted: true, data: null },
+    ],
+  }, token);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.data.rejected.map((x) => [x.id, x.reason]), [["esv", "plaintext"], ["nlt", "plaintext"]]);
+  const rows = (await serverRows(srv)).filter((x) => x.tbl === "apiKeys");
+  assert.deepEqual(rows.map((x) => x.id).sort(), ["apiBible", "gone"]);
+  assert.ok(!JSON.stringify(rows).includes("PLAINKEY"));
+});
+
 test("a stale push is rejected, with the server's copy for a v0.5 client", async () => {
   const srv = await server();
   const token = await account(srv);
