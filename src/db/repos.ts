@@ -85,10 +85,17 @@ export function isDueToday(p: { status: string; remind?: boolean; lastPrayedAt: 
   return localDayKey(p.lastPrayedAt) !== localDayKey();
 }
 
-export async function prayedFor(id: string) {
+/**
+ * Count one more prayer. Returns the values it replaced so the caller can offer
+ * Undo (`updatePrayer(id, previous)`), or null if the prayer is gone.
+ */
+export async function prayedFor(
+  id: string,
+): Promise<{ prayedCount: number; lastPrayedAt: number | null } | null> {
   const p = await db.prayers.get(id);
-  if (!p) return;
+  if (!p) return null;
   await db.prayers.update(id, { prayedCount: p.prayedCount + 1, lastPrayedAt: Date.now() });
+  return { prayedCount: p.prayedCount, lastPrayedAt: p.lastPrayedAt };
 }
 
 export async function markAnswered(id: string, answerNote: string) {
@@ -120,6 +127,25 @@ export async function deletePrayer(id: string) {
 
 export async function updatePrayer(id: string, patch: Partial<Prayer>) {
   await db.prayers.update(id, patch);
+}
+
+/**
+ * Undo for `deletePrayer`: put the row back as it was and re-link the journal
+ * entries that still exist. Pass the prayer exactly as read before the delete.
+ */
+export async function restorePrayer(snapshot: Prayer) {
+  const journalIds: string[] = [];
+  for (const jid of snapshot.linkedJournalIds ?? []) {
+    const j = await db.journal.get(jid);
+    if (!j) continue;
+    journalIds.push(jid);
+    const ids = new Set(j.linkedPrayerIds ?? []);
+    if (!ids.has(snapshot.id)) {
+      ids.add(snapshot.id);
+      await db.journal.update(jid, { linkedPrayerIds: [...ids] });
+    }
+  }
+  await db.prayers.put({ ...snapshot, linkedJournalIds: journalIds });
 }
 
 /* ---------------------------- custom prayer categories ------------------------- */
@@ -193,6 +219,25 @@ export async function deleteJournalEntry(id: string) {
       linkedJournalIds: (p.linkedJournalIds ?? []).filter((j) => j !== id),
     });
   }
+}
+
+/**
+ * Undo for `deleteJournalEntry`: put the entry back and re-link the prayers that
+ * still exist. Pass the entry exactly as read before the delete.
+ */
+export async function restoreJournalEntry(snapshot: JournalEntry) {
+  const prayerIds: string[] = [];
+  for (const pid of snapshot.linkedPrayerIds ?? []) {
+    const p = await db.prayers.get(pid);
+    if (!p) continue;
+    prayerIds.push(pid);
+    const ids = new Set(p.linkedJournalIds ?? []);
+    if (!ids.has(snapshot.id)) {
+      ids.add(snapshot.id);
+      await db.prayers.update(pid, { linkedJournalIds: [...ids] });
+    }
+  }
+  await db.journal.put({ ...snapshot, linkedPrayerIds: prayerIds });
 }
 
 /* --------------------------- journal ↔ prayer links ---------------------------- */
