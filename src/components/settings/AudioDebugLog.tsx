@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
-
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+import { isTauriAndroid } from "@/lib/platform";
+import { nativeAudio } from "@/audio/nativeAudio";
 
 /** Copy text, falling back to a hidden textarea where the async clipboard is refused. */
 async function copyText(text: string): Promise<boolean> {
@@ -37,13 +36,12 @@ async function copyText(text: string): Promise<boolean> {
  */
 export function AudioDebugLog() {
   const [status, setStatus] = useState<string | null>(null);
-  if (!(isTauri && isAndroid)) return null;
+  if (!isTauriAndroid) return null;
 
   async function copy() {
     setStatus("Reading the log…");
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const { lines } = await invoke<{ lines: string[] }>("plugin:native-audio|get_debug_log");
+      const { lines } = await nativeAudio.getDebugLog();
       if (!lines?.length) {
         setStatus("The log is empty. Play something first, then copy it.");
         return;

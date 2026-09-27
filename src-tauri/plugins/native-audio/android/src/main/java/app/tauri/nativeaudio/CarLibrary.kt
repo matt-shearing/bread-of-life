@@ -464,7 +464,9 @@ internal class CarLibrary(private val context: Context, val store: PlaybackStore
         return MediaItem.Builder().setMediaId(id).setUri(src).setMediaMetadata(metadata).build()
     }
 
+    /** The app's own line when the snapshot has one (it knows the translation's name). */
     private fun subtitleFor(snap: CarSnapshot): String {
+        if (snap.subtitle.isNotBlank()) return snap.subtitle
         val name = if (snap.translation == "BSB") "Berean Standard Bible" else snap.translation
         return "$name · ${snap.narrator.replaceFirstChar { it.uppercase() }}"
     }

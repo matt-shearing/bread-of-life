@@ -1,5 +1,5 @@
 /**
- * Android Auto, the app's half.
+ * Android Auto and the native player, the app's half (car.ts before v0.4.1).
  *
  * The car browses the native side (src-tauri/plugins/native-audio, CarLibrary.kt), which
  * often runs without the app: the phone connects to the car, the service starts, the
@@ -8,15 +8,10 @@
  * 1. A snapshot of what the car cannot work out for itself (today's plan day with its
  *    readings and audio, devotional audio, the narrator), pushed with `set_car_snapshot`
  *    whenever any of it changes. Native keeps it in SharedPreferences.
- * 2. Plan chapters and devotionals that played to their end. Native queues every one,
- *    whoever loaded the queue (the car, the app, or the app's own earlier session), because
- *    the app may not be there to hear it: swiped away, frozen in the background, or holding
- *    a queue it adopted from the car. The app collects them at start, when it comes back to
- *    the foreground, and whenever a state event says some are waiting
- *    (`take_car_completions`; the "car" in the command names is historical), records them
- *    exactly as the guided reader and the Listen button do (`setChapterDone`,
- *    `setDevotionDone`), then acknowledges them (`ack_car_completions`). Recording is
- *    idempotent, so a chapter the app also marked itself does no harm.
+ * 2. Plan chapters and devotionals that played to their end, which native records for the
+ *    app whoever loaded the queue. The drain is in nativeCompletions.ts; `recordCompletion`
+ *    below records one exactly as the guided reader and the Listen button do
+ *    (`setChapterDone`, `setDevotionDone`).
  *
  * The Bible tree (books, chapters, their URLs) is built natively from the same URL pattern
  * as src/audio/audioUrl.ts, so it needs nothing from here.
@@ -30,15 +25,16 @@ import { devotionalById, getDevotionDay } from "@/data/devotional";
 import { translationById } from "@/data/bible";
 import { refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
+import { isTauriAndroid } from "@/lib/platform";
 import { setNativeCompletionsHandler } from "./controller";
 import { devotionDoneId, parseCarDevotionalId } from "./devotionalIds";
 import { chapterAudioUrl, DEFAULT_AUDIO_TRANSLATION, DEFAULT_NARRATOR } from "./audioUrl";
 import { groupDayReadings, groupIndexByReading } from "./readingGroups";
+import { nativeAudio, type NativeCompletion } from "./nativeAudio";
+import { createCompletionsDrain } from "./nativeCompletions";
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 /** Only the Android app has a car to talk to. */
-export const carSupported = isTauri && isAndroid;
+export const carSupported = isTauriAndroid;
 
 export interface CarTrack {
   readingIndex: number;
@@ -66,6 +62,8 @@ export interface CarSnapshot {
   updatedAt: number;
   translation: string;
   narrator: string;
+  /** "Berean Standard Bible · David": the line under every chapter the car lists. */
+  subtitle: string;
   today: {
     planId: string;
     planName: string;
@@ -88,6 +86,8 @@ export function registerCarDevotionalSource(fn: DevotionalSource | null) {
   if (carSupported) schedulePush();
 }
 
+/** "Berean Standard Bible · David". Sent in the snapshot, so the car's chapters say the
+ *  same (CarLibrary.subtitleFor falls back to its own only before the first snapshot). */
 function subtitleFor(translation: string, narrator: string): string {
   const name = translationById(translation)?.name ?? translation;
   return `${name} · ${narrator.charAt(0).toUpperCase()}${narrator.slice(1)}`;
@@ -136,14 +136,7 @@ export async function buildCarSnapshot(activePlanId: string | null): Promise<Car
   } catch {
     devotional = [];
   }
-  return { version: 1, updatedAt: Date.now(), translation, narrator, today, devotional };
-}
-
-type Invoke = typeof import("@tauri-apps/api/core").invoke;
-let invokeFn: Promise<Invoke> | null = null;
-function invoke(): Promise<Invoke> {
-  invokeFn ??= import("@tauri-apps/api/core").then((m) => m.invoke);
-  return invokeFn;
+  return { version: 1, updatedAt: Date.now(), translation, narrator, subtitle, today, devotional };
 }
 
 let lastPushed = "";
@@ -156,7 +149,7 @@ export async function pushCarSnapshot(): Promise<void> {
   const key = JSON.stringify({ ...snap, updatedAt: 0 });
   if (key === lastPushed) return;
   try {
-    await (await invoke())("plugin:native-audio|set_car_snapshot", { json: JSON.stringify(snap) });
+    await nativeAudio.setCarSnapshot(JSON.stringify(snap));
     lastPushed = key;
   } catch (e) {
     console.warn("car: snapshot not sent", e);
@@ -166,18 +159,6 @@ export async function pushCarSnapshot(): Promise<void> {
 function schedulePush() {
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(() => void pushCarSnapshot(), 800);
-}
-
-interface NativeCompletion {
-  seq: number;
-  /** Absent on entries written before devotionals were recorded: those are plan chapters. */
-  kind?: "plan" | "devotional";
-  planId?: string;
-  planDay?: number;
-  planReadingIndex?: number;
-  /** The car's devotional id, "spurgeon-morning-evening:09-25:m". */
-  devotionalId?: string;
-  completedAt: number;
 }
 
 /** Record one completion. Idempotent: the same entry recorded twice changes nothing. */
@@ -203,39 +184,16 @@ async function recordCompletion(c: NativeCompletion): Promise<void> {
   // A plan that no longer exists has nothing to record; it is dropped all the same.
 }
 
-let draining: Promise<void> | null = null;
-/** Asked again while a drain was running: run once more after it, for what arrived since. */
-let drainAgain = false;
+const completions = createCompletionsDrain({
+  take: () => nativeAudio.takeCompletions(),
+  ack: (upTo) => nativeAudio.ackCompletions(upTo),
+  record: recordCompletion,
+});
 
 /** Record what native heard to the end, then tell native those entries are safe to forget. */
 export function drainNativeCompletions(): Promise<void> {
   if (!carSupported) return Promise.resolve();
-  if (draining) {
-    drainAgain = true;
-    return draining;
-  }
-  draining = (async () => {
-    try {
-      const call = await invoke();
-      const { items } = await call<{ items: NativeCompletion[] }>("plugin:native-audio|take_car_completions");
-      if (!items?.length) return;
-      let upTo = 0;
-      for (const c of items) {
-        await recordCompletion(c);
-        upTo = Math.max(upTo, c.seq);
-      }
-      await call("plugin:native-audio|ack_car_completions", { upTo });
-    } catch (e) {
-      console.warn("audio: completions not collected", e);
-    }
-  })().finally(() => {
-    draining = null;
-    if (drainAgain) {
-      drainAgain = false;
-      void drainNativeCompletions();
-    }
-  });
-  return draining;
+  return completions.drain();
 }
 
 /**
@@ -252,7 +210,7 @@ export function useCarSync(): void {
 
   useEffect(() => {
     if (!carSupported) return;
-    setNativeCompletionsHandler(() => void drainNativeCompletions());
+    setNativeCompletionsHandler((count) => completions.onPending(count));
     void drainNativeCompletions();
     const sub = liveQuery(() => db.plans.toArray()).subscribe({
       next: () => schedulePush(),

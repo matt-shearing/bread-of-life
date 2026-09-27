@@ -58,6 +58,9 @@ internal data class CarSnapshot(
     val today: CarToday?,
     val devotional: List<CarDevotional>,
     val updatedAt: Long,
+    /** The app's line under every chapter ("Berean Standard Bible · David"); blank before
+     *  v0.4.1 snapshots, when [CarLibrary] builds its own. */
+    val subtitle: String = "",
 ) {
     companion object {
         val EMPTY = CarSnapshot(BibleCatalog.DEFAULT_NARRATOR, BibleCatalog.DEFAULT_TRANSLATION, null, emptyList(), 0L)
@@ -109,6 +112,7 @@ internal data class CarSnapshot(
                 today = today,
                 devotional = devotional,
                 updatedAt = o.optLong("updatedAt", 0L),
+                subtitle = o.optString("subtitle"),
             )
         }
     }
