@@ -15,6 +15,7 @@ export const SYNCED_TABLES = [
   "devotions",
   "customPlans",
   "memory",
+  "readingLog",
 ] as const;
 export type SyncedTable = (typeof SYNCED_TABLES)[number];
 
@@ -29,6 +30,17 @@ export const KEY_PATH: Record<SyncedTable, string> = {
   devotions: "id",
   customPlans: "id",
   memory: "id",
+  readingLog: "id",
+};
+
+/**
+ * Tables added after v0.5.0, which a server stores only if it lists the named feature in
+ * /health. A server without it refuses them (v0.5) or fails the whole push (v0.4.0), so
+ * their changes are held back until it has it, then sent in full (see `gateTables` in
+ * src/db/sync.ts).
+ */
+export const TABLE_FEATURES: Partial<Record<SyncedTable, string>> = {
+  readingLog: "readingLog",
 };
 
 export const isSyncedTable = (t: string): t is SyncedTable => (SYNCED_TABLES as readonly string[]).includes(t);

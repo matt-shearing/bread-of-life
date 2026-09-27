@@ -30,7 +30,7 @@ import {
   decryptJSON,
   switchDataKeyAccount,
 } from "./crypto";
-import { E2E_CHECK_KEY, ENCRYPTED_TABLES, KEY_PATH, SYNCED_TABLES, syncsRow, type SyncedTable } from "./syncSchema";
+import { E2E_CHECK_KEY, ENCRYPTED_TABLES, KEY_PATH, SYNCED_TABLES, TABLE_FEATURES, syncsRow, type SyncedTable } from "./syncSchema";
 import { nextOutboxAt, nextStamp, onQueued, untracked } from "./syncTracking";
 import { mergePlans, samePlanProgress } from "./planMerge";
 import { normaliseDevotionId } from "@/lib/devotionDone";
@@ -57,6 +57,12 @@ export interface SyncState {
   pendingAccountChoice: boolean;
   /** This device's key can't read the account's encryption check: the phrase belongs to another key. */
   keyMismatch: boolean;
+  /**
+   * Gated table (see TABLE_FEATURES) → the account whose server has been sent all of it.
+   * Absent while the server lacks the table: its changes are dropped from the outbox then,
+   * and the whole table is queued once the server gains it.
+   */
+  gatedSent: Record<string, string>;
 }
 
 /** The project's hosted sync service (set at build time); hidden if unset. */
@@ -75,6 +81,7 @@ const DEFAULT_STATE: SyncState = {
   authError: false,
   pendingAccountChoice: false,
   keyMismatch: false,
+  gatedSent: {},
 };
 
 export async function getState(): Promise<SyncState> {
@@ -629,7 +636,35 @@ export async function pushChanges(): Promise<Outcome> {
   return push(base, s, f);
 }
 
+/**
+ * Tables the server may not store yet (TABLE_FEATURES). Without the feature, their queued
+ * changes are dropped: a v0.4.0 server fails a whole push over one, and they would park as
+ * "stuck" and worry the user. The rows stay here, and the first push to a server that has
+ * the feature queues the whole table.
+ */
+async function gateTables(s: SyncState, f: ServerFeatures): Promise<SyncState> {
+  const account = accountKey(s.mode, s.url, s.email ?? "");
+  const sent = { ...(s.gatedSent ?? {}) };
+  let changed = false;
+  for (const [table, feature] of Object.entries(TABLE_FEATURES) as [SyncedTable, string][]) {
+    if (f.features.has(feature)) {
+      if (sent[table] === account) continue;
+      await enqueueAll([table]);
+      sent[table] = account;
+      changed = true;
+    } else {
+      await db.outbox.where("key").startsWith(`${table}:`).delete();
+      if (table in sent) {
+        delete sent[table];
+        changed = true;
+      }
+    }
+  }
+  return changed ? setState({ gatedSent: sent }) : s;
+}
+
 async function push(base: string, s: SyncState, f: ServerFeatures): Promise<Outcome> {
+  s = await gateTables(s, f);
   const entries = await db.outbox.toArray();
   if (!entries.length) return "ok";
   const { out, drop } = await buildOutgoing(entries);

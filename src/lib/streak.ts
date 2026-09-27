@@ -2,9 +2,11 @@ import { localDayKey } from "./day.ts";
 
 /**
  * The reading streak: how many consecutive LOCAL days you have read something in the
- * Bible (any chapter recorded in `progress`). One calculation, used by the dashboard's
- * "Reading streak" card and by the daily-reading reminders, so the number in a
- * notification is always the number on the dashboard.
+ * Bible. The days come from the reading log (`readingDaysFromDb` in src/db/readingLog.ts),
+ * which keeps every day a chapter was read; `progress` kept only the latest, so reading a
+ * chapter again used to erase the earlier day and could break a streak. One calculation,
+ * used by the dashboard's "Reading streak" card, the History page and the daily-reading
+ * reminders, so the number in a notification is always the number on the dashboard.
  *
  * A streak is still alive until today is over: if you read yesterday but not yet
  * today, it counts back from yesterday. (Counting only from today made the dashboard
@@ -33,7 +35,7 @@ function previousDay(d: Date): Date {
   return p;
 }
 
-export function readingStreak(days: Set<string>, now: number = Date.now()): Streak {
+export function readingStreak(days: ReadonlySet<string>, now: number = Date.now()): Streak {
   let d = new Date(now);
   d = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
   const includesToday = days.has(localDayKey(d.getTime()));
@@ -44,4 +46,25 @@ export function readingStreak(days: Set<string>, now: number = Date.now()): Stre
     d = previousDay(d);
   }
   return { days: n, includesToday };
+}
+
+/** "YYYY-MM-DD" → local noon that day (noon keeps day arithmetic clear of DST changes). */
+function dayFromKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d, 12);
+}
+
+/** The longest run of consecutive local days in `days` (0 when empty). */
+export function longestStreak(days: Iterable<string>): number {
+  const sorted = [...new Set(days)].sort();
+  let best = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const key of sorted) {
+    const d = dayFromKey(key);
+    run = prev !== null && localDayKey(previousDay(d).getTime()) === prev ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = key;
+  }
+  return best;
 }

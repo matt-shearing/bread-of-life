@@ -221,7 +221,7 @@ export function GuidedReaderPage() {
       onComplete: (t) => {
         if (t.planReadingIndex != null) {
           setTicked((prev) => new Set(prev).add(t.planReadingIndex!));
-          void setChapterDone(planId, day, t.planReadingIndex, true, total).catch(() => {});
+          void setChapterDone(planId, day, t.planReadingIndex, true, total, { source: "audio" }).catch(() => {});
         }
       },
     });
