@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
+  ArrowLeft,
   ArrowRight,
   BookOpen,
   Check,
@@ -23,46 +25,72 @@ import { useUI } from "@/store/ui";
 import { Button, Input } from "@/components/ui";
 import { BackfillBar } from "@/components/settings/SyncSettings";
 import { cn } from "@/lib/cn";
+import { COARSE_H } from "@/components/confirm";
 
 /**
  * First-run welcome: a short walkthrough of the main features, then an optional
  * offer to create (or sign in to) a sync account. Everything works offline
  * without an account, so "Skip" is always a first-class choice.
+ *
+ * Built on Radix Dialog: focus stays inside, Escape skips, every step has Skip,
+ * and steps after the first have Back. An outside tap does nothing — a stray
+ * touch shouldn't end the welcome.
  */
 export function Onboarding() {
   const hasOnboarded = useUI((s) => s.hasOnboarded);
   const setHasOnboarded = useUI((s) => s.setHasOnboarded);
   const [step, setStep] = useState(0);
+  const [synced, setSynced] = useState(false);
 
   if (hasOnboarded) return null;
 
   const finish = () => setHasOnboarded(true);
+  const TITLES = ["Welcome to Bread of Life", "What's inside", "Sync across your devices"];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-primary-900/40 p-4 backdrop-blur-sm pt-[env(safe-area-inset-top)]">
-      <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-        <div className="flex-1 overflow-y-auto">
-          {step === 0 && <WelcomeStep />}
-          {step === 1 && <FeaturesStep />}
-          {step === 2 && <SyncStep onDone={finish} />}
-        </div>
-        <div className="flex items-center gap-3 border-t border-border px-6 py-4">
-          <Dots step={step} total={3} />
-          {step < 2 ? (
-            <>
-              <button className="ml-auto text-sm text-muted-foreground hover:text-foreground" onClick={finish}>
+    <DialogPrimitive.Root open onOpenChange={(o) => !o && finish()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[60] bg-primary-900/40 backdrop-blur-sm animate-fade-in" />
+        <DialogPrimitive.Content
+          data-testid="onboarding"
+          aria-describedby={undefined}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          className="fixed left-1/2 top-1/2 z-[60] flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl animate-fade-in focus:outline-none"
+        >
+          <DialogPrimitive.Title className="sr-only">
+            {TITLES[step]} — step {step + 1} of 3
+          </DialogPrimitive.Title>
+          <div className="flex-1 overflow-y-auto">
+            {step === 0 && <WelcomeStep />}
+            {step === 1 && <FeaturesStep />}
+            {step === 2 && <SyncStep onDone={finish} onSynced={() => setSynced(true)} />}
+          </div>
+          {!synced && (
+            <div className="flex items-center gap-2 border-t border-border px-4 py-3 sm:px-6 sm:py-4">
+              <Dots step={step} total={3} />
+              {step > 0 && (
+                <Button variant="ghost" className={cn("ml-2", COARSE_H)} onClick={() => setStep((s) => s - 1)}>
+                  <ArrowLeft style={{ width: 15, height: 15 }} /> Back
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                className={cn("ml-auto text-muted-foreground", COARSE_H)}
+                onClick={finish}
+                data-testid="onboarding-skip"
+              >
                 Skip
-              </button>
-              <Button onClick={() => setStep((s) => s + 1)}>
-                {step === 0 ? "Take the tour" : "Next"} <ArrowRight style={{ width: 15, height: 15 }} />
               </Button>
-            </>
-          ) : (
-            <div className="ml-auto" />
+              {step < 2 && (
+                <Button className={COARSE_H} onClick={() => setStep((s) => s + 1)} data-testid="onboarding-next">
+                  {step === 0 ? "Take the tour" : "Next"} <ArrowRight style={{ width: 15, height: 15 }} />
+                </Button>
+              )}
+            </div>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 
@@ -127,7 +155,10 @@ function FeaturesStep() {
   );
 }
 
-function SyncStep({ onDone }: { onDone: () => void }) {
+function SyncStep({ onDone, onSynced }: { onDone: () => void; onSynced: () => void }) {
+  const urlId = useId();
+  const emailId = useId();
+  const passwordId = useId();
   const [mode, setMode] = useState<SyncMode>(HOSTED_SYNC_URL ? "hosted" : "selfhost");
   const [url, setUrl] = useState("");
   const [email, setEmail] = useState("");
@@ -146,7 +177,10 @@ function SyncStep({ onDone }: { onDone: () => void }) {
     const fn = isSignup ? signup : login;
     const res = await fn(mode, mode === "selfhost" ? url : null, email.trim(), password);
     setBusy(false);
-    if (res.ok) setDone(true);
+    if (res.ok) {
+      setDone(true);
+      onSynced();
+    }
     else setError(res.error ?? "Something went wrong.");
   };
 
@@ -202,6 +236,8 @@ function SyncStep({ onDone }: { onDone: () => void }) {
 
       {mode === "selfhost" && (
         <Input
+          id={urlId}
+          aria-label="Sync server address"
           className="mt-3"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -210,6 +246,8 @@ function SyncStep({ onDone }: { onDone: () => void }) {
         />
       )}
       <Input
+        id={emailId}
+        aria-label="Email"
         className="mt-3"
         type="email"
         value={email}
@@ -219,6 +257,8 @@ function SyncStep({ onDone }: { onDone: () => void }) {
         spellCheck={false}
       />
       <Input
+        id={passwordId}
+        aria-label="Password"
         className="mt-3"
         type="password"
         value={password}
@@ -232,11 +272,16 @@ function SyncStep({ onDone }: { onDone: () => void }) {
         <Button onClick={() => void submit()} disabled={busy || !email.trim() || password.length < 8}>
           {busy ? "…" : isSignup ? "Create account" : "Log in"}
         </Button>
-        <button className="text-xs text-muted-foreground underline" onClick={() => setIsSignup((v) => !v)}>
+        <button
+          type="button"
+          className="min-h-[36px] text-xs text-muted-foreground underline [@media(pointer:coarse)]:min-h-[44px]"
+          onClick={() => setIsSignup((v) => !v)}
+        >
           {isSignup ? "I already have an account" : "Create an account"}
         </button>
         <button
-          className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          type="button"
+          className="ml-auto flex min-h-[36px] items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [@media(pointer:coarse)]:min-h-[44px]"
           onClick={onDone}
         >
           <CloudOff style={{ width: 15, height: 15 }} /> Stay local-only
