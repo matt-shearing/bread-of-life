@@ -11,6 +11,7 @@ import { registerCarDevotionalSource, useCarSync } from "@/audio/carSnapshot";
 import { carDevotionals } from "@/audio/devotionalAudio";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
+import { KeyboardLayer } from "@/components/layout/CommandPalette";
 import {
   initNotificationRouting,
   maybeNotifyDevotion,
@@ -81,7 +82,7 @@ export function AppShell() {
     <TooltipProvider>
       <div className="flex h-[100dvh] w-full overflow-hidden pt-[env(safe-area-inset-top)]">
         <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+        <main id="app-main" className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <div className="min-h-0 flex-1 overflow-hidden">
             <Outlet />
           </div>
@@ -93,6 +94,8 @@ export function AppShell() {
       {/* Opened from the mini-player; covers the page (and the bottom nav) while shown. */}
       <NowPlaying />
       <Onboarding />
+      {/* Ctrl/⌘+K palette and the ← → / ? shortcuts. */}
+      <KeyboardLayer />
     </TooltipProvider>
   );
 }

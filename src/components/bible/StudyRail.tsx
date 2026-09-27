@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BookMarked, HandHeart, Languages, Link2, Notebook, NotebookPen, X } from "lucide-react";
 import { useUI } from "@/store/ui";
@@ -27,47 +27,86 @@ import {
   type XrefEntry,
 } from "@/data/study";
 import { cn } from "@/lib/cn";
+import { useRailLayout } from "@/lib/layout";
+import { useOpenRef } from "@/lib/useOpenRef";
 
+type RailTab = "commentary" | "xref" | "strongs" | "references";
+const RAIL_TABS: { id: RailTab; label: string; icon: typeof BookMarked }[] = [
+  { id: "commentary", label: "Commentary", icon: BookMarked },
+  { id: "xref", label: "Cross-refs", icon: Link2 },
+  { id: "strongs", label: "Strong's", icon: Languages },
+  { id: "references", label: "References", icon: Notebook },
+];
+/** Below this rail width only the active tab keeps its label; the others show an icon. */
+const ALL_LABELS_MIN_PX = 460;
+
+/**
+ * The study rail. Its size and placement come from `useRailLayout` (src/lib/layout.ts),
+ * the one place that knows how much room the rail may take:
+ *  - phone: a full-screen sheet with a close button;
+ *  - Fold / narrow window: a panel floating over the right of the reader (≤ 40%);
+ *  - desktop: docked beside the reader, drag its edge to resize (≤ 40%).
+ * The parent must be `relative` and pad its reading column by `reserve`.
+ */
 export function StudyRail() {
-  const { railTab, setRailTab, toggleRail, railWidth } = useUI();
-  const [isDesktop, setIsDesktop] = useState(false);
+  const { railTab, setRailTab, setRailOpen } = useUI();
+  const { mode, width } = useRailLayout();
+  const allLabels = width >= ALL_LABELS_MIN_PX;
 
+  // Escape closes the floating panel/sheet (the docked rail stays put on desktop,
+  // where Esc also clears a verse range in the reader).
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const update = () => setIsDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
+    if (mode === "docked") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector("[role=dialog][data-state=open], [data-radix-popper-content-wrapper]")) return;
+      setRailOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, setRailOpen]);
 
   return (
     <aside
-      style={isDesktop ? { width: railWidth } : undefined}
-      className="fixed inset-0 z-40 flex w-full flex-col border-l border-border bg-card pt-[env(safe-area-inset-top)] md:relative md:z-auto md:shrink-0 md:pt-0"
+      data-study-rail={mode}
+      aria-label="Study panel"
+      style={mode === "sheet" ? undefined : { width }}
+      className={cn(
+        "flex flex-col bg-card",
+        mode === "sheet" && "fixed inset-0 z-40 w-full pt-[env(safe-area-inset-top)]",
+        mode === "overlay" && "absolute inset-y-0 right-0 z-30 border-l border-border shadow-2xl",
+        mode === "docked" && "absolute inset-y-0 right-0 z-20 border-l border-border",
+      )}
     >
-      <ResizeHandle />
-      <div className="flex items-center border-b border-border px-2">
-        <TabButton active={railTab === "commentary"} onClick={() => setRailTab("commentary")} icon={<BookMarked style={{ width: 15, height: 15 }} />}>
-          Commentary
-        </TabButton>
-        <TabButton active={railTab === "xref"} onClick={() => setRailTab("xref")} icon={<Link2 style={{ width: 15, height: 15 }} />}>
-          Cross-refs
-        </TabButton>
-        <TabButton active={railTab === "strongs"} onClick={() => setRailTab("strongs")} icon={<Languages style={{ width: 15, height: 15 }} />}>
-          Strong's
-        </TabButton>
-        <TabButton active={railTab === "references"} onClick={() => setRailTab("references")} icon={<Notebook style={{ width: 15, height: 15 }} />}>
-          References
-        </TabButton>
+      {mode === "docked" && <ResizeHandle />}
+      <div className="flex items-stretch border-b border-border">
+        <div role="tablist" aria-label="Study tools" className="flex min-w-0 flex-1 overflow-x-auto px-1 [scrollbar-width:none]">
+          {RAIL_TABS.map((t) => {
+            const Icon = t.icon;
+            const active = railTab === t.id;
+            return (
+              <TabButton
+                key={t.id}
+                active={active}
+                showLabel={allLabels || active}
+                label={t.label}
+                onClick={() => setRailTab(t.id)}
+                icon={<Icon style={{ width: 16, height: 16 }} />}
+              />
+            );
+          })}
+        </div>
+        {/* Close sits OUTSIDE the scrolling tab strip, so it can never be pushed off the edge. */}
         <button
-          onClick={toggleRail}
+          onClick={() => setRailOpen(false)}
           aria-label="Close study panel"
-          className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent md:hidden"
+          title="Close study panel"
+          className="flex w-11 shrink-0 items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <X style={{ width: 18, height: 18 }} />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
         {railTab === "commentary" && <CommentaryPanel />}
         {railTab === "xref" && <XrefPanel />}
         {railTab === "strongs" && <StrongsPanel />}
@@ -78,9 +117,10 @@ export function StudyRail() {
 }
 
 /**
- * Draggable left-edge divider — desktop only. The rail is the right-most
+ * Draggable left-edge divider — docked (desktop) only. The rail is the right-most
  * element, so its right edge sits at the viewport edge; the new width is simply
- * the distance from the pointer to that edge. Clamping lives in the store.
+ * the distance from the pointer to that edge. The store clamps to 280–640px and
+ * useRailLayout caps what is shown at 40% of the main column.
  */
 function ResizeHandle() {
   const setRailWidth = useUI((s) => s.setRailWidth);
@@ -107,7 +147,7 @@ function ResizeHandle() {
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize study panel"
-      className="group absolute inset-y-0 left-0 z-10 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none md:block"
+      className="group absolute inset-y-0 left-0 z-10 w-2 -translate-x-1/2 cursor-col-resize touch-none"
       title="Drag to resize · double-click to reset"
     >
       <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-primary/60 group-active:bg-primary" />
@@ -117,27 +157,32 @@ function ResizeHandle() {
 
 function TabButton({
   active,
+  showLabel,
+  label,
   onClick,
   icon,
-  children,
 }: {
   active: boolean;
+  showLabel: boolean;
+  label: string;
   onClick: () => void;
   icon: ReactNode;
-  children: ReactNode;
 }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
+      aria-label={label}
+      title={showLabel ? undefined : label}
       onClick={onClick}
       className={cn(
-        "flex flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-2.5 text-xs font-medium transition-colors",
-        active
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+        "flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        showLabel ? "flex-auto" : "flex-none",
+        active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
       {icon}
-      {children}
+      {showLabel && <span>{label}</span>}
     </button>
   );
 }
@@ -168,7 +213,8 @@ function useAvailableCommentarySources(): CommentarySource[] {
 }
 
 function CommentaryPanel() {
-  const { ho, chapter, commentarySource, setCommentarySource, goTo } = useUI();
+  const { ho, chapter, commentarySource, setCommentarySource } = useUI();
+  const openXref = useOpenXref();
   const sources = useAvailableCommentarySources();
   const [data, setData] = useState<CommentaryChapter | null>(null);
   const [state, setState] = useState<"loading" | "ok" | "empty">("loading");
@@ -234,7 +280,7 @@ function CommentaryPanel() {
                 {b.xrefs && b.xrefs.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {b.xrefs.map((x) => (
-                      <XrefChip key={x} osis={x} onOpen={goTo} />
+                      <XrefChip key={x} osis={x} onOpen={openXref} />
                     ))}
                   </div>
                 )}
@@ -254,12 +300,12 @@ function CommentaryPanel() {
 
 /** A small clickable cross-reference chip (Missler blocks). Ranges like
  *  "Heb.1.1-Heb.1.3" jump to the start ref's chapter, mirroring the Cross-refs tab. */
-function XrefChip({ osis, onOpen }: { osis: string; onOpen: (ho: string, chapter: number) => void }) {
+function XrefChip({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
   const p = parseOsis(osis.split("-")[0]);
   if (!p) return null;
   return (
     <button
-      onClick={() => onOpen(p.ho, p.chapter)}
+      onClick={() => onOpen(p.ho, p.chapter, p.verse)}
       className="rounded-full border border-border px-2 py-0.5 text-[11px] text-primary-600 transition-colors hover:border-primary/40 hover:bg-accent"
     >
       {osisLabel(osis)}
@@ -269,6 +315,23 @@ function XrefChip({ osis, onOpen }: { osis: string; onOpen: (ho: string, chapter
 
 /* ------------------------------ Cross-references ------------------------------ */
 
+type XrefOpener = (ho: string, chapter: number, verse?: number) => void;
+
+/**
+ * Following a cross-reference is a peek: land on the verse, and offer "Back to"
+ * the verse you came from (or to today's plan reading, from the guided reader).
+ */
+function useOpenXref(): XrefOpener {
+  const openRef = useOpenRef();
+  const { pathname, search } = useLocation();
+  return (hoT, chT, vT) => {
+    const s = useUI.getState();
+    const guided = pathname.startsWith("/guided");
+    const label = guided ? "today's reading" : refLabel(s.ho, s.chapter, s.selectedVerse ?? undefined);
+    openRef(hoT, chT, vT, { path: guided ? pathname + search : "/bible", label });
+  };
+}
+
 function osisLabel(osis: string): string {
   const [start] = osis.split("-");
   const p = parseOsis(start);
@@ -277,7 +340,8 @@ function osisLabel(osis: string): string {
 }
 
 function XrefPanel() {
-  const { ho, chapter, selectedVerse, goTo } = useUI();
+  const { ho, chapter, selectedVerse } = useUI();
+  const openXref = useOpenXref();
   const verse = selectedVerse ?? 1;
   const [refs, setRefs] = useState<XrefEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -308,7 +372,7 @@ function XrefPanel() {
       ) : (
         <div className="space-y-1.5">
           {refs.map((x, i) => (
-            <XrefRow key={i} osis={x.r} onOpen={(hoT, chT) => goTo(hoT, chT)} />
+            <XrefRow key={i} osis={x.r} onOpen={openXref} />
           ))}
           <p className="pt-2 text-center text-[11px] text-muted-foreground">
             OpenBible.info cross-references · CC-BY
@@ -319,7 +383,7 @@ function XrefPanel() {
   );
 }
 
-function XrefRow({ osis, onOpen }: { osis: string; onOpen: (ho: string, chapter: number) => void }) {
+function XrefRow({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
   const [text, setText] = useState<string>("");
   const start = osis.split("-")[0];
   const p = parseOsis(start);
@@ -340,7 +404,7 @@ function XrefRow({ osis, onOpen }: { osis: string; onOpen: (ho: string, chapter:
   if (!p) return null;
   return (
     <button
-      onClick={() => onOpen(p.ho, p.chapter)}
+      onClick={() => onOpen(p.ho, p.chapter, p.verse)}
       className="block w-full rounded-md border border-border p-2.5 text-left hover:border-primary/40 hover:bg-accent/40"
     >
       <div className="text-xs font-semibold text-primary-600">{osisLabel(osis)}</div>
@@ -411,7 +475,7 @@ function ReferencesPanel() {
       {refs.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No journal entries or prayers link to this chapter yet. Tag a verse from the journal editor,
-          or use the “J” / pray actions on a verse.
+          or use the Journal / Pray actions on a verse.
         </p>
       ) : (
         <div className="space-y-1.5">

@@ -1,5 +1,5 @@
 import { BookMarked, MoveHorizontal, X } from "lucide-react";
-import { useUI } from "@/store/ui";
+import { useRailLayout } from "@/lib/layout";
 
 /**
  * A gentle, one-off discovery hint for the study rail on touch tablets/folds,
@@ -18,7 +18,7 @@ export function StudyRailCoach({
   step: "toggle" | "resize";
   onDismiss: () => void;
 }) {
-  const railWidth = useUI((s) => s.railWidth);
+  const { width: railWidth } = useRailLayout();
 
   if (step === "toggle") {
     return (

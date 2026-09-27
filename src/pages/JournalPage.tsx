@@ -13,6 +13,7 @@ import {
 } from "@/db/repos";
 import { parseOsis, refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
+import { useOpenRef } from "@/lib/useOpenRef";
 import {
   Badge,
   Button,
@@ -64,6 +65,11 @@ export function JournalPage() {
     if (open) {
       setDialog({ id: open, mode: "read" });
       params.delete("open");
+      setParams(params, { replace: true });
+    } else if (params.get("new")) {
+      // /journal?new=1 — "New journal entry" from the Ctrl+K palette.
+      setDialog({ id: null, mode: "edit" });
+      params.delete("new");
       setParams(params, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -317,7 +323,8 @@ function EntryReadView({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const { goTo, selectVerse } = useUI();
+  const { selectVerse } = useUI();
+  const openRef = useOpenRef();
   const [linking, setLinking] = useState(false);
   const { confirm, confirmElement } = useConfirm();
 
@@ -354,10 +361,9 @@ function EntryReadView({
   function openPassage(osis: string) {
     const p = parseOsis(osis);
     if (!p) return;
-    goTo(p.ho, p.chapter);
     if (p.verse) selectVerse(p.verse);
     onClose();
-    navigate("/bible");
+    openRef(p.ho, p.chapter, p.verse, { path: "/journal", label: "your journal" });
   }
 
   return (

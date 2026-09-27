@@ -7,6 +7,7 @@ import { addCustomPlan, deleteCustomPlan, setDayDone, startPlan, resetPlan } fro
 import { buildReadingRange, getPlans, type Plan } from "@/data/plans";
 import { BOOKS, refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
+import { useOpenRef } from "@/lib/useOpenRef";
 import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -122,7 +123,8 @@ function PlanDetail({
   onDelete: () => void;
 }) {
   const navigate = useNavigate();
-  const { goTo, activePlanId, setActivePlan } = useUI();
+  const { activePlanId, setActivePlan } = useUI();
+  const openRef = useOpenRef();
   const doneSet = new Set(completed);
   const today = firstIncomplete(plan.days.length, completed);
   const isActive = activePlanId === plan.id;
@@ -212,8 +214,7 @@ function PlanDetail({
                     <button
                       key={i}
                       onClick={() => {
-                        goTo(r.ho, r.chapter);
-                        navigate("/bible");
+                        openRef(r.ho, r.chapter, r.vStart, { path: "/plans", label: "Plans" });
                       }}
                       className="rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent"
                     >
