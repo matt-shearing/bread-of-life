@@ -11,6 +11,7 @@ import { registerCarDevotionalSource, useCarSync } from "@/audio/car";
 import { carDevotionals } from "@/audio/devotionalAudio";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
+import { KeyboardLayer } from "@/components/layout/CommandPalette";
 import {
   initNotificationRouting,
   maybeNotifyDevotion,
@@ -93,6 +94,8 @@ export function AppShell() {
       {/* Opened from the mini-player; covers the page (and the bottom nav) while shown. */}
       <NowPlaying />
       <Onboarding />
+      {/* Ctrl/⌘+K palette and the ← → / ? shortcuts. */}
+      <KeyboardLayer />
     </TooltipProvider>
   );
 }

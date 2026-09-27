@@ -127,6 +127,14 @@ export function PrayersPage() {
 
   const prayers = useLiveQuery(() => db.prayers.orderBy("createdAt").reverse().toArray(), [], []);
 
+  // Deep-link: /prayers?new=1 opens the new-prayer dialog (the Ctrl+K palette's "New prayer").
+  useEffect(() => {
+    if (!params.get("new")) return;
+    setAdding(true);
+    params.delete("new");
+    setParams(params, { replace: true });
+  }, [params, setParams]);
+
   // Deep-link: /prayers?focus=<id> scrolls to and highlights that prayer (used by
   // cross-references from journal entries and the Bible study rail).
   useEffect(() => {

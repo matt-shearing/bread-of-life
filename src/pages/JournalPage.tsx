@@ -48,6 +48,11 @@ export function JournalPage() {
       setDialog({ id: open, mode: "read" });
       params.delete("open");
       setParams(params, { replace: true });
+    } else if (params.get("new")) {
+      // /journal?new=1 — "New journal entry" from the Ctrl+K palette.
+      setDialog({ id: null, mode: "edit" });
+      params.delete("new");
+      setParams(params, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
