@@ -67,7 +67,7 @@ export function Onboarding() {
               <Dots step={step} total={3} />
               {step > 0 && (
                 <Button variant="ghost" className={cn("ml-2", COARSE_H)} onClick={() => setStep((s) => s - 1)}>
-                  <ArrowLeft style={{ width: 15, height: 15 }} /> Back
+                  <ArrowLeft size={15} /> Back
                 </Button>
               )}
               <Button
@@ -80,7 +80,7 @@ export function Onboarding() {
               </Button>
               {step < 2 && (
                 <Button className={COARSE_H} onClick={() => setStep((s) => s + 1)} data-testid="onboarding-next">
-                  {step === 0 ? "Take the tour" : "Next"} <ArrowRight style={{ width: 15, height: 15 }} />
+                  {step === 0 ? "Take the tour" : "Next"} <ArrowRight size={15} />
                 </Button>
               )}
             </div>
@@ -108,7 +108,7 @@ function WelcomeStep() {
   return (
     <div className="px-7 py-10 text-center">
       <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-card">
-        <BookOpen style={{ width: 30, height: 30 }} />
+        <BookOpen size={30} />
       </div>
       <DialogPrimitive.Title asChild>
         <h1 className="font-serif text-3xl font-bold">Welcome to Bread of Life</h1>
@@ -142,8 +142,8 @@ function FeaturesStep() {
       <ul className="mt-5 space-y-4">
         {FEATURES.map((f) => (
           <li key={f.title} className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-600">
-              <f.icon style={{ width: 20, height: 20 }} />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-700 dark:text-primary-400">
+              <f.icon size={20} />
             </div>
             <div>
               <div className="font-semibold">{f.title}</div>
@@ -189,7 +189,7 @@ function SyncStep({ onDone, onSynced }: { onDone: () => void; onSynced: () => vo
     return (
       <div className="px-7 py-10 text-center">
         <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-success/15 text-success">
-          <Check style={{ width: 30, height: 30 }} />
+          <Check size={30} />
         </div>
         <DialogPrimitive.Title asChild>
           <h2 className="font-serif text-2xl font-bold">You're all set</h2>
@@ -289,7 +289,7 @@ function SyncStep({ onDone, onSynced }: { onDone: () => void; onSynced: () => vo
           className="ml-auto flex min-h-[36px] items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground [@media(pointer:coarse)]:min-h-[44px]"
           onClick={onDone}
         >
-          <CloudOff style={{ width: 15, height: 15 }} /> Stay local-only
+          <CloudOff size={15} /> Stay local-only
         </button>
       </div>
     </div>

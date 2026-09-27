@@ -615,7 +615,7 @@ export function Reader({
               <div key={i} className="mb-3 grid grid-cols-2 gap-6">
                 <div>{verse}</div>
                 <div className="font-serif leading-relaxed text-foreground/90">
-                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-600">
+                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-700 dark:text-primary-400">
                     {item.n}
                   </sup>
                   {secMap.get(item.n) ?? "…"}
@@ -729,11 +729,11 @@ function QuoteTray({
             <Button size="sm" variant={copied ? "success" : "primary"} className="shrink-0 rounded-full" onClick={onCopy}>
               {copied ? (
                 <>
-                  <Check style={{ width: 14, height: 14 }} /> Copied
+                  <Check size={14} /> Copied
                 </>
               ) : (
                 <>
-                  <Copy style={{ width: 14, height: 14 }} /> Copy
+                  <Copy size={14} /> Copy
                 </>
               )}
             </Button>
@@ -745,7 +745,7 @@ function QuoteTray({
             onClick={onDismiss}
             aria-label={onCopy ? "Clear selection" : "Cancel"}
           >
-            <X style={{ width: 15, height: 15 }} />
+            <X size={15} />
           </Button>
         </div>
       </div>
@@ -904,7 +904,7 @@ function Verse({
             flash && "verse-flash",
           )}
         >
-          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-600">
+          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-700 dark:text-primary-400">
             {n}
           </sup>
           {/* The words, and only the words — see src/lib/quote.ts. `select-text`
@@ -916,14 +916,14 @@ function Verse({
             <StickyNote
               aria-label="Has a note"
               className="ml-1 inline-block select-none align-super text-primary-500"
-              style={{ width: 12, height: 12 }}
+              size={12}
             />
           )}
           {memorised && (
             <Brain
               aria-label="In Memory Lane"
               className="ml-1 inline-block select-none align-super text-primary-500"
-              style={{ width: 12, height: 12 }}
+              size={12}
             />
           )}
         </span>
@@ -995,11 +995,11 @@ function VerseActions({
     navigator.clipboard?.writeText(citation(ho, chapter, fragment ?? [{ n, text }], translationShort));
 
   const actions: { key: string; label: string; icon: ReactNode; active?: boolean; run: () => void }[] = [
-    { key: "note", label: hasNote ? "Edit note" : "Note", icon: <StickyNote style={ICON} />, active: hasNote, run: () => { onClose(); onNote(); } },
+    { key: "note", label: hasNote ? "Edit note" : "Note", icon: <StickyNote size={18} />, active: hasNote, run: () => { onClose(); onNote(); } },
     {
       key: "memorise",
       label: inMemory ? "In Memory Lane" : "Memorise",
-      icon: <Brain style={ICON} />,
+      icon: <Brain size={18} />,
       active: inMemory,
       run: () => {
         if (inMemory) return;
@@ -1008,11 +1008,11 @@ function VerseActions({
         setTimeout(onClose, 550);
       },
     },
-    { key: "copy", label: fragment ? "Copy words" : "Copy", icon: <Copy style={ICON} />, run: () => { void copy(); onClose(); } },
-    { key: "range", label: "Select to…", icon: <TextSelect style={ICON} />, run: () => { onClose(); onPickRange(); } },
-    { key: "journal", label: "Journal", icon: <NotebookPen style={ICON} />, run: () => { onClose(); onCapture("journal"); } },
-    { key: "pray", label: "Pray", icon: <HandHeart style={ICON} />, run: () => { onClose(); onCapture("prayer"); } },
-    { key: "ask", label: "Ask", icon: <Sparkles style={ICON} />, run: () => { onClose(); onAsk(); } },
+    { key: "copy", label: fragment ? "Copy words" : "Copy", icon: <Copy size={18} />, run: () => { void copy(); onClose(); } },
+    { key: "range", label: "Select to…", icon: <TextSelect size={18} />, run: () => { onClose(); onPickRange(); } },
+    { key: "journal", label: "Journal", icon: <NotebookPen size={18} />, run: () => { onClose(); onCapture("journal"); } },
+    { key: "pray", label: "Pray", icon: <HandHeart size={18} />, run: () => { onClose(); onCapture("prayer"); } },
+    { key: "ask", label: "Ask", icon: <Sparkles size={18} />, run: () => { onClose(); onAsk(); } },
   ];
 
   const heading = (
@@ -1072,7 +1072,7 @@ function VerseActions({
                 aria-label={a.label === "Ask" ? "Ask companion" : a.label}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  a.active && "text-primary-600",
+                  a.active && "text-primary-700 dark:text-primary-400",
                 )}
               >
                 {a.icon}
@@ -1093,7 +1093,7 @@ function VerseActions({
           aria-label="Close verse actions"
           className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <X style={{ width: 18, height: 18 }} />
+          <X size={18} />
         </button>
       </div>
       {swatches}
@@ -1116,7 +1116,6 @@ function VerseActions({
   );
 }
 
-const ICON = { width: 18, height: 18 } as const;
 
 /**
  * Bottom sheet for a verse's actions on touch screens. It scrolls the tapped verse
@@ -1188,7 +1187,7 @@ function NoteDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogTitle>Note on {refLabel(ho, chapter, verse)}</DialogTitle>
-        <Textarea autoFocus rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your note…" />
+        <Textarea aria-label="Note" autoFocus rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your note…" />
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel

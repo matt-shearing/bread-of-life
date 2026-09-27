@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlignLeft, ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Rows3, Search } from "lucide-react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/db";
+import { AlignLeft, ChevronLeft, Hand, ChevronRight, PanelRightClose, PanelRightOpen, Rows3, Search } from "lucide-react";
 import { ChapterPicker } from "@/components/bible/ChapterPicker";
 import { TranslationPicker } from "@/components/bible/TranslationPicker";
 import { ParallelPicker } from "@/components/bible/ParallelPicker";
@@ -12,7 +14,7 @@ import { useRailLayout } from "@/lib/layout";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
 import { useChapterNav } from "@/lib/useChapterNav";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, ChipGroup, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function BiblePage() {
@@ -52,45 +54,30 @@ export function BiblePage() {
         <div className="flex items-center gap-1">
           <Tooltip label="Previous chapter">
             <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Previous chapter">
-              <ChevronLeft style={{ width: 18, height: 18 }} />
+              <ChevronLeft size={18} />
             </Button>
           </Tooltip>
           <Tooltip label="Next chapter">
             <Button variant="ghost" size="icon" onClick={() => step(1)} aria-label="Next chapter">
-              <ChevronRight style={{ width: 18, height: 18 }} />
+              <ChevronRight size={18} />
             </Button>
           </Tooltip>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <div className="mr-1 hidden items-center rounded-md border border-border p-0.5 sm:flex">
-            <Tooltip label="Verse per line">
-              <button
-                onClick={() => setReadingLayout("lines")}
-                aria-label="Verse per line"
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded",
-                  readingLayout === "lines" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Rows3 style={{ width: 16, height: 16 }} />
-              </button>
-            </Tooltip>
-            <Tooltip label="Flowing paragraphs">
-              <button
-                onClick={() => setReadingLayout("flowing")}
-                aria-label="Flowing paragraphs"
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded",
-                  readingLayout === "flowing" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <AlignLeft style={{ width: 16, height: 16 }} />
-              </button>
-            </Tooltip>
-          </div>
+          <ChipGroup
+            variant="segmented"
+            label="Reading layout"
+            value={readingLayout}
+            onValueChange={(v) => v && setReadingLayout(v)}
+            className="mr-1 hidden bg-transparent sm:inline-flex"
+            options={[
+              { value: "lines", label: <Rows3 size={16} aria-hidden />, ariaLabel: "Verse per line", title: "Verse per line" },
+              { value: "flowing", label: <AlignLeft size={16} aria-hidden />, ariaLabel: "Flowing paragraphs", title: "Flowing paragraphs" },
+            ]}
+          />
           <Tooltip label="Search scripture">
             <Button variant="ghost" size="icon" onClick={() => navigate("/search")} aria-label="Search">
-              <Search style={{ width: 18, height: 18 }} />
+              <Search size={18} />
             </Button>
           </Tooltip>
           <TranslationPicker />
@@ -100,9 +87,9 @@ export function BiblePage() {
           <Tooltip label={railOpen ? "Hide commentary" : "Show commentary"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle commentary">
               {railOpen ? (
-                <PanelRightClose style={{ width: 18, height: 18 }} />
+                <PanelRightClose size={18} />
               ) : (
-                <PanelRightOpen style={{ width: 18, height: 18 }} />
+                <PanelRightOpen size={18} />
               )}
             </Button>
           </Tooltip>
@@ -110,6 +97,7 @@ export function BiblePage() {
       </header>
 
       <ReturnChip />
+      <ReaderHint />
       {/* The rail is positioned inside this box; the reader leaves it `reserve` px. */}
       <div className="relative min-h-0 flex-1">
         <div className="h-full min-w-0" style={{ paddingRight: rail.reserve }}>
@@ -119,6 +107,33 @@ export function BiblePage() {
       </div>
 
       {coach && <StudyRailCoach step={coach} onDismiss={() => setCoach(null)} />}
+    </div>
+  );
+}
+
+/** First run: say what tapping a verse does, until it's dismissed (UX 12). */
+function ReaderHint() {
+  const dismissed = useUI((s) => s.readerHintDismissed);
+  const dismiss = useUI((s) => s.dismissReaderHint);
+  const hasAnnotations = useLiveQuery(async () => (await db.highlights.count()) + (await db.notes.count()) > 0, []);
+  // Someone who already highlights or takes notes has found it; don't tell them.
+  if (dismissed || hasAnnotations !== false) return null;
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  return (
+    <div
+      role="note"
+      className={cn(
+        "flex items-center gap-3 border-b border-border bg-primary/10 px-4 py-2 text-sm",
+        "text-primary-900 dark:text-primary-100",
+      )}
+    >
+      <Hand size={16} className="shrink-0" aria-hidden />
+      <p className="min-w-0 flex-1">
+        {touch ? "Tap" : "Click"} a verse to highlight it, add a note, copy it or pray about it.
+      </p>
+      <Button variant="ghost" size="sm" onClick={dismiss} className="shrink-0">
+        Got it
+      </Button>
     </div>
   );
 }

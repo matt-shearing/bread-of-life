@@ -1,18 +1,17 @@
-import type { ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BookHeart, BookOpen, Check, Sunrise, Sunset } from "lucide-react";
 import { db } from "@/db";
 import { setDevotionDone } from "@/db/repos";
 import type { Devotional, DevotionDay, DevotionReading } from "@/data/devotional";
-import { Button } from "@/components/ui";
+import { Button, Tabs } from "@/components/ui";
 import { ListenButton } from "./ListenButton";
 import { cn } from "@/lib/cn";
 import { devotionDoneId } from "@/lib/devotionDone";
 
 function labelIcon(label: string) {
-  if (label === "Morning") return <Sunrise style={{ width: 15, height: 15 }} />;
-  if (label === "Evening") return <Sunset style={{ width: 15, height: 15 }} />;
-  return <BookHeart style={{ width: 15, height: 15 }} />;
+  if (label === "Morning") return <Sunrise size={15} />;
+  if (label === "Evening") return <Sunset size={15} />;
+  return <BookHeart size={15} />;
 }
 
 export function DevotionView({
@@ -35,31 +34,21 @@ export function DevotionView({
   const done = useLiveQuery(() => db.devotions.get(doneId), [doneId]);
   const isDone = !!done;
 
-  return (
-    <div>
-      {day.readings.length > 1 && (
-        <div className="mb-4 flex items-center gap-1 rounded-lg bg-muted p-1">
-          {day.readings.map((r, i) => (
-            <SlotTab key={i} active={i === index} onClick={() => setIndex(i)} icon={labelIcon(r.label)}>
-              {r.label || `Reading ${i + 1}`}
-            </SlotTab>
-          ))}
-        </div>
-      )}
-
+  const body = (
+    <>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         {reading.ref ? (
           <button
             onClick={() => onOpenVerse(reading)}
             disabled={!reading.ho}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium",
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium [@media(pointer:coarse)]:min-h-11",
               reading.ho
                 ? "bg-primary/10 text-primary-700 hover:bg-primary/20 dark:text-primary-300"
                 : "bg-muted text-muted-foreground",
             )}
           >
-            <BookOpen style={{ width: 14, height: 14 }} />
+            <BookOpen size={14} />
             {reading.ref}
           </button>
         ) : (
@@ -76,38 +65,27 @@ export function DevotionView({
 
       <div className="mt-5 flex items-center gap-2">
         <Button variant={isDone ? "secondary" : "success"} onClick={() => setDevotionDone(doneId, !isDone)}>
-          <Check style={{ width: 16, height: 16 }} />
+          <Check size={16} />
           {isDone ? "Completed" : "Mark complete"}
         </Button>
         <span className="text-xs text-muted-foreground">
           {dev.name} · {dev.author} · Public Domain
         </span>
       </div>
-    </div>
+    </>
   );
-}
 
-function SlotTab({
-  active,
-  onClick,
-  icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+  // Morning and Evening are tabs over the one reading panel.
+  if (day.readings.length < 2) return <div>{body}</div>;
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-        active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-      )}
+    <Tabs
+      label="Reading"
+      value={String(index)}
+      onValueChange={(v) => setIndex(Number(v))}
+      listClassName="mb-4"
+      tabs={day.readings.map((r, i) => ({ value: String(i), label: r.label || `Reading ${i + 1}`, icon: labelIcon(r.label) }))}
     >
-      {icon}
-      {children}
-    </button>
+      {body}
+    </Tabs>
   );
 }

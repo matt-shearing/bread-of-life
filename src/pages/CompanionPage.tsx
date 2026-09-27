@@ -95,7 +95,7 @@ export function CompanionPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-border px-4 py-4 md:px-6">
-        <Sparkles style={{ width: 20, height: 20 }} className="text-primary-600" />
+        <Sparkles size={20} className="text-primary-700 dark:text-primary-400" />
         <div>
           <h1 className="font-serif text-xl font-bold">Study Companion</h1>
           <p className="text-xs text-muted-foreground">
@@ -104,7 +104,7 @@ export function CompanionPage() {
         </div>
         {messages.length > 0 && (
           <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setMessages([])}>
-            <Trash2 style={{ width: 15, height: 15 }} /> Clear
+            <Trash2 size={15} /> Clear
           </Button>
         )}
       </header>
@@ -118,7 +118,7 @@ export function CompanionPage() {
                 this device.
               </p>
               <Button variant="outline" size="sm" onClick={() => navigate("/settings")}>
-                <SettingsIcon style={{ width: 15, height: 15 }} /> Open Settings
+                <SettingsIcon size={15} /> Open Settings
               </Button>
             </Card>
           ) : messages.length === 0 ? (
@@ -168,6 +168,7 @@ export function CompanionPage() {
       <div className="border-t border-border px-4 py-4 md:px-6">
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <Textarea
+            aria-label="Ask the study companion"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -181,8 +182,8 @@ export function CompanionPage() {
             rows={1}
             className="min-h-[44px] resize-none"
           />
-          <Button onClick={() => send(input)} disabled={!configured || loading || !input.trim()} size="icon" className="h-11 w-11">
-            <Send style={{ width: 18, height: 18 }} />
+          <Button onClick={() => send(input)} disabled={!configured || loading || !input.trim()} size="icon" className="h-11 w-11 shrink-0" aria-label="Send">
+            <Send size={18} />
           </Button>
         </div>
       </div>

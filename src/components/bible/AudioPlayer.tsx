@@ -69,13 +69,13 @@ export function AudioPlayer({
           onClick={() => (isThis ? toggle() : void start(narrator))}
           aria-label="Play chapter audio"
         >
-          {showPause ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+          {showPause ? <Pause size={18} /> : <Headphones size={18} />}
         </Button>
       </Tooltip>
       {narrators.length > 1 && (
         <Popover>
           <PopoverTrigger asChild>
-            <button className="rounded px-1.5 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent">
+            <button className="rounded px-1.5 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2.5">
               {narrator}
             </button>
           </PopoverTrigger>
@@ -92,7 +92,7 @@ export function AudioPlayer({
                   n === narrator && "bg-accent",
                 )}
               >
-                {n === narrator && <Play style={{ width: 12, height: 12 }} className="text-primary-600" />}
+                {n === narrator && <Play size={12} className="text-primary-700 dark:text-primary-400" />}
                 {n}
               </button>
             ))}

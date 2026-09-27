@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -46,6 +46,8 @@ import {
   DialogDescription,
   DialogTitle,
   Input,
+  PageHeader,
+  Tabs,
   Textarea,
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -294,17 +296,15 @@ export function PrayersPage() {
           transition: refreshing || pull === 0 ? "transform 0.2s ease" : undefined,
         }}
       >
-        <div className="mb-6 flex items-center gap-3">
-          <div>
-            <h1 className="font-serif text-3xl font-bold">Prayers</h1>
-            <p className="text-sm text-muted-foreground">
-              Bring your requests to God — and look back on what He has done.
-            </p>
-          </div>
-          <Button className="ml-auto shrink-0 whitespace-nowrap" onClick={() => setAdding(true)}>
-            <Plus style={{ width: 16, height: 16 }} /> New prayer
-          </Button>
-        </div>
+        <PageHeader
+          title="Prayers"
+          subtitle="Bring your requests to God — and look back on what He has done."
+          actions={
+            <Button onClick={() => setAdding(true)}>
+              <Plus size={16} /> New prayer
+            </Button>
+          }
+        />
 
         {/* stats — only once there is something to count */}
         {stats.active + stats.answered > 0 && (
@@ -318,27 +318,27 @@ export function PrayersPage() {
 
         <PrayThroughButton className="mb-4" />
 
-        {/* tabs */}
-        <div className="mb-4 flex gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Prayer lists">
-          <TabBtn active={tab === "active"} onClick={() => setTab("active")}>
-            <HandHeart style={{ width: 16, height: 16 }} className="hidden min-[400px]:block" /> Active ({stats.active})
-          </TabBtn>
-          <TabBtn active={tab === "answered"} onClick={() => setTab("answered")}>
-            <Sparkles style={{ width: 16, height: 16 }} className="hidden min-[400px]:block" /> Answered ({stats.answered})
-          </TabBtn>
-          {(stats.archived > 0 || tab === "archived") && (
-            <TabBtn active={tab === "archived"} onClick={() => setTab("archived")}>
-              <Archive style={{ width: 16, height: 16 }} className="hidden min-[400px]:block" /> Archived ({stats.archived})
-            </TabBtn>
-          )}
-        </div>
+        {/* tabs (the panel below is the list; Radix Tabs gives the roles and arrow keys) */}
+        <Tabs
+          label="Prayer lists"
+          value={tab}
+          onValueChange={setTab}
+          listClassName="mb-4"
+          tabs={[
+            { value: "active" as Tab, label: `Active (${stats.active})`, icon: <HandHeart size={16} className="hidden min-[400px]:block" /> },
+            { value: "answered" as Tab, label: `Answered (${stats.answered})`, icon: <Sparkles size={16} className="hidden min-[400px]:block" /> },
+            ...(stats.archived > 0 || tab === "archived"
+              ? [{ value: "archived" as Tab, label: `Archived (${stats.archived})`, icon: <Archive size={16} className="hidden min-[400px]:block" /> }]
+              : []),
+          ]}
+        >
 
         {tab === "answered" && stats.answered > 0 && (
           <button
             onClick={() => navigate("/faithfulness")}
             className="mb-4 flex w-full items-center gap-2 rounded-lg border border-success/30 bg-success/5 px-4 py-2.5 text-sm font-medium text-success hover:bg-success/10"
           >
-            <Sparkles style={{ width: 16, height: 16 }} />
+            <Sparkles size={16} />
             Faithfulness review — look back over how God has answered
             <span className="ml-auto shrink-0 text-xs opacity-70">Open →</span>
           </button>
@@ -364,6 +364,7 @@ export function PrayersPage() {
             ))}
           </div>
         )}
+        </Tabs>
       </div>
 
       {adding && <PrayerDialog onClose={() => setAdding(false)} />}
@@ -380,23 +381,6 @@ function Stat({ label, value, accent }: { label: string; value: number | string;
       <div className={cn("text-2xl font-bold", accent && "text-success")}>{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </Card>
-  );
-}
-
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        "flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 py-2 text-sm font-medium transition-colors [@media(pointer:coarse)]:min-h-[44px]",
-        active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -464,9 +448,9 @@ function PrayerCard({
             className="-my-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
           >
             {p.remind ? (
-              <BellRing style={{ width: 16, height: 16 }} className="text-primary-600" />
+              <BellRing size={16} className="text-primary-700 dark:text-primary-400" />
             ) : (
-              <Bell style={{ width: 16, height: 16 }} className="text-muted-foreground" />
+              <Bell size={16} className="text-muted-foreground" />
             )}
           </button>
         )}
@@ -485,7 +469,7 @@ function PrayerCard({
       {answered ? (
         <div className="mt-3 rounded-md border border-success/30 bg-success/10 p-3">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-success">
-            <Sparkles style={{ width: 14, height: 14 }} /> Answered · {new Date(p.answeredAt!).toLocaleDateString()}
+            <Sparkles size={14} /> Answered · {new Date(p.answeredAt!).toLocaleDateString()}
           </div>
           {p.answerNote && <p className="mt-1 whitespace-pre-line text-sm">{p.answerNote}</p>}
         </div>
@@ -509,7 +493,7 @@ function PrayerCard({
               CHIP_TOUCH,
             )}
           >
-            <NotebookPen style={{ width: 11, height: 11 }} className="shrink-0" />
+            <NotebookPen size={11} className="shrink-0" />
             <span className="truncate">{entryTitle(j)}</span>
           </button>
         ))}
@@ -522,7 +506,7 @@ function PrayerCard({
               CHIP_TOUCH,
             )}
           >
-            <Plus style={{ width: 11, height: 11 }} /> Link a journal entry
+            <Plus size={11} /> Link a journal entry
           </button>
         )}
       </div>
@@ -542,21 +526,21 @@ function PrayerCard({
               >
                 {doneToday ? (
                   <>
-                    <Check style={{ width: 14, height: 14 }} /> Prayed today
+                    <Check size={14} /> Prayed today
                   </>
                 ) : (
                   <>
-                    <HandHeart style={{ width: 14, height: 14 }} /> Prayed
+                    <HandHeart size={14} /> Prayed
                   </>
                 )}
               </Button>
               <Button size="sm" variant="success" className={COARSE_H} onClick={onAnswer}>
-                <CheckCircle2 style={{ width: 14, height: 14 }} /> Answered
+                <CheckCircle2 size={14} /> Answered
               </Button>
             </>
           ) : (
             <Button size="sm" variant="outline" className={COARSE_H} onClick={onRestore} data-testid="restore-button">
-              <ArchiveRestore style={{ width: 14, height: 14 }} /> Restore
+              <ArchiveRestore size={14} /> Restore
             </Button>
           )}
         </div>
@@ -599,7 +583,7 @@ function PrayerMenu({
         data-testid="prayer-menu"
         className="-my-1 -mr-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
       >
-        <MoreHorizontal style={{ width: 18, height: 18 }} />
+        <MoreHorizontal size={18} />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
@@ -608,26 +592,26 @@ function PrayerMenu({
           className="z-50 min-w-[11rem] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg animate-fade-in"
         >
           <DropdownMenu.Item className={MENU_ITEM} onSelect={onEdit}>
-            <Pencil style={{ width: 15, height: 15 }} /> Edit
+            <Pencil size={15} /> Edit
           </DropdownMenu.Item>
           {p.status === "active" && (
             <DropdownMenu.Item className={MENU_ITEM} onSelect={onArchive}>
-              <Archive style={{ width: 15, height: 15 }} /> Archive
+              <Archive size={15} /> Archive
             </DropdownMenu.Item>
           )}
           {p.status === "answered" && (
             <DropdownMenu.Item className={MENU_ITEM} onSelect={onReopen}>
-              <RotateCcw style={{ width: 15, height: 15 }} /> Reopen as active
+              <RotateCcw size={15} /> Reopen as active
             </DropdownMenu.Item>
           )}
           {p.status === "archived" && (
             <DropdownMenu.Item className={MENU_ITEM} onSelect={onRestore}>
-              <ArchiveRestore style={{ width: 15, height: 15 }} /> Restore
+              <ArchiveRestore size={15} /> Restore
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Item className={cn(MENU_ITEM, "text-destructive")} onSelect={onDelete}>
-            <Trash2 style={{ width: 15, height: 15 }} /> Delete…
+            <Trash2 size={15} /> Delete…
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -668,11 +652,11 @@ function JournalLinkPicker({
                   )}
                 >
                   <NotebookPen
-                    style={{ width: 15, height: 15 }}
-                    className={on ? "text-primary-600" : "text-muted-foreground"}
+                    size={15}
+                    className={on ? "text-primary-700 dark:text-primary-400" : "text-muted-foreground"}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{entryTitle(j)}</span>
-                  {on && <span className="text-xs text-primary-600">Linked</span>}
+                  {on && <span className="text-xs text-primary-700 dark:text-primary-400">Linked</span>}
                 </button>
               );
             })}
@@ -691,20 +675,20 @@ function EmptyState({ tab, onAdd }: { tab: Tab; onAdd: () => void }) {
     <Card className="flex flex-col items-center gap-3 p-10 text-center">
       {tab === "active" ? (
         <>
-          <HandHeart style={{ width: 32, height: 32 }} className="text-primary-500" />
+          <HandHeart size={32} className="text-primary-500" />
           <p className="text-muted-foreground">No active prayers yet.</p>
           <Button onClick={onAdd}>
-            <Plus style={{ width: 16, height: 16 }} /> Add your first prayer
+            <Plus size={16} /> Add your first prayer
           </Button>
         </>
       ) : tab === "archived" ? (
         <>
-          <Archive style={{ width: 32, height: 32 }} className="text-muted-foreground" />
+          <Archive size={32} className="text-muted-foreground" />
           <p className="text-muted-foreground">Nothing archived.</p>
         </>
       ) : (
         <>
-          <Sparkles style={{ width: 32, height: 32 }} className="text-success" />
+          <Sparkles size={32} className="text-success" />
           <p className="text-muted-foreground">
             When God answers a prayer, mark it answered — this is where you’ll see what He has done.
           </p>
@@ -841,7 +825,7 @@ function PrayerDialog({ prayer, onClose }: { prayer?: Prayer; onClose: () => voi
                   }}
                   className="rounded-full opacity-50 hover:opacity-100"
                 >
-                  <X style={{ width: 12, height: 12 }} />
+                  <X size={12} />
                 </span>
               )}
             </button>
@@ -866,7 +850,7 @@ function PrayerDialog({ prayer, onClose }: { prayer?: Prayer; onClose: () => voi
                 className="w-24 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
               />
               <button type="button" aria-label="Add category" onClick={() => void commitNewCat()} className="text-primary">
-                <Check style={{ width: 12, height: 12 }} />
+                <Check size={12} />
               </button>
             </span>
           ) : (
@@ -878,7 +862,7 @@ function PrayerDialog({ prayer, onClose }: { prayer?: Prayer; onClose: () => voi
                 CHIP_TOUCH,
               )}
             >
-              <Plus style={{ width: 12, height: 12 }} /> Add
+              <Plus size={12} /> Add
             </button>
           )}
         </div>
@@ -890,9 +874,9 @@ function PrayerDialog({ prayer, onClose }: { prayer?: Prayer; onClose: () => voi
           className="flex min-h-[36px] items-center gap-2 text-left text-sm text-muted-foreground [@media(pointer:coarse)]:min-h-[44px]"
         >
           {remind ? (
-            <BellRing style={{ width: 16, height: 16 }} className="text-primary-600" />
+            <BellRing size={16} className="text-primary-700 dark:text-primary-400" />
           ) : (
-            <Bell style={{ width: 16, height: 16 }} />
+            <Bell size={16} />
           )}
           Remind me daily until answered
         </button>
@@ -937,7 +921,7 @@ function AnswerDialog({ prayer, onClose }: { prayer: Prayer; onClose: () => void
               onClose();
             }}
           >
-            <CheckCircle2 style={{ width: 16, height: 16 }} /> Mark answered
+            <CheckCircle2 size={16} /> Mark answered
           </Button>
         </div>
       </DialogContent>

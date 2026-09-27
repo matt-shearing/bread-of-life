@@ -21,7 +21,10 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  ChipGroup,
   Input,
+  PageBody,
+  PageHeader,
 } from "@/components/ui";
 import { RichEditor } from "@/components/journal/RichEditor";
 import { htmlToText } from "@/lib/htmlToText";
@@ -95,20 +98,16 @@ export function JournalPage() {
   const newDraft = useNewDraftTitle();
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div>
-            <h1 className="font-serif text-3xl font-bold">Journal</h1>
-            <p className="text-sm text-muted-foreground">Reflections, notes, and what God is teaching you.</p>
-          </div>
-          <Button
-            className="ml-auto shrink-0 whitespace-nowrap"
-            onClick={() => setDialog({ id: null, mode: "edit" })}
-          >
-            <Plus style={{ width: 16, height: 16 }} /> New entry
-          </Button>
-        </div>
+    <PageBody width="lg">
+        <PageHeader
+          title="Journal"
+          subtitle="Reflections, notes, and what God is teaching you."
+          actions={
+            <Button onClick={() => setDialog({ id: null, mode: "edit" })}>
+              <Plus size={16} /> New entry
+            </Button>
+          }
+        />
 
         {newDraft !== null && !dialog && (
           <button
@@ -117,7 +116,7 @@ export function JournalPage() {
             onClick={() => setDialog({ id: null, mode: "edit" })}
             className="mb-4 flex min-h-[44px] w-full items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-left text-sm hover:bg-primary/10"
           >
-            <History style={{ width: 16, height: 16 }} className="shrink-0 text-primary-600" />
+            <History size={16} className="shrink-0 text-primary-700 dark:text-primary-400" />
             <span className="min-w-0 flex-1 truncate">
               You have an unsaved entry{newDraft ? <>: <strong>{newDraft}</strong></> : null}
             </span>
@@ -127,12 +126,12 @@ export function JournalPage() {
 
         {!hasEntries ? (
           <Card className="flex flex-col items-center gap-3 p-10 text-center">
-            <NotebookPen style={{ width: 32, height: 32 }} className="text-primary-500" />
+            <NotebookPen size={32} className="text-primary-500" />
             <p className="text-muted-foreground">
               Your journal is empty. Write a reflection, or capture a verse from the Bible reader.
             </p>
             <Button onClick={() => setDialog({ id: null, mode: "edit" })}>
-              <Plus style={{ width: 16, height: 16 }} /> New entry
+              <Plus size={16} /> New entry
             </Button>
           </Card>
         ) : (
@@ -140,7 +139,7 @@ export function JournalPage() {
             <div className="mb-4 space-y-3">
               <div className="relative">
                 <Search
-                  style={{ width: 16, height: 16 }}
+                  size={16}
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 />
                 <Input
@@ -153,24 +152,14 @@ export function JournalPage() {
                 />
               </div>
               {allTags.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by tag">
-                  {allTags.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      aria-pressed={tag === t}
-                      onClick={() => setTag(tag === t ? null : t)}
-                      className={cn(
-                        "inline-flex min-h-[28px] items-center rounded-full border px-2.5 py-0.5 text-xs",
-                        CHIP_TOUCH,
-                        tag === t
-                          ? "border-primary bg-primary/10 text-primary-700 dark:text-primary-300"
-                          : "border-border text-muted-foreground hover:bg-accent",
-                      )}
-                    >
-                      #{t}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ChipGroup
+                    label="Filter by tag"
+                    allowDeselect
+                    value={tag}
+                    onValueChange={setTag}
+                    options={allTags.map((t) => ({ value: t, label: `#${t}` }))}
+                  />
                   {tag && (
                     <button
                       type="button"
@@ -180,7 +169,7 @@ export function JournalPage() {
                         CHIP_TOUCH,
                       )}
                     >
-                      <X style={{ width: 12, height: 12 }} /> clear
+                      <X size={12} /> clear
                     </button>
                   )}
                 </div>
@@ -217,13 +206,13 @@ export function JournalPage() {
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
                       {e.linkedOsis.map((o) => (
                         <Badge key={o} className="gap-1 border-primary/30 text-primary-700 dark:text-primary-300">
-                          <Link2 style={{ width: 11, height: 11 }} />
+                          <Link2 size={11} />
                           {osisToLabel(o)}
                         </Badge>
                       ))}
                       {(e.linkedPrayerIds?.length ?? 0) > 0 && (
                         <Badge className="gap-1 border-rose-300 text-rose-600">
-                          <HandHeart style={{ width: 11, height: 11 }} />
+                          <HandHeart size={11} />
                           {e.linkedPrayerIds!.length}
                         </Badge>
                       )}
@@ -242,7 +231,6 @@ export function JournalPage() {
             )}
           </>
         )}
-      </div>
 
       {dialog && (
         <EntryDialog
@@ -251,7 +239,7 @@ export function JournalPage() {
           onClose={() => setDialog(null)}
         />
       )}
-    </div>
+    </PageBody>
   );
 }
 
@@ -386,7 +374,7 @@ function EntryReadView({
         {entry.linkedOsis.length > 0 && (
           <div>
             <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <BookOpen style={{ width: 13, height: 13 }} /> Linked verses
+              <BookOpen size={13} /> Linked verses
             </div>
             <div className="flex flex-wrap gap-1.5">
               {entry.linkedOsis.map((o) => (
@@ -399,7 +387,7 @@ function EntryReadView({
                     CHIP_TOUCH,
                   )}
                 >
-                  <Link2 style={{ width: 11, height: 11 }} />
+                  <Link2 size={11} />
                   {osisToLabel(o)}
                 </button>
               ))}
@@ -409,7 +397,7 @@ function EntryReadView({
 
         <div>
           <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <HandHeart style={{ width: 13, height: 13 }} /> Linked prayers
+            <HandHeart size={13} /> Linked prayers
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {(linkedPrayers ?? []).map((p) => (
@@ -425,7 +413,7 @@ function EntryReadView({
                   CHIP_TOUCH,
                 )}
               >
-                <HandHeart style={{ width: 11, height: 11 }} />
+                <HandHeart size={11} />
                 {p.title}
               </button>
             ))}
@@ -437,7 +425,7 @@ function EntryReadView({
                 CHIP_TOUCH,
               )}
             >
-              <Plus style={{ width: 11, height: 11 }} /> Link a prayer
+              <Plus size={11} /> Link a prayer
             </button>
           </div>
         </div>
@@ -458,13 +446,13 @@ function EntryReadView({
             className={cn("mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive", COARSE_H)}
             onClick={() => void remove()}
           >
-            <Trash2 style={{ width: 15, height: 15 }} /> Delete
+            <Trash2 size={15} /> Delete
           </Button>
           <Button variant="ghost" className={COARSE_H} onClick={onClose}>
             Close
           </Button>
           <Button className={COARSE_H} onClick={onEdit}>
-            <Pencil style={{ width: 15, height: 15 }} /> Edit
+            <Pencil size={15} /> Edit
           </Button>
         </div>
         {confirmElement}
@@ -657,7 +645,7 @@ function EntryEditor({
             data-testid="draft-restored"
             className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
           >
-            <History style={{ width: 15, height: 15 }} className="shrink-0 text-primary-600" />
+            <History size={15} className="shrink-0 text-primary-700 dark:text-primary-400" />
             <span className="min-w-0 flex-1">
               Restored your unsaved changes from{" "}
               {new Date(restored.savedAt).toLocaleString(undefined, {
@@ -714,7 +702,7 @@ function EntryEditor({
                 CHIP_TOUCH,
               )}
             >
-              <BookOpen style={{ width: 12, height: 12 }} /> Tag in the Bible
+              <BookOpen size={12} /> Tag in the Bible
             </button>
           </div>
           {linkedOsis.length > 0 && (
@@ -731,7 +719,7 @@ function EntryEditor({
                   )}
                 >
                   {osisToLabel(o)}
-                  <X style={{ width: 11, height: 11 }} />
+                  <X size={11} />
                 </button>
               ))}
             </div>
@@ -804,11 +792,11 @@ function PrayerLinkPicker({
                   )}
                 >
                   <HandHeart
-                    style={{ width: 15, height: 15 }}
-                    className={on ? "text-primary-600" : "text-muted-foreground"}
+                    size={15}
+                    className={on ? "text-primary-700 dark:text-primary-400" : "text-muted-foreground"}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.title}</span>
-                  {on && <span className="text-xs text-primary-600">Linked</span>}
+                  {on && <span className="text-xs text-primary-700 dark:text-primary-400">Linked</span>}
                 </button>
               );
             })}

@@ -7,15 +7,7 @@ import { db } from "@/db";
 import { bookByHo, parseOsis, refLabel } from "@/lib/osis";
 import { getChapterFor, verses } from "@/data/bible";
 import { htmlToText } from "@/lib/htmlToText";
-import {
-  COMMENTARY_SOURCES,
-  MISSLER_ACKNOWLEDGMENT,
-  MISSLER_SOURCE,
-  fetchCommentaryChapter,
-  type CommentaryChapter,
-  type CommentarySource,
-} from "@/data/commentary";
-import { misslerAvailable } from "@/data/missler";
+import { CommentarySourceSelect, CommentaryView, useCommentarySources } from "@/components/bible/CommentaryView";
 import {
   getCrossRefs,
   getHebrewVerse,
@@ -91,7 +83,7 @@ export function StudyRail() {
                 showLabel={allLabels || active}
                 label={t.label}
                 onClick={() => setRailTab(t.id)}
-                icon={<Icon style={{ width: 16, height: 16 }} />}
+                icon={<Icon size={16} />}
               />
             );
           })}
@@ -103,7 +95,7 @@ export function StudyRail() {
           title="Close study panel"
           className="flex w-11 shrink-0 items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          <X style={{ width: 18, height: 18 }} />
+          <X size={18} />
         </button>
       </div>
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
@@ -189,127 +181,19 @@ function TabButton({
 
 /* -------------------------------- Commentary -------------------------------- */
 
-/** The public-domain set, plus the local MI library once its folder is set.
- *  The first time the library is detected, MI becomes the selected source —
- *  once only, so a user who later picks another commentary stays respected. */
-function useAvailableCommentarySources(): CommentarySource[] {
-  const [missler, setMissler] = useState(false);
-  const setCommentarySource = useUI((s) => s.setCommentarySource);
-  useEffect(() => {
-    let alive = true;
-    misslerAvailable().then((ok) => {
-      if (!alive) return;
-      setMissler(ok);
-      if (ok && !localStorage.getItem("mi-defaulted")) {
-        localStorage.setItem("mi-defaulted", "1");
-        setCommentarySource(MISSLER_SOURCE.id);
-      }
-    });
-    return () => {
-      alive = false;
-    };
-  }, [setCommentarySource]);
-  return missler ? [...COMMENTARY_SOURCES, MISSLER_SOURCE] : COMMENTARY_SOURCES;
-}
-
 function CommentaryPanel() {
-  const { ho, chapter, commentarySource, setCommentarySource } = useUI();
+  const { ho, chapter } = useUI();
   const openXref = useOpenXref();
-  const sources = useAvailableCommentarySources();
-  const [data, setData] = useState<CommentaryChapter | null>(null);
-  const [state, setState] = useState<"loading" | "ok" | "empty">("loading");
-  const isMissler = commentarySource === MISSLER_SOURCE.id;
-
-  useEffect(() => {
-    let alive = true;
-    setState("loading");
-    setData(null);
-    fetchCommentaryChapter(commentarySource, ho, chapter).then((res) => {
-      if (!alive) return;
-      if (res && res.blocks.length) {
-        setData(res);
-        setState("ok");
-      } else setState("empty");
-    });
-    return () => {
-      alive = false;
-    };
-  }, [ho, chapter, commentarySource]);
-
+  const sources = useCommentarySources();
   return (
     <div>
-      <div className="flex flex-wrap gap-1 border-b border-border px-3 py-2">
-        {sources.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setCommentarySource(s.id)}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-xs transition-colors",
-              commentarySource === s.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-            )}
-            title={s.name}
-          >
-            {s.short}
-          </button>
-        ))}
+      <div className="border-b border-border px-3 py-2">
+        <CommentarySourceSelect sources={sources} hideLabel />
       </div>
       <div className="px-4 py-3 text-sm leading-relaxed">
-        {state === "loading" && <p className="text-muted-foreground">Loading commentary…</p>}
-        {state === "empty" && (
-          <p className="text-muted-foreground">
-            No commentary here for this chapter (or offline and not cached). Try another source above.
-          </p>
-        )}
-        {state === "ok" && data && (
-          <div className="space-y-4">
-            {data.intro && (
-              <p className="border-l-2 border-primary/40 pl-3 text-[13px] italic text-muted-foreground">
-                {data.intro.length > 320 ? data.intro.slice(0, 320) + "…" : data.intro}
-              </p>
-            )}
-            {data.blocks.map((b) => (
-              <div key={b.verse}>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary-600">
-                  {b.endVerse && b.endVerse !== b.verse ? `Verses ${b.verse}–${b.endVerse}` : `Verse ${b.verse}`}
-                </div>
-                {b.paragraphs.map((p, i) => (
-                  <p key={i} className="mb-2 text-[13.5px] text-foreground/90">
-                    {p}
-                  </p>
-                ))}
-                {b.xrefs && b.xrefs.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {b.xrefs.map((x) => (
-                      <XrefChip key={x} osis={x} onOpen={openXref} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-            <p className="pt-2 text-center text-[11px] text-muted-foreground">
-              {isMissler
-                ? MISSLER_ACKNOWLEDGMENT
-                : `${sources.find((s) => s.id === commentarySource)?.name} · Public Domain`}
-            </p>
-          </div>
-        )}
+        <CommentaryView ho={ho} chapter={chapter} sources={sources} onOpenRef={openXref} compact />
       </div>
     </div>
-  );
-}
-
-/** A small clickable cross-reference chip (Missler blocks). Ranges like
- *  "Heb.1.1-Heb.1.3" jump to the start ref's chapter, mirroring the Cross-refs tab. */
-function XrefChip({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
-  const p = parseOsis(osis.split("-")[0]);
-  if (!p) return null;
-  return (
-    <button
-      onClick={() => onOpen(p.ho, p.chapter, p.verse)}
-      className="rounded-full border border-border px-2 py-0.5 text-[11px] text-primary-600 transition-colors hover:border-primary/40 hover:bg-accent"
-    >
-      {osisLabel(osis)}
-    </button>
   );
 }
 
@@ -407,7 +291,7 @@ function XrefRow({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
       onClick={() => onOpen(p.ho, p.chapter, p.verse)}
       className="block w-full rounded-md border border-border p-2.5 text-left hover:border-primary/40 hover:bg-accent/40"
     >
-      <div className="text-xs font-semibold text-primary-600">{osisLabel(osis)}</div>
+      <div className="text-xs font-semibold text-primary-700 dark:text-primary-400">{osisLabel(osis)}</div>
       {text && <div className="mt-0.5 line-clamp-2 font-serif text-[13px] text-foreground/90">{text}</div>}
     </button>
   );
@@ -492,9 +376,9 @@ function ReferencesPanel() {
             >
               <div className="flex items-center gap-1.5">
                 {r.kind === "journal" ? (
-                  <NotebookPen style={{ width: 13, height: 13 }} className="shrink-0 text-primary-600" />
+                  <NotebookPen size={13} className="shrink-0 text-primary-700 dark:text-primary-400" />
                 ) : (
-                  <HandHeart style={{ width: 13, height: 13 }} className="shrink-0 text-rose-500" />
+                  <HandHeart size={13} className="shrink-0 text-rose-500" />
                 )}
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.title}</span>
                 <span className="shrink-0 text-[11px] text-muted-foreground">

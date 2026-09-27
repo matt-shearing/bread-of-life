@@ -97,7 +97,7 @@ export function SyncSettings() {
       }}
     >
       {mode === "selfhost" && !reauth && (
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sync.example.org" spellCheck={false} />
+        <Input aria-label="Sync server address" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sync.example.org" spellCheck={false} />
       )}
       {insecure && !reauth && (
         <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
@@ -107,6 +107,7 @@ export function SyncSettings() {
         </p>
       )}
       <Input
+        aria-label="Email"
         type="email"
         name="email"
         autoComplete="username"
@@ -117,6 +118,7 @@ export function SyncSettings() {
         readOnly={reauth}
       />
       <Input
+        aria-label="Password"
         type="password"
         name="password"
         value={password}
@@ -130,7 +132,7 @@ export function SyncSettings() {
           {busy ? "…" : isSignup ? "Create account" : "Log in"}
         </Button>
         {!reauth && (
-          <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setIsSignup((v) => !v)}>
+          <button type="button" className="text-xs text-muted-foreground underline [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2" onClick={() => setIsSignup((v) => !v)}>
             {isSignup ? "I already have an account" : "Create an account"}
           </button>
         )}
@@ -288,8 +290,8 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
             void submit();
           }}
         >
-          <Input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="Current password" />
-          <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="New password (8+ characters)" />
+          <Input aria-label="Current password" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="Current password" />
+          <Input aria-label="New password" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="New password (8+ characters)" />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={close}>
@@ -337,7 +339,7 @@ function DeleteAccountDialog({ open, email, onClose }: { open: boolean; email: s
             void submit();
           }}
         >
-          <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
+          <Input aria-label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={close}>

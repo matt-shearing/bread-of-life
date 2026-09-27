@@ -183,13 +183,13 @@ export function FaithfulnessPage() {
       <div className="sticky top-0 z-10 border-b border-border bg-background/90 px-4 py-3 backdrop-blur print:hidden">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft style={{ width: 18, height: 18 }} />
+            <ArrowLeft size={18} />
           </Button>
           <div className="min-w-0 truncate text-sm font-semibold">Faithfulness review</div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {isAndroid && canShare && (
               <Button size="sm" onClick={() => void onShare()} disabled={answered.length === 0}>
-                <Share2 style={{ width: 15, height: 15 }} /> Share
+                <Share2 size={15} /> Share
               </Button>
             )}
             <Button
@@ -199,7 +199,7 @@ export function FaithfulnessPage() {
               disabled={answered.length === 0}
               aria-label="Copy the record as text"
             >
-              <Copy style={{ width: 15, height: 15 }} />
+              <Copy size={15} />
               <span className={cn(!isAndroid && "hidden sm:inline")}>Copy text</span>
             </Button>
             <Button
@@ -209,7 +209,7 @@ export function FaithfulnessPage() {
               disabled={answered.length === 0}
               aria-label={isAndroid ? "Print" : undefined}
             >
-              <Printer style={{ width: 15, height: 15 }} />
+              <Printer size={15} />
               {isAndroid ? null : isTauri ? "Save as PDF" : "Print / PDF"}
             </Button>
           </div>
@@ -268,8 +268,8 @@ export function FaithfulnessPage() {
         <article className="mx-auto max-w-2xl px-6 py-10 print:py-0">
           {/* Cover */}
           <header className="mb-10 text-center">
-            <div className="mb-3 flex items-center justify-center gap-1.5 text-primary-600">
-              <Sparkles style={{ width: 16, height: 16 }} />
+            <div className="mb-3 flex items-center justify-center gap-1.5 text-primary-700 dark:text-primary-400">
+              <Sparkles size={16} />
               <span className="text-xs font-semibold uppercase tracking-wider">Bread of Life</span>
             </div>
             <h1 className="font-serif text-4xl font-bold leading-tight">A Record of His Faithfulness</h1>
@@ -356,7 +356,7 @@ function FaithEntry({ p, journal }: { p: Prayer; journal: Map<string, JournalEnt
       )}
       {p.linkedOsis.length > 0 && (
         <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-          <BookOpen style={{ width: 13, height: 13 }} className="shrink-0 text-primary-600" />
+          <BookOpen size={13} className="shrink-0 text-primary-700 dark:text-primary-400" />
           {p.linkedOsis.map(osisLabel).join(" · ")}
         </p>
       )}
@@ -367,7 +367,7 @@ function FaithEntry({ p, journal }: { p: Prayer; journal: Map<string, JournalEnt
             return (
               <div key={j.id} className="text-sm">
                 <div className="flex items-center gap-1.5 font-medium">
-                  <NotebookPen style={{ width: 13, height: 13 }} className="shrink-0 text-primary-600" />
+                  <NotebookPen size={13} className="shrink-0 text-primary-700 dark:text-primary-400" />
                   {entryTitle(j)}
                   <span className="text-xs font-normal text-muted-foreground">· {longDate(j.createdAt)}</span>
                 </div>

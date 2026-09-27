@@ -90,13 +90,13 @@ export function E2ESettings() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Lock style={{ width: 16, height: 16 }} /> End-to-end encryption
+          <Lock size={16} /> End-to-end encryption
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {status.keyMismatch && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
-            <TriangleAlert style={{ width: 16, height: 16 }} className="mt-0.5 shrink-0 text-amber-600" />
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-amber-600" />
             <div>
               This device's key doesn't match the one your account uses, so entries from your other devices can't be
               read here. Enter the recovery phrase from the device where you first turned on encryption.
@@ -108,7 +108,7 @@ export function E2ESettings() {
         )}
         {status.needsKey && !status.keyMismatch && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
-            <TriangleAlert style={{ width: 16, height: 16 }} className="mt-0.5 shrink-0 text-amber-600" />
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-amber-600" />
             <div>
               Your account encrypts its journal, prayers and notes, and this device doesn't have the key yet. Entries from
               your other devices stay locked, and changes made here wait, until you enter your recovery phrase.
@@ -122,12 +122,12 @@ export function E2ESettings() {
         {status.enabled ? (
           <>
             <div className="flex items-center gap-2 text-sm text-success">
-              <ShieldCheck style={{ width: 16, height: 16 }} />
+              <ShieldCheck size={16} />
               Your journal, prayers and notes are encrypted before they sync. The server can’t read them.
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={doReveal}>
-                <KeyRound style={{ width: 15, height: 15 }} /> Show recovery phrase
+                <KeyRound size={15} /> Show recovery phrase
               </Button>
               <Button
                 variant="ghost"
@@ -153,7 +153,7 @@ export function E2ESettings() {
             <div className="flex flex-wrap gap-2">
               {!status.accountEncrypted && (
                 <Button size="sm" onClick={() => setConfirming(true)}>
-                  <Lock style={{ width: 15, height: 15 }} /> Turn on encryption
+                  <Lock size={15} /> Turn on encryption
                 </Button>
               )}
               <Button variant={status.accountEncrypted ? "primary" : "outline"} size="sm" onClick={() => setRestoreOpen(true)}>
@@ -228,6 +228,7 @@ export function E2ESettings() {
             will unlock and decrypt on this device.
           </DialogDescription>
           <Textarea
+            aria-label="Recovery phrase"
             value={restoreText}
             onChange={(e) => setRestoreText(e.target.value)}
             placeholder="word1 word2 word3 …"

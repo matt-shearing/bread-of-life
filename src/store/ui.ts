@@ -183,6 +183,9 @@ export interface UIState {
   setHasOnboarded: (v: boolean) => void;
   syncPromptDismissed: boolean;
   dismissSyncPrompt: () => void;
+  /** The reader's first-run hint ("tap a verse to…") has been dismissed. */
+  readerHintDismissed: boolean;
+  dismissReaderHint: () => void;
 
   // AI study companion
   ai: AIConfig;
@@ -356,6 +359,8 @@ export const useUI = create<UIState>()(
       setHasOnboarded: (v) => set({ hasOnboarded: v }),
       syncPromptDismissed: false,
       dismissSyncPrompt: () => set({ syncPromptDismissed: true }),
+      readerHintDismissed: false,
+      dismissReaderHint: () => set({ readerHintDismissed: true }),
 
       ai: { provider: "anthropic", model: "claude-opus-5", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),

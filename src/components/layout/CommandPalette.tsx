@@ -1,22 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  BookHeart,
-  BookMarked,
-  BookOpen,
-  Brain,
-  CalendarCheck,
-  HandHeart,
-  Home,
-  Keyboard,
-  NotebookPen,
-  PanelRightOpen,
-  Play,
-  Search,
-  Settings,
-  Sparkles,
-  SunMoon,
-} from "lucide-react";
+import { BookOpen, HandHeart, Keyboard, NotebookPen, PanelRightOpen, Play, Search, SunMoon } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { formatReference, parseReference } from "@/lib/reference";
 import { refLabel } from "@/lib/osis";
@@ -24,6 +8,7 @@ import { useChapterNav } from "@/lib/useChapterNav";
 import { isTypingTarget, MOD_K, overlayOpen } from "@/lib/shortcuts";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { NAV } from "./nav";
 
 interface Command {
   id: string;
@@ -36,21 +21,8 @@ interface Command {
   run: () => void;
 }
 
-const I = { width: 16, height: 16 } as const;
 
-const PAGES: { path: string; label: string; icon: ReactNode; keywords?: string }[] = [
-  { path: "/", label: "Home", icon: <Home style={I} />, keywords: "dashboard today" },
-  { path: "/bible", label: "Bible", icon: <BookOpen style={I} />, keywords: "read reader scripture" },
-  { path: "/search", label: "Search", icon: <Search style={I} />, keywords: "find" },
-  { path: "/plans", label: "Reading plans", icon: <CalendarCheck style={I} /> },
-  { path: "/devotional", label: "Devotional", icon: <BookHeart style={I} />, keywords: "spurgeon morning evening" },
-  { path: "/memory", label: "Memory Lane", icon: <Brain style={I} />, keywords: "memorise memorize review" },
-  { path: "/prayers", label: "Prayers", icon: <HandHeart style={I} /> },
-  { path: "/journal", label: "Journal", icon: <NotebookPen style={I} /> },
-  { path: "/companion", label: "Companion", icon: <Sparkles style={I} />, keywords: "ai ask" },
-  { path: "/commentary", label: "Commentary", icon: <BookMarked style={I} /> },
-  { path: "/settings", label: "Settings", icon: <Settings style={I} />, keywords: "preferences sync theme" },
-];
+const PAGES = NAV.map((n) => ({ path: n.to, label: n.label, icon: <n.icon size={16} />, keywords: n.keywords }));
 
 /**
  * App-wide keyboard layer, mounted once in AppShell:
@@ -151,7 +123,7 @@ function CommandPalette({
         id: "goto",
         group: "Go to",
         label: `Go to ${formatReference(ref)}`,
-        icon: <BookOpen style={I} />,
+        icon: <BookOpen size={16} />,
         hint: "Enter",
         run: go(() => {
           const s = useUI.getState();
@@ -163,7 +135,7 @@ function CommandPalette({
     }
     const actions: Command[] = [
       ...(activePlanId
-        ? [{ id: "today", group: "Actions" as const, label: "Start today's reading", icon: <Play style={I} />, keywords: "plan guided", run: go(() => navigate("/read-today")) }]
+        ? [{ id: "today", group: "Actions" as const, label: "Start today's reading", icon: <Play size={16} />, keywords: "plan guided", run: go(() => navigate("/read-today")) }]
         : []),
       ...(readingPos
         ? [
@@ -171,7 +143,7 @@ function CommandPalette({
               id: "continue",
               group: "Actions" as const,
               label: `Continue reading ${refLabel(readingPos.ho, readingPos.chapter, readingPos.verse > 1 ? readingPos.verse : undefined)}`,
-              icon: <BookOpen style={I} />,
+              icon: <BookOpen size={16} />,
               keywords: "resume bible",
               run: go(() => {
                 const s = useUI.getState();
@@ -182,20 +154,20 @@ function CommandPalette({
             },
           ]
         : []),
-      { id: "new-prayer", group: "Actions", label: "New prayer", icon: <HandHeart style={I} />, keywords: "add pray request", run: go(() => navigate("/prayers?new=1")) },
-      { id: "new-journal", group: "Actions", label: "New journal entry", icon: <NotebookPen style={I} />, keywords: "add write", run: go(() => navigate("/journal?new=1")) },
+      { id: "new-prayer", group: "Actions", label: "New prayer", icon: <HandHeart size={16} />, keywords: "add pray request", run: go(() => navigate("/prayers?new=1")) },
+      { id: "new-journal", group: "Actions", label: "New journal entry", icon: <NotebookPen size={16} />, keywords: "add write", run: go(() => navigate("/journal?new=1")) },
       {
         id: "theme",
         group: "Actions",
         label: resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme",
-        icon: <SunMoon style={I} />,
+        icon: <SunMoon size={16} />,
         keywords: "toggle theme dark light mode",
         run: go(toggleTheme),
       },
       ...(pathname === "/bible" || pathname.startsWith("/guided")
-        ? [{ id: "rail", group: "Actions" as const, label: "Toggle study panel", icon: <PanelRightOpen style={I} />, keywords: "commentary cross references strongs rail", run: go(toggleRail) }]
+        ? [{ id: "rail", group: "Actions" as const, label: "Toggle study panel", icon: <PanelRightOpen size={16} />, keywords: "commentary cross references strongs rail", run: go(toggleRail) }]
         : []),
-      { id: "help", group: "Actions", label: "Keyboard shortcuts", icon: <Keyboard style={I} />, hint: "?", keywords: "help keys", run: go(onHelp) },
+      { id: "help", group: "Actions", label: "Keyboard shortcuts", icon: <Keyboard size={16} />, hint: "?", keywords: "help keys", run: go(onHelp) },
     ];
     const pages: Command[] = PAGES.map((p) => ({
       id: `page:${p.path}`,
@@ -217,7 +189,7 @@ function CommandPalette({
         id: "search",
         group: "Search",
         label: `Search the Bible for “${q}”`,
-        icon: <Search style={I} />,
+        icon: <Search size={16} />,
         run: go(() => navigate(`/search?${new URLSearchParams({ q })}`)),
       });
     }
@@ -250,7 +222,7 @@ function CommandPalette({
       <DialogContent className="top-[12vh] max-w-xl -translate-y-0 gap-0 overflow-hidden p-0" aria-describedby={undefined}>
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <div className="flex items-center gap-2 border-b border-border px-4 pr-12">
-          <Search style={{ width: 18, height: 18 }} className="shrink-0 text-muted-foreground" />
+          <Search size={18} className="shrink-0 text-muted-foreground" />
           <input
             autoFocus
             value={query}

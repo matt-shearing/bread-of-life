@@ -345,9 +345,9 @@ function RecentReading({ log, todayKey }: { log: ReadingLogEntry[]; todayKey: st
                         navigate("/bible");
                       }}
                       title={`${S.label} · ${new Date(c.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-sm hover:border-primary/40 hover:bg-accent [@media(pointer:coarse)]:min-h-11"
                     >
-                      <S.icon style={{ width: 13, height: 13 }} className="text-primary-600 dark:text-primary-400" aria-label={S.label} />
+                      <S.icon style={{ width: 13, height: 13 }} className="text-primary-700 dark:text-primary-400" aria-label={S.label} />
                       {refLabel(c.ho, c.chapter)}
                     </button>
                   );

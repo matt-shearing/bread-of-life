@@ -194,7 +194,7 @@ function ToastHost() {
             }}
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md px-3 font-semibold text-primary-300 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 dark:text-primary-700 dark:hover:bg-black/10 [@media(pointer:coarse)]:min-h-[44px]"
           >
-            <Undo2 style={{ width: 15, height: 15 }} /> {t.undoLabel ?? "Undo"}
+            <Undo2 size={15} /> {t.undoLabel ?? "Undo"}
           </button>
         )}
         <button
@@ -203,7 +203,7 @@ function ToastHost() {
           onClick={() => dismissToast(t.id)}
           className="inline-flex h-10 w-10 items-center justify-center rounded-md opacity-70 hover:bg-white/10 hover:opacity-100 dark:hover:bg-black/10 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
         >
-          <X style={{ width: 15, height: 15 }} />
+          <X size={15} />
         </button>
       </div>
     </div>
