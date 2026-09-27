@@ -55,3 +55,6 @@ export const knownApiBible = (id: string) => KNOWN_API_BIBLES.find((b) => b.id =
 /** What the picker says about the NASB before any key can read it. */
 export const NASB_NOTE =
   "NASB 2020 or NASB 1995 with a free API.Bible key — pick it as one of your three Bibles";
+
+/** What the picker says about the Amplified Bible before any key can read it. */
+export const AMP_NOTE = "Amplified Bible with a free API.Bible key — pick it as one of your three Bibles";

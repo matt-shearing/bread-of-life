@@ -258,8 +258,9 @@ function ApiBibleKey() {
       <p className="text-xs text-muted-foreground">
         Sign up for the free Starter plan at <Link href="https://api.bible/sign-up/starter">api.bible</Link> (American
         Bible Society; accounts are approved by hand, which can take a little while). The Starter plan lets you choose
-        three copyrighted Bibles: for the NASB, choose <strong>New American Standard Bible 2020</strong> (listed as
-        NASB) or <strong>New American Standard Bible 1995</strong>. Then paste your key here.
+        three copyrighted Bibles. For the NASB, choose <strong>New American Standard Bible 2020</strong> (listed as
+        NASB) or <strong>New American Standard Bible 1995</strong>; for the Amplified, choose{" "}
+        <strong>Amplified Bible</strong>. Then paste your key here.
       </p>
       <Field label="API.Bible key">
         {(id) => (

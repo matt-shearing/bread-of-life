@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, KeyRound, Lock } from "lucide-react";
 import { FREE_TRANSLATIONS, translationById, type Translation } from "@/data/bible";
 import { ESV_TRANSLATION, NLT_TRANSLATION, licensedTranslations } from "@/data/licensed";
-import { NASB_NOTE } from "@/data/licensed/catalog";
+import { AMP_NOTE, NASB_NOTE } from "@/data/licensed/catalog";
 import { useUI } from "@/store/ui";
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -23,6 +23,7 @@ export function TranslationPicker() {
   const hasEsv = licensed.some((t) => t.id === ESV_TRANSLATION.id);
   const hasNlt = licensed.some((t) => t.id === NLT_TRANSLATION.id);
   const hasNasb = licensed.some((t) => /^NASB/i.test(t.short));
+  const hasAmp = licensed.some((t) => /^AMP/i.test(t.short));
 
   const pick = (t: Translation) => {
     setTranslation(t.id);
@@ -65,6 +66,9 @@ export function TranslationPicker() {
         )}
         {!hasNasb && (
           <LockedRow short="NASB" name="New American Standard Bible" note={NASB_NOTE} onClick={toSettings} />
+        )}
+        {!hasAmp && (
+          <LockedRow short="AMP" name="Amplified Bible" note={AMP_NOTE} onClick={toSettings} />
         )}
         <button
           onClick={toSettings}
