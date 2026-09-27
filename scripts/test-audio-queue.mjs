@@ -73,8 +73,12 @@ const native = {
   playing: true,
   time: 1,
   gate: Promise.resolve(),
+  /** The sleep timer native runs (NativeAudioRuntime.sleepTimer), and every set_sleep_timer. */
+  sleep: null,
+  sleepCalls: [],
   snapshot(index = native.index) {
     return {
+      sleepTimer: native.sleep,
       status: native.playing ? "playing" : "idle", currentTime: native.time, duration: 60, isPlaying: native.playing,
       buffering: false, rate: 1, index, capturedAtMs: ++native.clock, queueGeneration: native.gen, queueOrigin: "app",
       finished: [...native.finished],
@@ -98,7 +102,19 @@ const native = {
   },
   async invoke(cmd, args) {
     await native.gate; // the round trip to native takes time
+    if (cmd === "plugin:native-audio|set_sleep_timer") {
+      native.sleepCalls.push(args);
+      native.sleep = args.atEpochMs
+        ? { mode: "time", endsAtEpochMs: args.atEpochMs, remainingMs: args.atEpochMs - Date.now() }
+        : args.endOfItem
+          ? { mode: "item", remainingMs: 59_000 }
+          : args.endOfGroup
+            ? { mode: "group" }
+            : null;
+      return native.snapshot();
+    }
     if (cmd === "plugin:native-audio|set_queue") {
+      native.sleep = null; // a new queue clears the timer
       native.index = args.startIndex;
       native.gen++;
       native.finished = [];
@@ -115,6 +131,7 @@ const native = {
       return native.snapshot();
     }
     if (cmd === "plugin:native-audio|stop") {
+      native.sleep = null;
       native.gen++;
       native.index = 0;
       native.finished = [];
@@ -526,6 +543,120 @@ test("a jump into a queue native no longer holds falls back to handing over the 
   await tick();
 });
 
+/* ------------------------------------- sleep timer -------------------------------------- */
+
+test("sleep timer: minutes reach native as a wall-clock time, and the state shows the time left", async () => {
+  c.playQueue(tracks, { startIndex: 0 });
+  await tick();
+  native.sleepCalls.length = 0;
+  const before = Date.now();
+  c.setSleepTimer({ minutes: 15 });
+  let s = c.useAudio();
+  assert.equal(s.sleep?.kind, "time", "shown at once, before native answers");
+  await tick();
+  assert.equal(native.sleepCalls.length, 1);
+  const at = native.sleepCalls[0].atEpochMs;
+  assert.ok(Number.isInteger(at), "whole milliseconds");
+  assert.ok(at >= before + 15 * 60_000 && at <= Date.now() + 15 * 60_000, `atEpochMs ${at}`);
+  assert.deepEqual(Object.keys(native.sleepCalls[0]), ["atEpochMs"]);
+  s = c.useAudio();
+  assert.deepEqual(s.sleep, { kind: "time", endsAt: at }, "native's own end time");
+  const left = c.sleepRemainingMs(s);
+  assert.ok(left > 14.9 * 60_000 && left <= 15 * 60_000, `remaining ${left}`);
+  assert.equal(c.sleepRemainingMs(s, at - 5_000), 5_000);
+  assert.equal(c.sleepRemainingMs(s, at + 1), 0);
+
+  // Native's ticks repeat the timer; only a change reaches subscribers.
+  globalThis.__nativeEmit(native.snapshot());
+  globalThis.__nativeEmit(native.snapshot());
+  assert.equal(c.useAudio(), s, "an unchanged timer (and time) leaves the state as it was");
+  c.stop();
+  await tick();
+});
+
+test("sleep timer: end of chapter and end of reading map to native's item and group", async () => {
+  // A plan day: Genesis 1–2 is one reading, Genesis 3 the next.
+  const day = tracks.slice(0, 3).map((t, i) => ({ ...t, planId: "p", planDay: 0, readingGroup: i < 2 ? 0 : 1 }));
+  c.playQueue(day, { startIndex: 0 });
+  await tick();
+  native.sleepCalls.length = 0;
+  assert.equal(c.hasReadings(c.useAudio()), true);
+  assert.equal(c.isLastOfReading(day, 0), false);
+  assert.equal(c.isLastOfReading(day, 1), true);
+
+  c.setSleepTimer({ endOf: "chapter" });
+  await tick();
+  assert.deepEqual(native.sleepCalls.at(-1), { endOfItem: true });
+  assert.deepEqual(c.useAudio().sleep, { kind: "chapter" });
+  // Time left in the chapter, at the playing speed.
+  globalThis.__nativeEmit({ ...native.snapshot(), currentTime: 30, duration: 60 });
+  assert.equal(c.sleepRemainingMs(c.useAudio()), 30_000);
+
+  c.setSleepTimer({ endOf: "reading" });
+  await tick();
+  assert.deepEqual(native.sleepCalls.at(-1), { endOfGroup: true });
+  assert.deepEqual(c.useAudio().sleep, { kind: "reading" });
+  assert.equal(c.sleepRemainingMs(c.useAudio()), null, "Genesis 2 is still to come");
+
+  // Outside a plan day there are no readings: "end of reading" is the chapter.
+  c.playQueue(tracks.slice(0, 2), { startIndex: 0 });
+  await tick();
+  assert.equal(c.useAudio().sleep, null, "a new queue starts without a timer");
+  c.setSleepTimer({ endOf: "reading" });
+  await tick();
+  assert.deepEqual(native.sleepCalls.at(-1), { endOfItem: true });
+  c.stop();
+  await tick();
+});
+
+test("sleep timer: cancel, native firing it, and events from before the set", async () => {
+  c.playQueue(tracks, { startIndex: 1 });
+  await tick();
+  c.setSleepTimer({ minutes: 5 });
+  await tick();
+  c.setSleepTimer(null);
+  assert.equal(c.useAudio().sleep, null, "gone at once");
+  await tick();
+  assert.deepEqual(native.sleepCalls.at(-1), {}, "set_sleep_timer with nothing cancels");
+  assert.equal(c.useAudio().sleep, null);
+
+  // A tick captured before set_sleep_timer landed must not wipe the timer the app shows.
+  let release;
+  native.gate = new Promise((r) => (release = r));
+  c.setSleepTimer({ minutes: 30 });
+  globalThis.__nativeEmit({ ...native.snapshot(), sleepTimer: null });
+  assert.equal(c.useAudio().sleep?.kind, "time");
+  release();
+  native.gate = Promise.resolve();
+  await tick();
+  assert.equal(c.useAudio().sleep?.kind, "time");
+
+  // Native fires it in the background: paused, not stopped, and no timer.
+  native.sleep = null;
+  native.playing = false;
+  globalThis.__nativeEmit(native.snapshot());
+  const s = c.useAudio();
+  assert.equal(s.sleep, null);
+  assert.equal(s.playing, false);
+  assert.equal(s.queue.length, tracks.length, "the queue is still there to resume");
+
+  // Set from the car's button: the app shows it too.
+  native.sleep = { mode: "item", remainingMs: 1000 };
+  globalThis.__nativeEmit(native.snapshot());
+  assert.deepEqual(c.useAudio().sleep, { kind: "chapter" });
+  // Stop clears it (natively too).
+  c.stop();
+  await tick();
+  assert.equal(c.useAudio().sleep, null);
+  assert.equal(native.sleep, null);
+  // With nothing loaded there is nothing to time.
+  const calls = native.sleepCalls.length;
+  c.setSleepTimer({ minutes: 10 });
+  await tick();
+  assert.equal(c.useAudio().sleep, null);
+  assert.equal(native.sleepCalls.length, calls);
+});
+
 /* ----------------------------------- completions (B5) ----------------------------------- */
 
 const { createCompletionsDrain, PENDING_THROTTLE_MS, MAX_ATTEMPTS } = await import("../src/audio/nativeCompletions.ts");
@@ -667,6 +798,19 @@ test("desktop: loads never wait for a download, so a superseded chapter does not
   const loads = rust.calls.filter(([c]) => c === "desktop_audio_load").map(([, a]) => a.url);
   assert.deepEqual(loads, [2, 3, 4, 5, 6].map((n) => `https://x/${n}.mp3`));
   assert.equal(rust.calls.at(-1)[0], "desktop_audio_play");
+  engine.release();
+});
+
+test("desktop: the sleep timer's fade sets Rust's volume, clamped to 0–1", async () => {
+  const { rust, engine } = desktop();
+  engine.setVolume(0.456);
+  engine.setVolume(-2);
+  engine.setVolume(7);
+  await tick();
+  assert.deepEqual(
+    rust.calls.filter(([c]) => c === "desktop_audio_volume").map(([, a]) => a),
+    [{ volume: 0.46 }, { volume: 0 }, { volume: 1 }],
+  );
   engine.release();
 });
 

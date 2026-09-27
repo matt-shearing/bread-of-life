@@ -62,6 +62,8 @@ enum Cmd {
     Play,
     Pause,
     Seek(f64),
+    /// Output volume, 0–1 (the sleep timer's fade). Kept for later tracks too.
+    Volume(f32),
     Stop,
 }
 
@@ -147,6 +149,8 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Shared>, media: Arc<MediaKeys>) {
     // out" (report `ended`, so the controller advances the queue) from "we stopped it".
     let mut active = false;
     let mut reported = Playback::Stopped;
+    // Each track gets a fresh Player, so the volume lives here and is applied to each.
+    let mut volume: f32 = 1.0;
 
     loop {
         // Tick only while something plays; otherwise sleep until told to do something.
@@ -177,6 +181,9 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Shared>, media: Arc<MediaKeys>) {
                 shared.playing.store(false, Ordering::Relaxed);
                 match load_track(&mut sink, &mut player, bytes, start_sec) {
                     Ok(duration_ms) => {
+                        if let Some(p) = &player {
+                            p.set_volume(volume as rodio::Float);
+                        }
                         shared.duration_ms.store(duration_ms, Ordering::Relaxed);
                         shared
                             .position_ms
@@ -219,6 +226,12 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Shared>, media: Arc<MediaKeys>) {
                             .store(secs_to_ms(seconds), Ordering::Relaxed);
                         seeked = true;
                     }
+                }
+            }
+            Ok(Cmd::Volume(v)) => {
+                volume = v;
+                if let Some(p) = &player {
+                    p.set_volume(v as rodio::Float);
                 }
             }
             Ok(Cmd::Stop) => {
@@ -634,6 +647,20 @@ pub fn desktop_audio_seek(state: State<'_, DesktopAudio>, position: f64) {
     }
 }
 
+/// Set the output volume, 0–1: the sleep timer fades the last seconds out with it, then
+/// pauses and sets it back to 1. It applies to later tracks as well.
+#[tauri::command]
+pub fn desktop_audio_volume(state: State<'_, DesktopAudio>, volume: f64) {
+    if let Some(v) = volume_from_webview(volume) {
+        state.send(Cmd::Volume(v));
+    }
+}
+
+/// A volume from the webview, clamped to 0–1; None for NaN or infinity.
+fn volume_from_webview(volume: f64) -> Option<f32> {
+    volume.is_finite().then(|| volume.clamp(0.0, 1.0) as f32)
+}
+
 /// Forget the track, abandon any fetch, and release the sound device. The next `load`
 /// opens it again.
 #[tauri::command]
@@ -662,6 +689,15 @@ pub fn desktop_audio_state(state: State<'_, DesktopAudio>) -> DesktopAudioState 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn volumes_from_the_webview_are_clamped_and_never_nan() {
+        assert_eq!(volume_from_webview(0.5), Some(0.5));
+        assert_eq!(volume_from_webview(-1.0), Some(0.0));
+        assert_eq!(volume_from_webview(3.0), Some(1.0));
+        assert_eq!(volume_from_webview(f64::NAN), None);
+        assert_eq!(volume_from_webview(f64::INFINITY), None);
+    }
 
     #[test]
     fn resolves_asset_urls_back_to_paths() {

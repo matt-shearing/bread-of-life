@@ -69,6 +69,7 @@ Kotlin method with the camelCase name (`set_queue` calls `setQueue`).
 | `stop` | Unloads the playlist, moves the queue generation on and releases the service binding. The mini-player's ✕. |
 | `next`, `previous` | The next chapter; the previous chapter, or the start of this one after 3 s. |
 | `seek_to`, `set_rate` | Seek within the item; set the speed for the whole queue. |
+| `set_sleep_timer` | `{ atEpochMs }`, `{ endOfItem: true }` or `{ endOfGroup: true }` starts or replaces the sleep timer; no arguments cancel it. See "The sleep timer". |
 | `get_queue` | The loaded playlist with each item's chapter and plan position, to adopt a queue the app did not load. |
 | `set_car_snapshot` | Stores the app's snapshot for Android Auto (today's plan day, devotional audio, narrator, subtitle). |
 | `take_completions`, `ack_completions` | Plan chapters and devotionals heard to the end, and their acknowledgement. `take_car_completions` and `ack_car_completions` are the v0.4.0 names, kept until v0.5. |
@@ -93,6 +94,8 @@ permission.
 - `finished`: the indexes of this queue generation that played to their natural end.
 - `pendingCompletions`: how many completions wait for the app. The store keeps it as a
   counter.
+- `sleepTimer`: `{ mode: "time" | "item" | "group", endsAtEpochMs?, remainingMs? }`, or null
+  when no timer runs. Always present.
 
 Native sends the event on every player change, and on a timer while something plays and the
 app's activity is on screen: every 500 ms. While the activity is not on screen it sends
@@ -166,6 +169,27 @@ pause request, audio-focus change and service lifecycle event goes into the debu
 (`get_debug_log`). It also goes to logcat under the tag `BoLAudio` in debug builds, or in a
 release build after `adb shell setprop log.tag.BoLAudio DEBUG`.
 
+## The sleep timer
+
+Now Playing offers 5, 10, 15, 30, 45 or 60 minutes, "End of this chapter", and on a plan day
+"End of this reading" (the last chapter of the passage playing). The mini-player shows a moon
+and the time left. The last 10 seconds fade out, then playback **pauses**, so Play carries on.
+Stop and any new queue clear the timer. The controller's `setSleepTimer` and `state.sleep`
+are the app's side on every platform.
+
+- **Android**: native runs it, because the WebView's timers are frozen in the background.
+  `set_sleep_timer` posts a check on the main looper; while something plays the service is in
+  the foreground and ExoPlayer holds a wake lock, so it fires with the screen off. The fade is
+  the player's volume. End of chapter uses Media3's `pauseAtEndOfMediaItems` (set only on the
+  reading's last chapter for "end of reading"); the chapter is recorded as heard when the
+  pause happens, and not again when Play moves on. The state event carries the timer, so a
+  timer set from the car shows in the app.
+- **Android Auto**: a fourth button (a moon) steps off, 15 min, 30 min, end of chapter, off.
+- **Browser and Linux**: the controller runs it, checking on every time update (which a
+  playing `<audio>` element keeps firing in a background tab) and once a second. The fade is
+  the `<audio>` element's volume, or `desktop_audio_volume` on Linux. At the end of the
+  chapter it records the chapter, loads the next one paused and clears the timer.
+
 ## Android Auto
 
 The service is a Media3 `MediaLibraryService`, so Android Auto can browse the app and play
@@ -185,7 +209,7 @@ from it without the app open. User-facing steps and the GrapheneOS set-up are in
   `src/audio/audio-url-cases.json`). Today and Devotional come from the app's snapshot
   (`set_car_snapshot`, built in `src/audio/carSnapshot.ts`). Recent and Continue listening are
   recorded natively, for streamable URLs only (never a cache file).
-- **Buttons**: back 30 s, next reading and speed (`SessionCommands`). The speed button steps
+- **Buttons**: back 30 s, next reading, speed and the sleep timer (`SessionCommands`). The speed button steps
   through the app's own speeds (`src/audio/speeds.json`). Previous and next move a whole
   chapter when the command comes from Android Auto and 10 s otherwise (earphones, lock screen).
 - **Voice**: `onSetMediaItems` receives the search query; `RefParser.kt` reads book names,
@@ -215,12 +239,13 @@ WebKitGTK plays `<audio>` through GStreamer and aborts the web process on a host
 - `pnpm test:audio` (`scripts/test-audio-queue.mjs`): the real controller and engines against
   stubs of the plugin and React. Jumps, skips and heard chapters, adopting external queues,
   stop, `dev/` ids, lazy start, change-only notifications and selectors, the completions
-  drain, and the Linux engine.
+  drain, the sleep timer's native commands and state, and the Linux engine.
 - `pnpm test:audio-url`: the narration URL pattern, shared with the Kotlin side.
 - Robolectric (`src-tauri/plugins/native-audio/android/src/test`, run by CI after the APK
   build): `HeadsetResumeTest` (earphone buttons and the service), `AndroidAutoTest` (a Media3
   `MediaBrowser` against the real session), `PlaybackReviewTest` (play after an error, speech
-  focus, stop, `skip_to`, completions, artwork paths, speeds), `AudioUrlAgreementTest`, and
+  focus, stop, `skip_to`, completions, artwork paths, speeds), `SleepTimerTest` (the fade and
+  pause, end of chapter and of reading, cleared by a new queue and stop), `AudioUrlAgreementTest`, and
   `ArtworkTilesSamplesTest`, which writes sample tiles to `build/car-artwork-samples/`.
 - `cd src-tauri && cargo test`: the Rust player's URL resolution, position handling and MP3
   duration scan, and the MPRIS command mapping.

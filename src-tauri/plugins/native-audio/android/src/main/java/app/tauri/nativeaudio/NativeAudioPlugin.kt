@@ -36,6 +36,7 @@ import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CacheBitmapLoader
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -45,6 +46,7 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlin.math.max
@@ -71,6 +73,34 @@ private const val DEBUG_TAG = "BoLAudio"
 private const val DEBUG_LOG_CAPACITY = 300
 private const val ARTWORK_SIZE_PX = 256
 private const val LAST_PLAYED_THROTTLE_MS = 5_000L
+/** The sleep timer fades the volume out over this long before it pauses (as the app does). */
+internal const val SLEEP_FADE_MS = 10_000L
+/** How often the sleep timer adjusts the volume during the fade. */
+private const val SLEEP_FADE_STEP_MS = 250L
+/** Before the fade, the longest the sleep timer waits between checks. A chapter's end moves
+ *  with seeks and speed changes, so it is looked at again rather than scheduled once. */
+private const val SLEEP_CHECK_MAX_MS = 5_000L
+
+/**
+ * The sleep timer: pause at a time, at the end of the current item, or at the end of the
+ * current reading (the last item of its reading group). See [NativeAudioRuntime.setSleepTimer].
+ */
+internal sealed class SleepTimer {
+    /** Pause at [deadlineElapsedMs] ([SystemClock.elapsedRealtime]); [minutes] labels the car's button. */
+    data class At(val deadlineElapsedMs: Long, val minutes: Int) : SleepTimer()
+    object EndOfItem : SleepTimer()
+    object EndOfGroup : SleepTimer()
+}
+
+/** The sleep timer as the state event reports it. */
+data class SleepTimerState(
+    /** "time", "item" or "group". */
+    val mode: String,
+    /** "time" only: when playback pauses, in wall-clock ms. */
+    val endsAtEpochMs: Long? = null,
+    /** How long until the pause, when known. */
+    val remainingMs: Long? = null,
+)
 
 data class NativeAudioState(
     val status: String,
@@ -102,6 +132,8 @@ data class NativeAudioState(
      * the app complete in whichever event it sees next.
      */
     val finished: List<Int> = emptyList(),
+    /** The sleep timer, or null when none is set. */
+    val sleepTimer: SleepTimerState? = null,
 )
 
 @InvokeArg
@@ -144,6 +176,16 @@ class SkipToArgs {
     var positionSec: Double? = null
     /** The queue the app believes is loaded; a skip into any other queue is refused. */
     var queueGeneration: Long? = null
+}
+
+@InvokeArg
+class SetSleepTimerArgs {
+    /** Pause at this wall-clock time (ms since the epoch). */
+    var atEpochMs: Long? = null
+    /** Pause at the end of the current item. */
+    var endOfItem: Boolean? = null
+    /** Pause at the end of the current reading (its reading group). */
+    var endOfGroup: Boolean? = null
 }
 
 @InvokeArg
@@ -212,6 +254,13 @@ object NativeAudioRuntime {
     private var lastError: String? = null
     private var pendingSeekState: PendingSeekState? = null
 
+    /** The sleep timer, and its check on the main looper (see [sleepCheck]). */
+    private var sleepTimer: SleepTimer? = null
+    /** The index of the item the sleep timer paused at the end of: recorded as heard when
+     *  it paused, so the AUTO transition that follows the next play does not record it again. */
+    private var sleepCompletedIndex: Int? = null
+    private val sleepRunnable = Runnable { sleepCheck() }
+
     /**
      * Whether the app's activity is on screen, from the plugin's lifecycle callbacks (see
      * [NativeAudioPlugin.onResume] / [NativeAudioPlugin.onStop]). Only then does the progress
@@ -241,6 +290,10 @@ object NativeAudioRuntime {
     private val playerListener = object : Player.Listener {
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             debugLog("player", "playWhenReady=$playWhenReady reason=${playWhenReadyReasonName(reason)}")
+            // The sleep timer's end of item (or reading): Media3 paused at the item's end.
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                onSleepPausedAtEndOfItem()
+            }
         }
 
         override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
@@ -251,14 +304,18 @@ object NativeAudioRuntime {
         override fun onPlaybackStateChanged(playbackState: Int) {
             debugLog("player", "playbackState=${playbackStateName(playbackState)}")
             if (playbackState == Player.STATE_ENDED) {
-                synchronized(lock) {
+                val hadSleepTimer = synchronized(lock) {
                     // The last chapter of the queue finished.
                     player?.let { p ->
-                        p.currentMediaItem?.let { recordCompletionLocked(it) }
-                        if (p.currentMediaItemIndex >= 0) finishedIndexes.add(p.currentMediaItemIndex)
+                        val index = p.currentMediaItemIndex
+                        if (index != sleepCompletedIndex) p.currentMediaItem?.let { recordCompletionLocked(it) }
+                        if (index >= 0) finishedIndexes.add(index)
                     }
                     persistLastPlayedLocked(force = true)
+                    // Nothing is left to pause: the timer is done.
+                    (sleepTimer != null).also { if (it) clearSleepTimerLocked("queue ended") }
                 }
+                if (hadSleepTimer) sleepTimerChanged()
             }
             syncTicking()
             emitState()
@@ -275,9 +332,13 @@ object NativeAudioRuntime {
                     val previousIndex = exo?.let { it.currentMediaItemIndex - 1 }?.takeIf { it >= 0 }
                     if (exo != null && previousIndex != null && previousIndex < exo.mediaItemCount) {
                         finishedIndexes.add(previousIndex)
-                        recordCompletionLocked(exo.getMediaItemAt(previousIndex))
+                        // Already recorded when the sleep timer paused at its end.
+                        if (previousIndex != sleepCompletedIndex) recordCompletionLocked(exo.getMediaItemAt(previousIndex))
                     }
                 }
+                sleepCompletedIndex = null
+                // End of reading: pause at the end of this item only if it ends the reading.
+                applyPauseAtEndLocked()
                 currentItemId = mediaItem?.mediaId
                 if (player?.isPlaying == true) recordStartLocked()
                 persistLastPlayedLocked(force = true)
@@ -297,7 +358,7 @@ object NativeAudioRuntime {
 
         override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
             // The speed button shows the current speed.
-            synchronized(lock) { mediaSession }?.setCustomLayout(SessionCommands.layout(playbackParameters.speed))
+            refreshCustomLayout()
             emitState()
         }
 
@@ -467,7 +528,7 @@ object NativeAudioRuntime {
             // service, because it outlives any one service instance (see NativeAudioService).
             mediaSession = MediaLibrarySession.Builder(ctx, sessionPlayer, LibrarySessionCallback { synchronized(lock) { carLibrary } })
                 .setBitmapLoader(AppIconBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader(ctx))) { appIcon(ctx) })
-                .setCustomLayout(SessionCommands.layout(exoPlayer.playbackParameters.speed))
+                .setCustomLayout(SessionCommands.layout(exoPlayer.playbackParameters.speed, sleepLabelLocked()))
                 .apply {
                     if (pendingIntent != null) setSessionActivity(pendingIntent)
                 }
@@ -715,6 +776,9 @@ object NativeAudioRuntime {
 
             lastError = null
             pendingSeekState = null
+            sleepTimer = null
+            sleepCompletedIndex = null
+            tickHandler.removeCallbacks(sleepRunnable)
             carLibrary = null
             currentItemId = null
             recordedStartOf = null
@@ -916,6 +980,12 @@ object NativeAudioRuntime {
         finishedIndexes.clear()
         currentItemId = null
         recordedStartOf = null
+        // A new queue (or the app's stop) ends any sleep timer.
+        if (sleepTimer != null) {
+            clearSleepTimerLocked("new queue")
+            tickHandler.post { refreshCustomLayout() }
+        }
+        sleepCompletedIndex = null
     }
 
     /** A queue arrived through the session (the car, a voice request, the resume card). */
@@ -928,6 +998,11 @@ object NativeAudioRuntime {
             lastError = null
             currentItemId = null
             recordedStartOf = null
+            sleepCompletedIndex = null
+            if (sleepTimer != null) {
+                clearSleepTimerLocked("new queue")
+                tickHandler.post { refreshCustomLayout() }
+            }
             appContext?.let { ensureServiceBoundLocked(it) }
             debugLog("queue", "external queue of $count from=${currentController()}")
         }
@@ -1033,6 +1108,202 @@ object NativeAudioRuntime {
         emitState()
         return true
     }
+
+    /* --------------------------------- sleep timer --------------------------------- */
+
+    /**
+     * Start, replace or (all arguments empty) cancel the sleep timer: pause at [atEpochMs], at
+     * the end of the current item, or at the end of the current reading. The last
+     * [SLEEP_FADE_MS] fade out through the player's volume, and playback then PAUSES, so Play
+     * carries on. A Handler on the main looper runs it; while something plays, the service is
+     * in the foreground and ExoPlayer holds a wake lock, so it fires with the app in the
+     * background or the screen off. Cleared by stop and by any new queue.
+     */
+    fun setSleepTimer(@Suppress("UNUSED_PARAMETER") context: Context, atEpochMs: Long?, endOfItem: Boolean, endOfGroup: Boolean) {
+        synchronized(lock) {
+            clearSleepTimerLocked(null)
+            if (player == null) return@synchronized
+            sleepTimer = when {
+                atEpochMs != null -> {
+                    val delay = max(0L, atEpochMs - System.currentTimeMillis())
+                    SleepTimer.At(SystemClock.elapsedRealtime() + delay, ((delay + 30_000L) / 60_000L).toInt())
+                }
+                endOfItem -> SleepTimer.EndOfItem
+                endOfGroup -> SleepTimer.EndOfGroup
+                else -> null
+            }
+            applyPauseAtEndLocked()
+            debugLog("sleep", "set ${describeSleepLocked()}")
+        }
+        sleepTimerChanged()
+    }
+
+    /** The car's sleep button: off → 15 min → 30 min → end of chapter → off. */
+    fun cycleSleepTimer(): Boolean {
+        val now = synchronized(lock) {
+            if (player == null) return false
+            sleepTimer
+        }
+        val next: Pair<Long?, Boolean> = when (now) {
+            null -> System.currentTimeMillis() + 15 * 60_000L to false
+            is SleepTimer.At -> if (now.minutes <= 15) System.currentTimeMillis() + 30 * 60_000L to false else null to true
+            else -> null to false
+        }
+        appContext?.let { setSleepTimer(it, next.first, next.second, false) }
+        return true
+    }
+
+    /** Clear the timer and put the volume back; [why] (when not null) goes to the debug log. */
+    private fun clearSleepTimerLocked(why: String?) {
+        val had = sleepTimer != null
+        sleepTimer = null
+        tickHandler.removeCallbacks(sleepRunnable)
+        player?.let {
+            it.pauseAtEndOfMediaItems = false
+            if (it.volume != 1f) it.volume = 1f
+        }
+        if (had && why != null) debugLog("sleep", "cleared: $why")
+    }
+
+    /** After any change: check the timer now, update the car's button, tell the app. */
+    private fun sleepTimerChanged() {
+        tickHandler.removeCallbacks(sleepRunnable)
+        if (synchronized(lock) { sleepTimer } != null) tickHandler.post(sleepRunnable)
+        refreshCustomLayout()
+        emitState()
+    }
+
+    /** End of item always, end of reading only on the reading's last item. */
+    private fun applyPauseAtEndLocked() {
+        val exo = player ?: return
+        val want = when (sleepTimer) {
+            SleepTimer.EndOfItem -> true
+            SleepTimer.EndOfGroup -> isLastOfGroupLocked(exo)
+            else -> false
+        }
+        if (exo.pauseAtEndOfMediaItems != want) exo.pauseAtEndOfMediaItems = want
+    }
+
+    private fun groupAt(exo: Player, i: Int): Int? =
+        exo.getMediaItemAt(i).mediaMetadata.extras?.let { if (it.containsKey(CarLibrary.EXTRA_READING_GROUP)) it.getInt(CarLibrary.EXTRA_READING_GROUP) else null }
+
+    /** Is the current item the last of its reading group (or in no group)? */
+    private fun isLastOfGroupLocked(exo: Player): Boolean {
+        val index = exo.currentMediaItemIndex
+        if (index !in 0 until exo.mediaItemCount) return true
+        val group = groupAt(exo, index) ?: return true
+        return index + 1 >= exo.mediaItemCount || groupAt(exo, index + 1) != group
+    }
+
+    /** Time left in the current item at the current speed, or null when its length is unknown. */
+    private fun itemRemainingMsLocked(exo: Player): Long? {
+        val duration = exo.duration
+        if (duration == C.TIME_UNSET || duration <= 0) return null
+        val speed = exo.playbackParameters.speed.takeIf { it > 0f } ?: 1f
+        return (max(0L, duration - exo.currentPosition) / speed).toLong()
+    }
+
+    /** Until the timer pauses playback, or null when that is not known yet. */
+    private fun sleepRemainingMsLocked(): Long? {
+        val exo = player ?: return null
+        return when (val t = sleepTimer) {
+            null -> null
+            is SleepTimer.At -> max(0L, t.deadlineElapsedMs - SystemClock.elapsedRealtime())
+            SleepTimer.EndOfItem -> itemRemainingMsLocked(exo)
+            SleepTimer.EndOfGroup -> if (isLastOfGroupLocked(exo)) itemRemainingMsLocked(exo) else null
+        }
+    }
+
+    private fun describeSleepLocked(): String = when (val t = sleepTimer) {
+        null -> "off"
+        is SleepTimer.At -> "in ${sleepRemainingMsLocked()} ms"
+        SleepTimer.EndOfItem -> "end of item"
+        SleepTimer.EndOfGroup -> "end of reading"
+    }
+
+    /**
+     * The timer's check, on the main looper: fade as the end nears and, for a timed timer, pause
+     * when it comes (Media3 pauses at an item's end itself: [onSleepPausedAtEndOfItem]). Posted
+     * again at most [SLEEP_CHECK_MAX_MS] later, every [SLEEP_FADE_STEP_MS] during the fade.
+     */
+    private fun sleepCheck() {
+        var fired = false
+        val delay: Long = synchronized(lock) {
+            val t = sleepTimer ?: return
+            val exo = player ?: run {
+                sleepTimer = null
+                return
+            }
+            if (t !is SleepTimer.At) applyPauseAtEndLocked()
+            val remaining = sleepRemainingMsLocked()
+            if (t is SleepTimer.At && remaining != null && remaining <= 0L) {
+                // Pause first, then restore the volume: the player applies them in that order.
+                (mediaSessionPlayer ?: exo).pause()
+                clearSleepTimerLocked(null)
+                debugLog("sleep", "fired: paused")
+                persistLastPlayedLocked(force = true)
+                fired = true
+                return@synchronized -1L
+            }
+            val volume = if (remaining == null) 1f else (remaining.toFloat() / SLEEP_FADE_MS).coerceIn(0f, 1f)
+            if (exo.volume != volume) exo.volume = volume
+            when {
+                remaining == null -> SLEEP_CHECK_MAX_MS
+                remaining > SLEEP_FADE_MS -> (remaining - SLEEP_FADE_MS).coerceIn(SLEEP_FADE_STEP_MS, SLEEP_CHECK_MAX_MS)
+                else -> SLEEP_FADE_STEP_MS
+            }
+        }
+        if (fired) {
+            refreshCustomLayout()
+            emitState()
+        } else {
+            tickHandler.postDelayed(sleepRunnable, delay)
+        }
+    }
+
+    /**
+     * Media3 paused at the end of an item because the sleep timer asked it to. The item was
+     * heard to its end: record it now (the listener may not press Play again until tomorrow),
+     * and not again when Play moves on to the next item.
+     */
+    private fun onSleepPausedAtEndOfItem() {
+        synchronized(lock) {
+            if (sleepTimer == null || sleepTimer is SleepTimer.At) return
+            val exo = player ?: return
+            val index = exo.currentMediaItemIndex
+            if (index in 0 until exo.mediaItemCount && index != sleepCompletedIndex) {
+                finishedIndexes.add(index)
+                recordCompletionLocked(exo.getMediaItemAt(index))
+                sleepCompletedIndex = index
+            }
+            clearSleepTimerLocked(null)
+            debugLog("sleep", "fired: paused at the end of item $index")
+            persistLastPlayedLocked(force = true)
+        }
+        refreshCustomLayout()
+        emitState()
+    }
+
+    /** The car's buttons show the speed and the sleep timer. */
+    private fun refreshCustomLayout() {
+        val session = synchronized(lock) { mediaSession } ?: return
+        session.setCustomLayout(customLayout(null))
+    }
+
+    /** The custom buttons for the current speed (or [speed]) and sleep timer. */
+    internal fun customLayout(speed: Float?): ImmutableList<CommandButton> = synchronized(lock) {
+        SessionCommands.layout(speed ?: player?.playbackParameters?.speed ?: 1f, sleepLabelLocked())
+    }
+
+    /** What the car's sleep button says while a timer runs. */
+    private fun sleepLabelLocked(): String? = when (val t = sleepTimer) {
+        null -> null
+        is SleepTimer.At -> "${t.minutes} min"
+        SleepTimer.EndOfItem -> "end of chapter"
+        SleepTimer.EndOfGroup -> "end of reading"
+    }
+
+    internal fun sleepTimerForTest(): SleepTimer? = synchronized(lock) { sleepTimer }
 
     /** Step the speed through 1×, 1.2×, 1.5×, 2×, 0.8×. */
     fun cycleSpeed(): Boolean {
@@ -1154,6 +1425,14 @@ object NativeAudioRuntime {
             // A counter the store keeps, not a parse of the stored list (up to 500 entries).
             pendingCompletions = carLibrary?.store?.pendingCompletionCount() ?: 0,
             finished = finishedIndexes.toList(),
+            sleepTimer = sleepTimer?.let { t ->
+                val remaining = sleepRemainingMsLocked()
+                when (t) {
+                    is SleepTimer.At -> SleepTimerState("time", System.currentTimeMillis() + (remaining ?: 0L), remaining)
+                    SleepTimer.EndOfItem -> SleepTimerState("item", null, remaining)
+                    SleepTimer.EndOfGroup -> SleepTimerState("group", null, remaining)
+                }
+            },
         )
     }
 
@@ -1287,6 +1566,15 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         respond(invoke, "setRate") { NativeAudioRuntime.setRate(context, rate) }
     }
 
+    /** Start, replace or (no arguments) cancel the sleep timer (see [NativeAudioRuntime.setSleepTimer]). */
+    @Command
+    fun setSleepTimer(invoke: Invoke) {
+        val args = invoke.parseArgs(SetSleepTimerArgs::class.java)
+        respond(invoke, "setSleepTimer") {
+            NativeAudioRuntime.setSleepTimer(context, args.atEpochMs, args.endOfItem == true, args.endOfGroup == true)
+        }
+    }
+
     @Command
     fun getState(invoke: Invoke) = respond(invoke, "getState") {}
 
@@ -1397,6 +1685,17 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         payload.put("queueOrigin", state.queueOrigin)
         payload.put("pendingCompletions", state.pendingCompletions)
         payload.put("finished", org.json.JSONArray(state.finished))
+        // Always present, so the app can tell "no timer" from an older plugin that has none.
+        payload.put(
+            "sleepTimer",
+            state.sleepTimer?.let { t ->
+                JSObject().apply {
+                    put("mode", t.mode)
+                    t.endsAtEpochMs?.let { put("endsAtEpochMs", it) }
+                    t.remainingMs?.let { put("remainingMs", it) }
+                }
+            } ?: org.json.JSONObject.NULL,
+        )
         if (!state.error.isNullOrBlank()) payload.put("error", state.error)
         return payload
     }

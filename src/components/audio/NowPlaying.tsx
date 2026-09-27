@@ -48,6 +48,7 @@ import { db } from "@/db";
 import { bookByHo, refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
+import { SleepControl } from "./SleepTimer";
 import { cn } from "@/lib/cn";
 import { formatClock as fmt, MONTH_NAMES } from "@/lib/day";
 
@@ -314,9 +315,10 @@ function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void
               </RoundButton>
             </div>
 
-            {/* Secondary: speed + next reading */}
+            {/* Secondary: speed, sleep timer, next reading */}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               {canSetRate && <SpeedControl />}
+              <SleepControl />
               {eveningLater && (
                 <button
                   onClick={() => void playDevotionalReading(devo.devotionalId, devo.day, 1)}
