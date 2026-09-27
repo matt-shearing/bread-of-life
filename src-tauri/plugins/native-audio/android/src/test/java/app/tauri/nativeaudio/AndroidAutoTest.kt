@@ -289,7 +289,7 @@ class AndroidAutoTest {
             runMainLooperUntil { b.customLayout.any { it.displayName.toString() == label } }
             assertEquals(label, mode, NativeAudioRuntime.getState(context).sleepTimer?.mode)
         }
-        assertTrue("still playing: the car's button only sets the timer", player.isPlaying)
+        assertTrue("not paused: the car's button only sets the timer", player.playWhenReady)
     }
 
     @Test
