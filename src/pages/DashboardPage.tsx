@@ -24,6 +24,7 @@ import { useUI } from "@/store/ui";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
 import { ListenButton } from "@/components/devotional/ListenButton";
+import { htmlToText } from "@/components/journal/RichEditor";
 
 function greeting() {
   const h = new Date().getHours();
@@ -309,7 +310,7 @@ export function DashboardPage() {
               {(journal ?? []).map((e) => (
                 <Card key={e.id} className="cursor-pointer p-4 hover:border-primary/40" onClick={() => navigate("/journal")}>
                   <h3 className="font-medium">{e.title}</h3>
-                  {e.body && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{e.body}</p>}
+                  {htmlToText(e.body) && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{htmlToText(e.body)}</p>}
                   <div className="mt-2 text-xs text-muted-foreground">{new Date(e.updatedAt).toLocaleDateString()}</div>
                 </Card>
               ))}
