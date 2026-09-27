@@ -21,7 +21,7 @@ import java.io.FileOutputStream
 /**
  * Artwork for Android Auto. Browse items need an artwork URI the car can open (content:// or
  * http), not a bitmap in the item, so the tiles are drawn here on first request, cached as PNG
- * files, and served by [CarArtworkProvider]:
+ * files, and served by [ArtworkTilesProvider]:
  *
  *   content://<app id>.nativeaudio.artwork/chapter/JHN/3   "John" over a large "3"
  *   …/book/JHN                                               "John", "21 chapters"
@@ -30,7 +30,7 @@ import java.io.FileOutputStream
  *
  * Warm amber, like the app. Tab icons are vector drawables instead (the car tints those).
  */
-internal object CarArtwork {
+internal object ArtworkTiles {
     const val SIZE_PX = 480
     private const val VERSION = 1
     private val TOP = Color.parseColor("#FBBF24") // amber-400
@@ -75,9 +75,13 @@ internal object CarArtwork {
                 b.name to (if (b.chapters == 1) "1 chapter" else "${b.chapters} chapters")
             }
             segments.size == 4 && segments[0] == "range" -> {
+                // Only the pages CarLibrary actually lists (1–50, 51–100, …): the provider is
+                // exported, and any other range would let another app fill our cache with tiles.
                 val b = book(segments[1]) ?: return null
                 val from = segments[2].toIntOrNull() ?: return null
                 val to = segments[3].toIntOrNull() ?: return null
+                if (from < 1 || from > b.chapters || (from - 1) % CarLibrary.RANGE != 0) return null
+                if (to != minOf(b.chapters, from + CarLibrary.RANGE - 1)) return null
                 b.name to "$from–$to"
             }
             segments.size == 2 && segments[0] == "testament" -> when (segments[1]) {
@@ -197,8 +201,12 @@ internal object CarArtwork {
     }
 }
 
-/** Serves [CarArtwork] tiles to Android Auto and the system media controls. Read-only. */
-class CarArtworkProvider : ContentProvider() {
+/**
+ * Serves [ArtworkTiles] tiles to Android Auto and the system media controls. Read-only, and
+ * only for the fixed set of paths [ArtworkTiles.spec] accepts. Called CarArtworkProvider before
+ * v0.4.1.
+ */
+class ArtworkTilesProvider : ContentProvider() {
     override fun onCreate(): Boolean = true
 
     override fun getType(uri: Uri): String = "image/png"
@@ -206,7 +214,7 @@ class CarArtworkProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         if (mode != "r") throw SecurityException("read-only")
         val ctx = context ?: throw FileNotFoundException("no context")
-        val file = CarArtwork.file(ctx, uri.pathSegments) ?: throw FileNotFoundException(uri.toString())
+        val file = ArtworkTiles.file(ctx, uri.pathSegments) ?: throw FileNotFoundException(uri.toString())
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     }
 

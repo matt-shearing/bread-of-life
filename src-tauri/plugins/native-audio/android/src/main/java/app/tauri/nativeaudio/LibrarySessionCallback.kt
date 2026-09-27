@@ -20,14 +20,18 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
-/** Custom buttons on the car's (and the lock screen's) playback screen. */
-internal object CarCommands {
+/** Custom buttons on the car's (and the lock screen's) playback screen. Called CarCommands before v0.4.1. */
+internal object SessionCommands {
     const val NEXT_READING = "app.tauri.nativeaudio.NEXT_READING"
     const val BACK_30 = "app.tauri.nativeaudio.BACK_30"
     const val SPEED = "app.tauri.nativeaudio.SPEED"
 
-    /** The speeds the car's speed button steps through, each with its own icon. */
-    val SPEEDS = floatArrayOf(1.0f, 1.2f, 1.5f, 2.0f, 0.8f)
+    /**
+     * The playback speeds, slowest first: the car's speed button steps up through them and
+     * wraps round, and the app's speed menu offers the same ones (src/audio/speeds.json;
+     * SpeedsAgreementTest keeps the two in step). Each has its own Media3 icon.
+     */
+    val SPEEDS = floatArrayOf(0.8f, 1.0f, 1.2f, 1.5f, 1.8f, 2.0f)
 
     val all: List<SessionCommand> = listOf(
         SessionCommand(NEXT_READING, Bundle.EMPTY),
@@ -35,9 +39,12 @@ internal object CarCommands {
         SessionCommand(SPEED, Bundle.EMPTY),
     )
 
+    /** The next speed up, wrapping from the fastest to the slowest. A speed not in the list
+     *  (set some other way) goes to the next one above it. */
     fun nextSpeed(current: Float): Float {
         val i = SPEEDS.indexOfFirst { kotlin.math.abs(it - current) < 0.01f }
-        return if (i < 0) 1.0f else SPEEDS[(i + 1) % SPEEDS.size]
+        if (i >= 0) return SPEEDS[(i + 1) % SPEEDS.size]
+        return SPEEDS.firstOrNull { it > current } ?: SPEEDS[0]
     }
 
     @OptIn(UnstableApi::class)
@@ -46,6 +53,7 @@ internal object CarCommands {
             kotlin.math.abs(speed - 0.8f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_0_8
             kotlin.math.abs(speed - 1.2f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_1_2
             kotlin.math.abs(speed - 1.5f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_1_5
+            kotlin.math.abs(speed - 1.8f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_1_8
             kotlin.math.abs(speed - 2.0f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_2_0
             kotlin.math.abs(speed - 1.0f) < 0.01f -> CommandButton.ICON_PLAYBACK_SPEED_1_0
             else -> CommandButton.ICON_PLAYBACK_SPEED
@@ -66,8 +74,9 @@ internal object CarCommands {
         )
     }
 
+    /** "1×", "1.2×", "0.75×": at most two decimals, no trailing zeros. */
     fun formatSpeed(speed: Float): String {
-        val s = if (speed == speed.toInt().toFloat()) speed.toInt().toString() else "%.1f".format(java.util.Locale.US, speed)
+        val s = java.math.BigDecimal("%.2f".format(java.util.Locale.US, speed)).stripTrailingZeros().toPlainString()
         return "$s×"
     }
 }
@@ -75,19 +84,20 @@ internal object CarCommands {
 /**
  * The session's callback: the Android Auto library (browse, search, play by id, resume),
  * the custom buttons, and the logging the debug log relies on for every controller command.
+ * Called CarSessionCallback before v0.4.1.
  */
 @OptIn(UnstableApi::class)
-internal class CarSessionCallback(
+internal class LibrarySessionCallback(
     private val library: () -> CarLibrary?,
 ) : MediaLibrarySession.Callback {
 
     override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
         val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
-            .apply { CarCommands.all.forEach { add(it) } }
+            .apply { SessionCommands.all.forEach { add(it) } }
             .build()
         return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
             .setAvailableSessionCommands(commands)
-            .setCustomLayout(CarCommands.layout(session.player.playbackParameters.speed))
+            .setCustomLayout(SessionCommands.layout(session.player.playbackParameters.speed))
             .build()
     }
 
@@ -126,9 +136,9 @@ internal class CarSessionCallback(
     ): ListenableFuture<SessionResult> {
         NativeAudioRuntime.debugLog("session", "custom ${customCommand.customAction} from=${NativeAudioRuntime.describe(session, controller)}")
         val handled = when (customCommand.customAction) {
-            CarCommands.BACK_30 -> NativeAudioRuntime.seekBackBy(30_000L)
-            CarCommands.NEXT_READING -> NativeAudioRuntime.nextReading()
-            CarCommands.SPEED -> NativeAudioRuntime.cycleSpeed()
+            SessionCommands.BACK_30 -> NativeAudioRuntime.seekBackBy(30_000L)
+            SessionCommands.NEXT_READING -> NativeAudioRuntime.nextReading()
+            SessionCommands.SPEED -> NativeAudioRuntime.cycleSpeed()
             else -> false
         }
         return Futures.immediateFuture(SessionResult(if (handled) SessionResult.RESULT_SUCCESS else SessionError.ERROR_NOT_SUPPORTED))

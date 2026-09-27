@@ -15,7 +15,7 @@ import org.json.JSONObject
  * the narrator), and it is kept in SharedPreferences. The native side keeps its own record of
  * what was actually played (Continue listening, Recent) and of plan chapters and devotionals
  * that played to their end, from the car or anywhere else, which the app collects as soon as it
- * hears some are waiting, or at its next start (`take_car_completions` / `ack_car_completions`).
+ * hears some are waiting, or at its next start (`take_completions` / `ack_completions`).
  */
 internal data class CarTrack(
     val readingIndex: Int,
@@ -201,8 +201,11 @@ internal object MediaIds {
     }
 }
 
-/** SharedPreferences behind [CarSnapshot], Recent, Continue listening and completions. */
-internal class CarStore(context: Context) {
+/**
+ * SharedPreferences behind [CarSnapshot], Recent, Continue listening and completions. Called
+ * CarStore before v0.4.1; the preferences file keeps its old name so nothing stored is lost.
+ */
+internal class PlaybackStore(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -292,17 +295,27 @@ internal class CarStore(context: Context) {
         val from = maxOf(0, list.length() - COMPLETION_LIMIT)
         for (i in from until list.length()) trimmed.put(list.get(i))
         prefs.edit().putString(KEY_COMPLETIONS, trimmed.toString()).putLong(KEY_COMPLETION_SEQ, seq).apply()
+        pendingCount = trimmed.length()
     }
 
     fun completions(): JSONArray = completionsArray()
 
-    fun pendingCompletionCount(): Int = completionsArray().length()
+    /**
+     * How many completions wait for the app. Every state event carries it, so it is a
+     * counter kept in step with the list rather than a parse of up to 500 stored entries.
+     */
+    fun pendingCompletionCount(): Int {
+        val known = pendingCount
+        if (known >= 0) return known
+        return completionsArray().length().also { pendingCount = it }
+    }
 
     /** Drop every completion up to and including [upTo] (the app has recorded them). */
     fun ackCompletions(upTo: Long) {
         val keep = JSONArray()
         completionsArray().objects().forEach { if (it.optLong("seq") > upTo) keep.put(it) }
         prefs.edit().putString(KEY_COMPLETIONS, keep.toString()).apply()
+        pendingCount = keep.length()
     }
 
     private fun completionsArray(): JSONArray =
@@ -311,12 +324,20 @@ internal class CarStore(context: Context) {
     internal fun clearForTest() {
         prefs.edit().clear().commit()
         cachedSnapshot = null
+        pendingCount = -1
     }
 
     private fun recentKey(mediaId: String): String =
         MediaIds.chapterOf(mediaId)?.let { (ho, c) -> "ch/$ho/$c" } ?: mediaId
 
     companion object {
+        /**
+         * Shared by every instance (the runtime's, and the short-lived ones used before the
+         * player exists), all of which write the same preferences file. -1 = not counted yet.
+         */
+        @Volatile
+        private var pendingCount = -1
+
         private const val PREFS = "tauri_native_audio_car"
         private const val KEY_SNAPSHOT = "snapshot"
         private const val KEY_RECENT = "recent"
@@ -324,7 +345,7 @@ internal class CarStore(context: Context) {
         private const val KEY_COMPLETIONS = "completions"
         private const val KEY_COMPLETION_SEQ = "completion_seq"
         const val RECENT_LIMIT = 10
-        private const val COMPLETION_LIMIT = 500
+        internal const val COMPLETION_LIMIT = 500
     }
 }
 

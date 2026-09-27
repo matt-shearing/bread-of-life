@@ -7,23 +7,23 @@ Default permissions for the plugin
 - `allow-initialize`
 - `allow-register-listener`
 - `allow-remove-listener`
-- `allow-set-source`
 - `allow-set-queue`
+- `allow-skip-to`
 - `allow-next`
 - `allow-previous`
 - `allow-play`
 - `allow-pause`
+- `allow-stop`
 - `allow-seek-to`
 - `allow-set-rate`
 - `allow-get-state`
-- `allow-get-progress-checkpoint`
-- `allow-clear-progress-checkpoint`
 - `allow-get-debug-log`
 - `allow-set-car-snapshot`
+- `allow-take-completions`
+- `allow-ack-completions`
 - `allow-take-car-completions`
 - `allow-ack-car-completions`
 - `allow-get-queue`
-- `allow-dispose`
 
 ## Permission Table
 
@@ -63,25 +63,12 @@ Denies the ack_car_completions command without any pre-configured scope.
 <tr>
 <td>
 
-`native-audio:allow-clear-progress-checkpoint`
+`native-audio:allow-ack-completions`
 
 </td>
 <td>
 
-Enables the clear_progress_checkpoint command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`native-audio:deny-clear-progress-checkpoint`
-
-</td>
-<td>
-
-Denies the clear_progress_checkpoint command without any pre-configured scope.
+Enables the ack_completions command without any pre-configured scope.
 
 </td>
 </tr>
@@ -89,25 +76,12 @@ Denies the clear_progress_checkpoint command without any pre-configured scope.
 <tr>
 <td>
 
-`native-audio:allow-dispose`
+`native-audio:deny-ack-completions`
 
 </td>
 <td>
 
-Enables the dispose command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`native-audio:deny-dispose`
-
-</td>
-<td>
-
-Denies the dispose command without any pre-configured scope.
+Denies the ack_completions command without any pre-configured scope.
 
 </td>
 </tr>
@@ -134,32 +108,6 @@ Enables the get_debug_log command without any pre-configured scope.
 <td>
 
 Denies the get_debug_log command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`native-audio:allow-get-progress-checkpoint`
-
-</td>
-<td>
-
-Enables the get_progress_checkpoint command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`native-audio:deny-get-progress-checkpoint`
-
-</td>
-<td>
-
-Denies the get_progress_checkpoint command without any pre-configured scope.
 
 </td>
 </tr>
@@ -505,12 +453,12 @@ Denies the set_rate command without any pre-configured scope.
 <tr>
 <td>
 
-`native-audio:allow-set-source`
+`native-audio:allow-skip-to`
 
 </td>
 <td>
 
-Enables the set_source command without any pre-configured scope.
+Enables the skip_to command without any pre-configured scope.
 
 </td>
 </tr>
@@ -518,12 +466,38 @@ Enables the set_source command without any pre-configured scope.
 <tr>
 <td>
 
-`native-audio:deny-set-source`
+`native-audio:deny-skip-to`
 
 </td>
 <td>
 
-Denies the set_source command without any pre-configured scope.
+Denies the skip_to command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-stop`
+
+</td>
+<td>
+
+Enables the stop command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-stop`
+
+</td>
+<td>
+
+Denies the stop command without any pre-configured scope.
 
 </td>
 </tr>
@@ -550,6 +524,32 @@ Enables the take_car_completions command without any pre-configured scope.
 <td>
 
 Denies the take_car_completions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:allow-take-completions`
+
+</td>
+<td>
+
+Enables the take_completions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`native-audio:deny-take-completions`
+
+</td>
+<td>
+
+Denies the take_completions command without any pre-configured scope.
 
 </td>
 </tr>

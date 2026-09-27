@@ -28,7 +28,7 @@
 
         <!-- Artwork tiles for the car (generated book/chapter images). Read-only, nothing private. -->
         <provider
-            android:name="app.tauri.nativeaudio.CarArtworkProvider"
+            android:name="app.tauri.nativeaudio.ArtworkTilesProvider"
             android:authorities="${applicationId}.nativeaudio.artwork"
             android:exported="true" />
     </application>

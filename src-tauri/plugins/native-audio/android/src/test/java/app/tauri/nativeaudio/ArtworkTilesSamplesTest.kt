@@ -18,7 +18,7 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-class CarArtworkSamplesTest {
+class ArtworkTilesSamplesTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
@@ -37,7 +37,7 @@ class CarArtworkSamplesTest {
             listOf("devotional", "morning"),
         )
         for (segments in samples) {
-            val file = CarArtwork.file(context, segments)
+            val file = ArtworkTiles.file(context, segments)
             assertNotNull(segments.toString(), file)
             val bytes = file!!.readBytes()
             assertEquals(0x89.toByte(), bytes[0])

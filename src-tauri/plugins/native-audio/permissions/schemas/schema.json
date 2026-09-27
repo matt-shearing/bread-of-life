@@ -307,28 +307,16 @@
           "markdownDescription": "Denies the ack_car_completions command without any pre-configured scope."
         },
         {
-          "description": "Enables the clear_progress_checkpoint command without any pre-configured scope.",
+          "description": "Enables the ack_completions command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-clear-progress-checkpoint",
-          "markdownDescription": "Enables the clear_progress_checkpoint command without any pre-configured scope."
+          "const": "allow-ack-completions",
+          "markdownDescription": "Enables the ack_completions command without any pre-configured scope."
         },
         {
-          "description": "Denies the clear_progress_checkpoint command without any pre-configured scope.",
+          "description": "Denies the ack_completions command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-clear-progress-checkpoint",
-          "markdownDescription": "Denies the clear_progress_checkpoint command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the dispose command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-dispose",
-          "markdownDescription": "Enables the dispose command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the dispose command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-dispose",
-          "markdownDescription": "Denies the dispose command without any pre-configured scope."
+          "const": "deny-ack-completions",
+          "markdownDescription": "Denies the ack_completions command without any pre-configured scope."
         },
         {
           "description": "Enables the get_debug_log command without any pre-configured scope.",
@@ -341,18 +329,6 @@
           "type": "string",
           "const": "deny-get-debug-log",
           "markdownDescription": "Denies the get_debug_log command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_progress_checkpoint command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-progress-checkpoint",
-          "markdownDescription": "Enables the get_progress_checkpoint command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_progress_checkpoint command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-progress-checkpoint",
-          "markdownDescription": "Denies the get_progress_checkpoint command without any pre-configured scope."
         },
         {
           "description": "Enables the get_queue command without any pre-configured scope.",
@@ -511,16 +487,28 @@
           "markdownDescription": "Denies the set_rate command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_source command without any pre-configured scope.",
+          "description": "Enables the skip_to command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-set-source",
-          "markdownDescription": "Enables the set_source command without any pre-configured scope."
+          "const": "allow-skip-to",
+          "markdownDescription": "Enables the skip_to command without any pre-configured scope."
         },
         {
-          "description": "Denies the set_source command without any pre-configured scope.",
+          "description": "Denies the skip_to command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-set-source",
-          "markdownDescription": "Denies the set_source command without any pre-configured scope."
+          "const": "deny-skip-to",
+          "markdownDescription": "Denies the skip_to command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop",
+          "markdownDescription": "Enables the stop command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop",
+          "markdownDescription": "Denies the stop command without any pre-configured scope."
         },
         {
           "description": "Enables the take_car_completions command without any pre-configured scope.",
@@ -535,10 +523,22 @@
           "markdownDescription": "Denies the take_car_completions command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-initialize`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-set-source`\n- `allow-set-queue`\n- `allow-next`\n- `allow-previous`\n- `allow-play`\n- `allow-pause`\n- `allow-seek-to`\n- `allow-set-rate`\n- `allow-get-state`\n- `allow-get-progress-checkpoint`\n- `allow-clear-progress-checkpoint`\n- `allow-get-debug-log`\n- `allow-set-car-snapshot`\n- `allow-take-car-completions`\n- `allow-ack-car-completions`\n- `allow-get-queue`\n- `allow-dispose`",
+          "description": "Enables the take_completions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-take-completions",
+          "markdownDescription": "Enables the take_completions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the take_completions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-take-completions",
+          "markdownDescription": "Denies the take_completions command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-initialize`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-set-queue`\n- `allow-skip-to`\n- `allow-next`\n- `allow-previous`\n- `allow-play`\n- `allow-pause`\n- `allow-stop`\n- `allow-seek-to`\n- `allow-set-rate`\n- `allow-get-state`\n- `allow-get-debug-log`\n- `allow-set-car-snapshot`\n- `allow-take-completions`\n- `allow-ack-completions`\n- `allow-take-car-completions`\n- `allow-ack-car-completions`\n- `allow-get-queue`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-initialize`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-set-source`\n- `allow-set-queue`\n- `allow-next`\n- `allow-previous`\n- `allow-play`\n- `allow-pause`\n- `allow-seek-to`\n- `allow-set-rate`\n- `allow-get-state`\n- `allow-get-progress-checkpoint`\n- `allow-clear-progress-checkpoint`\n- `allow-get-debug-log`\n- `allow-set-car-snapshot`\n- `allow-take-car-completions`\n- `allow-ack-car-completions`\n- `allow-get-queue`\n- `allow-dispose`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-initialize`\n- `allow-register-listener`\n- `allow-remove-listener`\n- `allow-set-queue`\n- `allow-skip-to`\n- `allow-next`\n- `allow-previous`\n- `allow-play`\n- `allow-pause`\n- `allow-stop`\n- `allow-seek-to`\n- `allow-set-rate`\n- `allow-get-state`\n- `allow-get-debug-log`\n- `allow-set-car-snapshot`\n- `allow-take-completions`\n- `allow-ack-completions`\n- `allow-take-car-completions`\n- `allow-ack-car-completions`\n- `allow-get-queue`"
         }
       ]
     }

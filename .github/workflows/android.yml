@@ -98,9 +98,9 @@ jobs:
           APK="${{ steps.apk.outputs.path }}"
           AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           "$AAPT" dump xmltree "$APK" AndroidManifest.xml > apk-manifest.txt
-          grep -n -A3 -E 'car.application|MediaBrowserService|MediaLibraryService|NativeAudioService|CarArtworkProvider|nativeaudio.artwork' apk-manifest.txt
+          grep -n -A3 -E 'car.application|MediaBrowserService|MediaLibraryService|NativeAudioService|ArtworkTilesProvider|nativeaudio.artwork' apk-manifest.txt
           for want in com.google.android.gms.car.application android.media.browse.MediaBrowserService \
-                      androidx.media3.session.MediaLibraryService app.tauri.nativeaudio.CarArtworkProvider; do
+                      androidx.media3.session.MediaLibraryService app.tauri.nativeaudio.ArtworkTilesProvider; do
             grep -q "$want" apk-manifest.txt || { echo "::error::$want missing from the APK manifest"; exit 1; }
           done
           DESC=$("$AAPT" dump --values resources "$APK" | grep -A2 'automotive_app_desc' | grep -oE 'res/[^"]+\.xml' | head -1)
@@ -153,7 +153,7 @@ jobs:
           echo "Testing $PROJECT"
           ./gradlew "$PROJECT:testDebugUnitTest" --console=plain
 
-      # The car's generated artwork tiles (CarArtworkSamplesTest), to look at.
+      # The car's generated artwork tiles (ArtworkTilesSamplesTest), to look at.
       - name: Upload Android Auto artwork samples
         if: always()
         uses: actions/upload-artifact@v4
