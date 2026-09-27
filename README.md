@@ -109,8 +109,11 @@ source of truth and sync is purely additive.
   **Settings → Sync → Self-hosted**. The server is open source in [`deploy/sync-server`](deploy/sync-server)
   (a small Node service with a Docker Compose + Caddy setup); see its README to stand one up.
 
-Local-only remains the default. End-to-end encryption of the synced payload is on the roadmap
-(today the relay stores data server-side); see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Local-only remains the default. Once signed in you can also turn on **end-to-end encryption**:
+your journal, prayers and notes are encrypted on the device (AES-256-GCM) before they're sent, so
+the server only stores ciphertext. You get a 24-word recovery phrase to unlock them on another
+device; lose it and the synced copies can't be read (the copy on your device is unaffected). Other
+synced data (highlights, reading progress, plans, settings) is stored on the server as sent.
 
 ## Run it from source
 
@@ -121,6 +124,7 @@ pnpm fetch:bible     # downloads the BSB into public/bible/bsb/ (already present
 pnpm dev             # run in a browser at http://localhost:1420
 pnpm tauri:dev       # run as the native desktop app
 pnpm build           # typecheck + production web build → dist/
+pnpm lint && pnpm test   # what CI runs on every pull request, besides the build
 pnpm tauri:build     # native installers (AppImage/deb on Linux, etc.)
 ```
 
