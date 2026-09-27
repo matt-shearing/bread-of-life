@@ -22,6 +22,8 @@ import type { ReactNode } from "react";
 import { db } from "@/db";
 import { useUI } from "@/store/ui";
 import { cn } from "@/lib/cn";
+import { useSidebarCollapsed } from "@/lib/layout";
+import { MOD_K } from "@/lib/shortcuts";
 import { Button, Tooltip } from "@/components/ui";
 
 const NAV = [
@@ -43,9 +45,10 @@ function MaybeTooltip({ show, label, children }: { show: boolean; label: string;
 }
 
 export function Sidebar() {
-  const { resolvedTheme, toggleTheme, sidebarCollapsed, toggleSidebar } = useUI();
+  const { resolvedTheme, toggleTheme } = useUI();
   const activePrayers = useLiveQuery(() => db.prayers.where("status").equals("active").count(), [], 0);
-  const collapsed = sidebarCollapsed;
+  // Collapsed by default on the Fold and narrow windows; see src/lib/layout.ts.
+  const { collapsed, toggle: toggleSidebar } = useSidebarCollapsed();
 
   return (
     <aside
@@ -102,6 +105,12 @@ export function Sidebar() {
             >
               <Icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
               {!collapsed && <span className="flex-1">{label}</span>}
+              {!collapsed && label === "Search" && (
+                // Discoverability for the palette; hidden on touch screens (no keyboard).
+                <kbd className="hidden rounded border border-border px-1.5 text-[10px] font-normal text-muted-foreground [@media(hover:hover)]:inline">
+                  {MOD_K}
+                </kbd>
+              )}
               {label === "Prayers" &&
                 activePrayers > 0 &&
                 (collapsed ? (

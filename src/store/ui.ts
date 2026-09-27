@@ -12,6 +12,31 @@ import type { ResolvedTheme, ThemeLocation, ThemeMode } from "@/lib/theme";
  */
 export type ReadingLayout = "lines" | "flowing";
 export type DashboardBg = "plain" | "still" | "animated";
+
+/** A verse to bring into view once its chapter has rendered (see `goTo`). */
+export interface VerseTarget {
+  ho: string;
+  chapter: number;
+  verse: number;
+  /** Briefly highlight the verse on arrival. Off when restoring your own place. */
+  flash: boolean;
+  /** Changes on every request, so asking for the verse already on screen still scrolls. */
+  nonce: number;
+}
+/** Where you are in your OWN reading (the Bible tab), as opposed to a plan or a peek. */
+export interface ReadingPos {
+  ho: string;
+  chapter: number;
+  verse: number;
+  at: number;
+}
+/** The page a followed reference came from, for the "Back to …" chip in the reader. */
+export interface ReturnPoint {
+  path: string;
+  label: string;
+  /** The Bible location before the jump, put back when you return. */
+  prev: { ho: string; chapter: number; verse: number | null };
+}
 // The theme types are defined in @/lib/theme (the store imports the resolver, so
 // they cannot live here without a cycle) and re-exported so `@/store/ui` stays the
 // one place to look for UI-state types, as it already is for AIProvider.
@@ -41,7 +66,28 @@ export interface UIState {
   // current Bible location
   ho: string;
   chapter: number;
-  goTo: (ho: string, chapter: number) => void;
+  /**
+   * Move the reader. With a verse, the reader scrolls it into view once the chapter
+   * has rendered and (unless `flash: false`) highlights it briefly.
+   */
+  goTo: (ho: string, chapter: number, verse?: number | null, opts?: { flash?: boolean }) => void;
+  /** Pending scroll request for the reader; consumed (cleared) once honoured. Not persisted. */
+  target: VerseTarget | null;
+  clearTarget: () => void;
+
+  /** Your own reading position (top visible verse on the Bible tab). Written only by the
+   *  Bible page's reader — never by the guided plan reader or a reference peek. */
+  readingPos: ReadingPos | null;
+  setReadingPos: (p: ReadingPos) => void;
+
+  /** Set when a reference is followed from another page; drives "Back to …". Not persisted. */
+  returnTo: ReturnPoint | null;
+  setReturnTo: (r: ReturnPoint | null) => void;
+
+  /** Last few searches typed on the Search page (device-local). */
+  recentSearches: string[];
+  addRecentSearch: (q: string) => void;
+  clearRecentSearches: () => void;
   // The guided reader can scope the reader to a verse range (Soul Food Classic
   // "part of a psalm"). Only honoured where a portion is explicitly wanted;
   // any plain goTo clears it.
@@ -72,6 +118,13 @@ export interface UIState {
   // left nav (Spotify-style collapse to icons-only on desktop)
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  /**
+   * The same choice for COMPACT layouts (768–1023px, or any touch screen such as the
+   * unfolded Fold), remembered separately so expanding it on the Fold doesn't change
+   * the desktop. null = never chosen → collapsed by default.
+   */
+  sidebarCompactPref: boolean | null;
+  setSidebarCompactPref: (collapsed: boolean) => void;
 
   commentarySource: string;
   setCommentarySource: (id: string) => void;
@@ -189,7 +242,31 @@ export const useUI = create<UIState>()(
       ho: "JHN",
       chapter: 1,
       portion: null,
-      goTo: (ho, chapter) => set({ ho, chapter, portion: null }),
+      goTo: (ho, chapter, verse, opts) =>
+        set({
+          ho,
+          chapter,
+          portion: null,
+          target:
+            verse != null && verse > 0
+              ? { ho, chapter, verse, flash: opts?.flash ?? true, nonce: Date.now() + Math.random() }
+              : null,
+        }),
+      target: null,
+      clearTarget: () => set((s) => (s.target ? { target: null } : s)),
+      readingPos: null,
+      setReadingPos: (p) => set({ readingPos: p }),
+      returnTo: null,
+      setReturnTo: (r) => set({ returnTo: r }),
+      recentSearches: [],
+      addRecentSearch: (q) =>
+        set((s) => {
+          const t = q.trim();
+          if (t.length < 2) return s;
+          const rest = s.recentSearches.filter((x) => x.toLowerCase() !== t.toLowerCase());
+          return { recentSearches: [t, ...rest].slice(0, 8) };
+        }),
+      clearRecentSearches: () => set({ recentSearches: [] }),
       goToPortion: (ho, chapter, start, end) =>
         set({ ho, chapter, portion: { ho, chapter, start, end } }),
 
@@ -219,6 +296,8 @@ export const useUI = create<UIState>()(
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      sidebarCompactPref: null,
+      setSidebarCompactPref: (collapsed) => set({ sidebarCompactPref: collapsed }),
 
       commentarySource: "matthew-henry",
       setCommentarySource: (id) => set({ commentarySource: id }),
@@ -290,6 +369,12 @@ export const useUI = create<UIState>()(
        * reading reminder time the user chose (`migrateReminderPrefs`).
        */
       version: 1,
+      // Transient navigation state: a pending scroll or a "Back to …" chip must not
+      // survive a restart.
+      partialize: (s) => {
+        const { target: _t, returnTo: _r, ...rest } = s;
+        return rest as UIState;
+      },
       migrate: (persisted, version) =>
         migrateReminderPrefs(persisted as Record<string, unknown>, version) as unknown as UIState,
       /**

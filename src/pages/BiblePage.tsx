@@ -7,6 +7,8 @@ import { ParallelPicker } from "@/components/bible/ParallelPicker";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
 import { StudyRailCoach } from "@/components/bible/StudyRailCoach";
+import { ReturnChip } from "@/components/bible/ReturnChip";
+import { useRailLayout } from "@/lib/layout";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
 import { useChapterNav } from "@/lib/useChapterNav";
@@ -18,6 +20,7 @@ export function BiblePage() {
   const navigate = useNavigate();
   const { step } = useChapterNav();
   const [coach, setCoach] = useState<null | "toggle" | "resize">(null);
+  const rail = useRailLayout();
 
   // Only a real DESKTOP (a wide screen with a mouse) auto-opens the study rail —
   // there it enriches without crowding. On touch tablets/folds (coarse pointer,
@@ -38,12 +41,13 @@ export function BiblePage() {
 
   // When they take the hint and open the rail, advance to the resize hint.
   useEffect(() => {
-    if (coach === "toggle" && railOpen) setCoach("resize");
-  }, [railOpen, coach]);
+    // Only the docked rail has a drag handle; the Fold's floating panel does not.
+    if (coach === "toggle" && railOpen) setCoach(rail.mode === "docked" ? "resize" : null);
+  }, [railOpen, coach, rail.mode]);
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-2 border-b border-border bg-background/80 px-3 py-2.5 backdrop-blur md:px-4 md:py-3">
+      <header className="flex flex-wrap items-center gap-2 whitespace-nowrap border-b border-border bg-background/80 px-3 py-2.5 backdrop-blur md:px-4 md:py-3">
         <ChapterPicker />
         <div className="flex items-center gap-1">
           <Tooltip label="Previous chapter">
@@ -105,8 +109,10 @@ export function BiblePage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
+      <ReturnChip />
+      {/* The rail is positioned inside this box; the reader leaves it `reserve` px. */}
+      <div className="relative min-h-0 flex-1">
+        <div className="h-full min-w-0" style={{ paddingRight: rail.reserve }}>
           <Reader />
         </div>
         {railOpen && <StudyRail />}
