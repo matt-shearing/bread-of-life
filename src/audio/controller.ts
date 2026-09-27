@@ -180,7 +180,8 @@ const sharedHandlers: EngineHandlers = {
   },
   onPause: () => {
     set({ playing: false });
-    setMediaPlaybackState("paused");
+    // The pause that follows stop() finds nothing loaded: the OS controls should say "none".
+    setMediaPlaybackState(state.queue.length ? "paused" : "none");
   },
   onTime: (t) => {
     set({ currentTime: t });
@@ -199,7 +200,7 @@ const sharedHandlers: EngineHandlers = {
   onFinished: (indexes) => markHeard(indexes),
   // Android Auto (or the system's resume card) loaded a queue the app did not: take it as
   // ours so the mini-player and Now Playing show it. Its plan chapters are recorded by
-  // native (they reach the app through take_car_completions), so nothing marks here.
+  // native (they reach the app through take_completions), so nothing marks here.
   onExternalQueue: (items, index) => {
     const queue = items.map(trackFromNative);
     onTrackComplete = null;
@@ -227,7 +228,7 @@ const sharedHandlers: EngineHandlers = {
 };
 mainEngine.handlers = handlersFor(mainEngine);
 
-/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/car.ts). */
+/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/nativeCompletions.ts). */
 let onNativeCompletions: ((count: number) => void) | null = null;
 export function setNativeCompletionsHandler(fn: ((count: number) => void) | null) {
   onNativeCompletions = fn;
