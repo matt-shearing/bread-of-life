@@ -1,6 +1,6 @@
 {
   "name": "bread-of-life-sync",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },
