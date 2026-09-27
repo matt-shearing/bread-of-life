@@ -1,165 +1,162 @@
-# Bread of Life — session handoff (2026-07-11)
+# Handoff
 
-Comprehensive context for continuing this project after a context compaction. Pairs with
-`docs/ROADMAP.md` (the full backlog) and the auto-memory file
-`~/.claude/projects/-home-contra-dev/memory/bread-of-life-2026-fresh-start.md`.
+Bread of Life v0.4.0 is released on every platform. v0.5.0 is merged on `integrate/v0.5` and waits
+for Matt's approval. The v0.5 sync server is written but not deployed, because SSH to the sync VM is
+blocked. Read this page, then `CLAUDE.md`, before changing anything. What comes next is in
+[`ROADMAP.md`](ROADMAP.md).
 
----
+## What the app is
 
-## 1. What this is
-**Bread of Life** — a warm, offline-first "homebase" for the devotional life: Bible reading + pluggable
-commentary + journalling + an **answered-prayer log you can look back on** (the emotional core) + reading
-plans + devotionals + optional AI study companion + **cross-device sync**. First-principles rebuild that
-superseded ~10 prior attempts. Owner/user: **Matt Shearing** (matt@oneqode.com).
+Bread of Life is a warm, offline-first home for Bible reading, prayer and journalling. Its heart is
+an answered-prayer log you can look back on. Around that sit the Berean Standard Bible (bundled,
+plus four public-domain translations fetched on demand), commentary, cross-references and Strong's,
+reading plans, Spurgeon's devotionals, Memory Lane, an audio Bible, Android Auto and an optional AI
+study companion. Everything works without an account; sync is opt-in.
 
-- Local dir: `~/dev/bread-of-life-2026`. Repo: **github.com/matt-shearing/bread-of-life** (PUBLIC).
-- Stack: **Tauri 2** (Rust shell + system webview) · **React 18 + Vite + TypeScript** · Tailwind + Radix ·
-  **Zustand** for UI state (`src/store/ui.ts` — the ONLY UI store) · **Dexie/IndexedDB** for user data
-  (`src/db/`, behind a repo seam). Scripture = static per-book JSON (BSB, CC0, bundled). Verse identity =
-  OSIS + BBCCCVVV (`src/lib/osis.ts`). HashRouter (`src/main.tsx`). Commentary/other translations from the
-  HelloAO Free Use Bible API, cached in Dexie.
-- Ground rules (from CLAUDE.md): ship the emotional core first; ONE stack/state/data-source; real data
-  end-to-end (never mock verses); offline-first; keep it warm/uncluttered (amber, Merriweather scripture).
+The owner is Matt Shearing. The repository is public at
+[matt-shearing/bread-of-life](https://github.com/matt-shearing/bread-of-life), and the website is
+[breadoflife.dev](https://breadoflife.dev). Call the hosted sync option "the hosted sync service",
+never by Matt's name.
 
-## 2. Current shipped state — **v0.2.0** (stable, Latest)
-Released on all platforms. Features: Bible reader (BSB + WEB/KJV/ASV/YLT + parallel; NASB/AMP license-gated),
-reading-layout toggle, chapter audio, full-text search, **study rail** (Commentary + cross-refs + Strong's;
-opens by default on desktop), highlights/notes, **prayers w/ answered-review**, journal (Tiptap), dashboard
-(VOTD/streak/plans over a cozy countryside bg), reading plans incl. **Soul Food** (OT·NT·Psalm·Proverbs
-Bible-in-a-year), Spurgeon devotionals + reminders, multi-provider AI companion (Claude/OpenAI/Grok/Gemini/
-DeepSeek/Ollama; bring-your-own-key), and **cross-device sync** (see §4). In-app **Request a feature / Report
-a bug** (opens prefilled GitHub issues). ~40MB static data bundled; fully offline on first launch.
+## How it is built
 
-### Distribution (all live)
-- **Android**: signed APK via CI (`.github/workflows/android.yml`) on `v*` tag → GitHub Release → Obtainium.
-  Keystore `~/bread-of-life-android.jks` (password `~/bread-of-life-android-keystore-info.txt` — BACK UP;
-  same key required for all updates). Secrets `ANDROID_KEYSTORE_*` set in the repo.
-- **Desktop**: CI matrix (`.github/workflows/desktop.yml`) builds Linux AppImage+deb / Windows nsis .exe /
-  macOS universal .dmg on `v*` tags. Unsigned beta (SmartScreen/Gatekeeper notes in release).
-- **AUR**: `bread-of-life-bin` (`yay -S bread-of-life-bin`) at **0.2.0**. Repo `~/dev/aur-bread-of-life`
-  (`ssh://aur@aur.archlinux.org/bread-of-life-bin.git`, key = default `~/.ssh/id_ed25519`, maintainer
-  Matt Shearing <matt@block-sense.io>). Repackages the release `.deb` (SYSTEM webkit → works on Arch).
-  To bump: edit `pkgver`, `updpkgsums`, `makepkg --printsrcinfo > .SRCINFO`, commit+push.
-- **Website**: **https://breadoflife.dev** (GitHub Pages from `website/index.html`; HTTPS enforced;
-  auto-deploys on `website/**` change via `.github/workflows/pages.yml`). Christ-centered design on the app's
-  cozy dusk-countryside art.
+- **Stack:** Tauri 2, React 18 with Vite and TypeScript, Tailwind with Radix, Zustand for UI state
+  and Dexie for user data. `CLAUDE.md` has the rules and the layout; do not add a second state
+  system or data source.
+- **Platforms:** Android (the main one; Matt uses a Pixel 10 Pro Fold with GrapheneOS), Linux,
+  Windows and macOS. iOS is not built.
+- **Audio:** on Android a vendored Media3 plugin plays a native queue and serves Android Auto. On the
+  Linux desktop, audio plays in Rust, because the WebKitGTK webview aborts on media. See
+  [`NATIVE-AUDIO.md`](NATIVE-AUDIO.md).
+- **Our Tauri plugins** live in `src-tauri/plugins/`: `native-audio` (Android only), `reminders`
+  (exact alarms), `device-tts` (the phone's voice) and `all-files` (all-files access and the folder
+  picker).
 
-## 3. Infrastructure / access
-- **Domain**: breadoflife.dev (also owns breadoflife.app — see roadmap: migrate later). Registrar Porkbun;
-  API creds at `~/.porkbun.json` (chmod 600). DNS script pattern in scratchpad/pb-dns.py.
-- **Sync server (LIVE)**: **https://sync.breadoflife.dev** on Matt's OneQode OpenStack cloud. VM
-  `bol-sync-01` (oq.small, Singapore), floating IP **202.43.5.120**, SG `bol-sync`. Docker compose at
-  `/opt/bol/deploy/sync-server` (our node:sqlite server + Caddy auto-TLS + rate-limit). SSH
-  `ssh -i ~/.ssh/hermes_vm ubuntu@202.43.5.120`. Deploy record: `~/dev/oneqode-deploy/deployments/bol-sync.md`.
-  OneQode CLI: `~/.venvs/openstack/bin/openstack --os-cloud openstack`; provision via `~/dev/oneqode-deploy/`.
+## Test it
 
-## 4. Cross-device sync — THE big architecture story (read before touching sync)
-- **Requirement**: sync prayers/journal/reading-progress/notes/plans across devices; a hosted default +
-  optional self-host; refer to the hosted option as **"app-hosted" / "the hosted sync service"** — NEVER by
-  Matt's name (his explicit instruction).
-- **Evolu was tried and ABANDONED.** Evolu (local-first SQLite-WASM + E2E) needs **OPFS**, and webkit2gtk
-  2.52's `FileSystemSyncAccessHandle` backend is **unimplemented** → Evolu can't persist on the Linux desktop
-  webview (verified in the real Tauri app; enabling webkit OPFS feature flags exposed the API but the SAH
-  backend still throws `NotSupportedError`). The whole Evolu migration lives on the DEAD-END branch
-  `feat/sync` — do NOT ship it. Lesson: I recommended Evolu on paper without weighting the OPFS-in-webview
-  risk enough; verification caught it.
-- **Shipped approach (the standard one)**: keep **Dexie/IndexedDB** (works in EVERY webview incl. desktop —
-  proven) + a hand-rolled **delta-sync**. `src/db/sync.ts` = engine: Dexie CRUD hooks stamp `updatedAt` and
-  enqueue changed rows into an `outbox` table (guarded by an `applyingRemote` flag so pulls don't echo);
-  `pushChanges()` sends the outbox, `pullChanges()` merges last-write-wins by cursor; `syncNow()` (re-runs if
-  called mid-sync); `startSync()` in `src/main.tsx` (deferred + guarded). Auth = email+password → HMAC token.
-  Transport uses `@tauri-apps/plugin-http` in Tauri (no CORS), `window.fetch` in browser (server sends CORS).
-  **repos.ts + all read sites are UNTOUCHED** — the hooks do the work. Account UI = `SyncSettings.tsx`.
-  `.env.production` sets `VITE_BOL_SYNC_URL=https://sync.breadoflife.dev` → the Hosted option appears.
-  Server: `deploy/sync-server/` (Node built-in `node:sqlite`, per-record LWW, tombstones, scrypt pw;
-  Docker + Caddy bundle; also self-hostable). **VERIFIED** end-to-end: 2 real webkit2gtk instances (2×
-  WebKitWebDriver) synced bidirectionally + deletes through the LIVE prod server.
-- **v0.5 sync review fixes (2026-09-27, branch `fix/sync-data-review`)**: the Dexie hooks and the
-  `applyingRemote` flag are gone. A DBCore middleware (`src/db/syncTracking.ts`) stamps `updatedAt`
-  monotonically and queues the outbox entry inside the write's own transaction; pulls apply in an
-  `untracked()` transaction. The push only clears entries unchanged since they were sent, and with the
-  v0.4.0 server only once a pull shows the server holds them. Plan progress merges per day (`dayAt`),
-  deletes obey last-write-wins, pulls page until caught up, pushes are chunked, undecryptable rows are
-  held in `syncHeld`, settings sync by allow-list (`src/db/syncSchema.ts`). The server gained per-row
-  rejections, a stamp clamp, token expiry/revocation, password change and account deletion, all
-  advertised in `/health` `features` and optional for clients. Tests: `pnpm test:sync`, `pnpm test:sync-server`.
-- **Known sync gap (being fixed on `feat/sync-onboarding`)**: only NEW edits enqueue via hooks; data created
-  BEFORE sign-in never uploaded (Matt hit this — an early phone prayer didn't reach desktop). The
-  "Link this device" full backfill (enqueue all local rows on first sign-in) fixes it.
+Run these before you push. CI runs the first four on every pull request.
 
-## 5. Key issues & solutions (so they aren't re-hit)
-- **Linux blank screen (AppImage)**: two distinct causes. (a) webkit DMABUF renderer — fixed by setting
-  `WEBKIT_DISABLE_DMABUF_RENDERER=1` in `src-tauri/src/lib.rs` before the webview inits. (b) the AppImage
-  BUNDLES an old ubuntu-built webkit that clashes with Arch's newer system webkit → blank even with (a).
-  Fix = strip bundled webkit from the AppImage (branch `fix/appimage-webkit`: post-build extract → delete
-  libwebkit2gtk/libjavascriptcoregtk + the webkit2gtk-4.1 helper dir → re-appimagetool). The **.deb/AUR use
-  SYSTEM webkit and work** — that's the reliable Linux path for Matt (Arch).
-- **Subagents share the main working tree by default** → parallel `git checkout` corrupts each other. MUST
-  launch feature subagents with `isolation:"worktree"` (each gets its own worktree; branch visible via shared
-  .git). First v0.3 attempt without this clobbered everything (0 commits, discarded).
-- **Headless verification harnesses that WORK here** (Xvfb software rendering; the app renders fine in webkit
-  so bugs like DMABUF are GPU-specific): (1) Chromium: launch via `run_in_background` (shell `&` trips a
-  watchdog → exit 144) + connect-only CDP (don't spawn chromium from the node driver). (2) webkit2gtk: run
-  `WebKitWebDriver --port=P --replace-on-new-session` under `xvfb-run` (ONE session per instance → use
-  multiple ports for multiple "devices"), MiniBrowser `--automation` (IndexedDB works in it; OPFS does not),
-  drive via WebDriver `execute/async` for promise-returning ops. Scripts in the session scratchpad
-  (wk-sync2.mjs etc.). (3) Real Tauri app: `xvfb-run pnpm tauri dev` + a Worker/probe reporting via
-  tauri-http to a local `python -m http.server`.
-- **Version bump**: bump `package.json` + `src-tauri/tauri.conf.json` + `src-tauri/Cargo.toml` (+ `cargo
-  update -p bread-of-life --precise X`) together, else bundle filenames mismatch the tag. Settings shows the
-  version via `import { version } from "../../package.json"` (was hardcoded "v0.1" — fixed).
+- `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build`. `pnpm test` runs every
+  `scripts/test-*.mjs` file plus the plan checks.
+- `cd src-tauri && cargo check` when you touch Rust. CI's `cargo check --locked` job runs only when
+  `src-tauri/` changes.
+- `pnpm test:sync`, `pnpm test:backup` and `pnpm test:sync-server` for anything near sync. The
+  harness in `scripts/lib/` loads the real `src/db` code as several devices, each with its own
+  fake IndexedDB and a clock you can skew. It runs every case against two servers: the v0.4.0
+  server read from git, which production runs, and the current one. A client change must pass
+  against both.
+- The native-audio plugin's Robolectric tests run in the "Android APK" workflow
+  (`android.yml`), after the APK builds. That workflow runs on `v*` tags and on manual dispatch, not
+  on pull requests. Dispatch it on your branch when you change Kotlin or anything Android.
+- For UI changes, drive `pnpm dev` with Playwright at 832×880 (the unfolded Fold), 412×915 and
+  1440×900, in light and dark.
 
-## 6. v0.3 IN FLIGHT — feature branches (integrate next; see §7)
-All built by `isolation:"worktree"` subagents off `main`, each committed to its branch, tsc+build green:
-| Branch | What | Status |
-|---|---|---|
-| `feat/sync-onboarding` | **Link-this-device backfill** (fixes the sync gap) + first-run onboarding + dashboard sync nudge | ✅ 1 commit |
-| `feat/prayers-polish` | custom prayer categories, pull-to-refresh, README update, tauri.localhost investigation (webview origin — not configurable; documented) | ✅ 1 commit |
-| `feat/bible-layout` | resizable StudyRail (`railWidth`) + collapsible sidebar (`sidebarCollapsed`) | ✅ 1 commit |
-| `feat/swipe-gestures` | swipe next/prev chapter (+ shared `src/lib/useChapterNav.ts`) | ✅ 1 commit |
-| `fix/appimage-webkit` | strip bundled webkit from AppImage (workflow step + `scripts/appimage-unbundle-webkit.sh`) | ✅ 1 commit |
-| `feat/journal-rich` | tag-in-bible verse linking, read-view+edit, journal↔prayer cross-ref, study-rail References tab | ⏳ building |
-| `feat/plan-rails` | guided "on-rails" reading mode (walks a plan's chapters, partial tracking, leave-guard) | ⏳ building |
-| `feat/memory-verses` | memory-verse pool + SM-2 spaced-repetition deck + gamify + notify | ❌ agent flaked twice (0 tool uses) — RETRY |
+Nothing in v0.5 has run on a real phone or in the desktop app yet. Say so in any pull request that
+touches native code.
 
-Already on `main` this batch: roadmap (all v0.3 items), Settings real version, reminder-toggle fix.
-Already-inline fixes elsewhere: reminder toggle (`SettingsPage.tsx`).
+## Release
 
-Fixes/inline already committed to main earlier: everything through v0.2.0 + the v0.3 docs + 2 small fixes.
+A release commit changes the version and nothing else.
 
-## 7. INTEGRATION PLAN (do this next, ideally clean context)
-1. Merge the ready branches into `main` SEQUENTIALLY, running `npx tsc --noEmit` (0) + `pnpm build` after each.
-2. Expected CONFLICTS: (a) **multiple Dexie `db.version(N)` bumps** — `feat/journal-rich` (link fields),
-   `feat/memory-verses` (new table), `feat/plan-rails` (partial-completion) each add a version; RENUMBER them
-   to sequential versions (current max on main = 6, from sync's outbox/syncState). (b) shared files touched by
-   several branches: `src/store/ui.ts`, `src/pages/BiblePage.tsx`, `src/components/bible/StudyRail.tsx`
-   (References tab in journal vs resize in bible-layout), `src/pages/SettingsPage.tsx`, `src/main.tsx`
-   (routes), `src/components/layout/Sidebar.tsx`/`MobileNav.tsx` (nav items). (c) `src/lib/useChapterNav.ts`
-   (swipe) may overlap plan-rails' chapter nav.
-   Suggested merge order (least→most invasive): appimage-fix → prayers-polish → swipe-gestures → bible-layout
-   → sync-onboarding → plan-rails → journal-rich → (memory-verses after retry).
-3. RETRY `feat/memory-verses` (fully specced in ROADMAP "## Memory verses"; launch with isolation:"worktree").
-4. After integration: bump version, cut **v0.3.0** (CI builds all platforms + the fixed AppImage), update the
-   AUR to 0.3.0, and finalize release notes.
-5. On-device: have Matt confirm sync backfill + the AppImage fix on his Arch box.
+1. Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, then
+   run `cargo update -p bread-of-life --precise <version>` in `src-tauri/`. The bundle names come
+   from these, so they must agree with the tag.
+2. Update the "Latest" paragraph in `README.md`.
+3. Commit as `release: vX.Y.Z — <summary>` and run `scripts/check-release-commit.sh`. It fails on
+   any file outside the version files, `README.md`, `CHANGELOG.md`, `docs/` and `fastlane/`.
+4. Tag `vX.Y.Z` and push the tag. `desktop.yml` runs the same check as its `release-guard` job,
+   builds the Linux, Windows and macOS bundles, attaches them to the release and publishes
+   `bread-of-life-bin` to the AUR through `scripts/bump-aur.sh`. `android.yml` builds, signs and
+   attaches the APK, which Obtainium picks up.
+5. Check that the release has all five assets and that the AUR package moved. The AUR search lags
+   the git push by a while.
 
-## 8. Deferred backlog (in ROADMAP.md — not yet started)
-- **Faithfulness review** — monthly/yearly answered-prayer auto-story → warm PDF/share card.
-- **E2E encryption** — journals/prayers sit in PLAINTEXT on the relay until this lands. Design: passphrase/
-  recovery-key-derived key, encrypt payloads client-side before push.
-- **breadoflife.app migration** — Matt owns it; move site + `sync.breadoflife.app`, keep .dev redirecting,
-  make sync URL swappable via config; ensure data/accounts migrate.
-- **Chuck Missler "Line by Line" commentary** — source located: `/run/media/contra/Infinar/Chuck Missler/
-  The Holy Bible - Chuck Missler -  Line by Line - OT and NT - mp3 with pdf notes` (157 PDFs, Briefings/NT/OT
-  + mp3). Build the parser + pluggable commentary source keyed by OSIS. COPYRIGHT: local-only/personal
-  (gitignore the notes; don't redistribute), or a user-run build step against their own files. Reuse
-  `~/dev/commentary-parser` + the born-digital pdf_to_text approach ([[unlimited-ocr-amd-triage]] memory).
+The release guard exists because v0.3.10's release commit deleted the feature it announced. Make
+release commits from a git worktree, not from `~/dev/bread-of-life-2026`, which Syncthing also
+touches.
 
-## 9. Matt's standing instructions / preferences
-- Ship real, verified, working features; commit incrementally; avoid the old "Cracked Jacked Claude"
-  meta-framework bloat that killed prior attempts.
-- Hosted sync = "app-hosted"/"the hosted service" — never his name. No personal name on the website either.
-- Wants heavy use of well-contextualized subagents (he flagged my context limit); wants docs kept current
-  (README/ROADMAP/Settings version were lagging — keep them updated each release).
-- Verify things yourself (he pushed back on being asked to test — do it in a VM/harness when possible).
-- Memory verses excite him (gamify + tasteful notifications); the answered-prayer log is the emotional core.
+The website is `website/index.html`, published by `pages.yml` from `main` whenever `website/**`
+changes.
+
+## Where things live
+
+- **Checkouts:** `~/dev/bread-of-life-2026` is the primary checkout. `main` is checked out in the
+  worktree `~/dev/bol-e2e`, so `gh pr merge --delete-branch` fails its local step; the merge still
+  lands, and you delete the remote branch by hand. Each branch gets its own worktree under
+  `~/dev/bol-*`. Never share one checkout between two sessions.
+- **Remotes:** `origin` is GitHub. `forge` is the private Forgejo mirror.
+- **Android signing:** the keystore is `~/bread-of-life-android.jks`, and its password is in
+  `~/bread-of-life-android-keystore-info.txt`. Every update must use the same key. CI reads it from
+  the `ANDROID_KEYSTORE_*` secrets.
+- **AUR:** the `aur` job in `desktop.yml` publishes with a key held in the `aur` environment. The
+  local copy of the package repository is `~/dev/aur-bread-of-life`.
+- **Devotional audio:** 732 MP3s of *Morning and Evening* (Kokoro-82M, voice `bm_george`, 607 MB)
+  and a `manifest.json` are assets of the GitHub prerelease `devotional-audio-v1`. The app fetches
+  the manifest with `plugin-http`, because GitHub sends no CORS headers, so a plain browser always
+  shows "No recording". The generator is `scripts/build-devotional-audio.py`; see
+  [`DEVOTIONAL-AUDIO.md`](DEVOTIONAL-AUDIO.md).
+- **Sync server:** the code is `deploy/sync-server/`. Production is `https://sync.breadoflife.dev`
+  on the OneQode VM `bol-sync-01` (floating IP 202.43.5.120), running Docker Compose in
+  `/opt/bol/deploy/sync-server` with Caddy in front. The deployment record is
+  `~/dev/oneqode-deploy/deployments/bol-sync.md`. `.env.production` points release builds at it.
+- **DNS:** Porkbun, scriptable with the credentials in `~/.porkbun.json`. Matt also owns
+  breadoflife.app.
+
+## The sync server cannot be reached by SSH
+
+Since 25 September 2026, port 22 on `bol-sync-01` times out from outside and from `hermes-prod-01`
+on the same subnet, while port 443 answers. The fault is the host firewall or sshd, not the
+security group. Sync keeps working, but production still runs the v0.4.0 server.
+
+To deploy v0.5:
+
+1. Open the console with `openstack console url show bol-sync-01` and restore SSH.
+2. Confirm that `/opt/bol/deploy/sync-server/.env` sets `TOKEN_SECRET`. The v0.5 server refuses to
+   start in production without it, and changing it signs everyone out. Existing v0.4.0 tokens and
+   password hashes keep working.
+3. If Cloudflare fronts the server, set `TRUSTED_PROXIES` to Cloudflare's ranges (listed in the
+   server README). Otherwise every user shares one rate-limit bucket.
+4. Pull the new bundle and run `docker compose up -d --build`, then check that `/health` lists the
+   new `features`.
+
+After the deploy, the app shows the account buttons (sign out everywhere, change password, delete
+account) and starts syncing reading history.
+
+## Android and Tauri traps
+
+- **Kotlin command names are camelCase.** A Kotlin `@Command` method is `fun pickFolder`, while the
+  Rust command, the JS `invoke` name and the permission id stay `pick_folder`. A mismatch fails at
+  run time with "No command pickFolder found".
+- **Never call `ndk_context::android_context()` from Rust.** Tauri does not initialise it, so it
+  panics, and with `panic = "abort"` the app dies. v0.3.7 crashed on opening Settings this way.
+  Reach Android APIs through a Kotlin plugin.
+- **Icons after `android init`.** `tauri android init` scaffolds the project with the default Tauri
+  icon, so CI runs `pnpm tauri icon src-tauri/app-icon.png` afterwards. The generated
+  `src-tauri/gen/android` is not in git; manifest changes need a plugin or a CI patch.
+- **minSdk 26.** CI raises the scaffolded `minSdk` to 26 for the native-audio plugin.
+- **Blank desktop window on Matt's box.** `pnpm tauri:dev` shows a blank window unless both
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` and `WEBKIT_DISABLE_COMPOSITING_MODE=1` are set. `lib.rs` sets
+  only the first.
+- **The dependency cooldown.** `pnpm-workspace.yaml` holds `minimumReleaseAge` (three days), so CI
+  inherits it. It is not a stray file; keep it committed.
+- **Invoke errors are objects.** A rejected `invoke` gives a plain object; print it with
+  `JSON.stringify`, not `String(e)`.
+- **Tests after merges.** Merging parallel branches has silently dropped handlers before. Run the
+  full `pnpm test` after every merge.
+
+## Known open issues
+
+- The v0.5 sync server is not deployed (see above).
+- `feat/website-v2` (pull request #18), the rewritten website, targets `main` and is not merged.
+- The E2E data key and the AI key sit in plain text in localStorage.
+- `prayedCount` and array-valued settings merge as whole rows.
+- On Android, `window.print()` probably does nothing, so the Faithfulness review offers Share and
+  Copy text instead of a PDF.
+- A chapter finished while Android has the app frozen can be logged on two days.
+- A symphonia panic while decoding on the desktop cannot be caught and ends the app.
+- Browser speech devotionals pause without the sleep-timer fade.
+- Android Auto lists refresh only while the app runs.
+- Signing up with an email already in use answers 409, which reveals that the account exists.
+- `react-router` 6 has two advisories fixed only in version 7.
+- The Word for Today is on `feat/word-for-today`, held for UCB's permission. Rebase it before any
+  merge.

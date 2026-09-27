@@ -1,252 +1,175 @@
 # Roadmap
 
-Status of the post-v0.1.0 work. Shipping order, not a wishlist.
+Bread of Life is at v0.4.0, with v0.5.0 built on `integrate/v0.5` and waiting for Matt's approval.
+The biggest open item is deploying the v0.5 sync server, which is blocked because SSH to the
+sync VM is closed at the host firewall. This page lists what has shipped, what comes next and what
+we decided not to build. For how the project works day to day, see [`HANDOFF.md`](HANDOFF.md).
 
-## ✅ Distribution (done / in progress)
-- **Android** — signed APK via CI → GitHub Release → Obtainium. ✅
-- **Linux** — AppImage + `.deb` via CI. ✅
-- **AUR** — `bread-of-life-bin` published (`yay -S bread-of-life-bin`). ✅
-- **Windows / macOS** — CI matrix builds `.exe` (NSIS) + universal `.dmg`. ⏳ unsigned beta
-  (see *Code signing* below).
+## Shipped
 
-## Platforms
+### v0.1 (July 2026)
 
-### Windows & macOS (in progress)
-`.github/workflows/desktop.yml` now builds all three desktop OSes. Beta bundles are **unsigned**:
-- Windows: SmartScreen "More info → Run anyway".
-- macOS: right-click → Open (or `xattr -dr com.apple.quarantine`), because unsigned.
+- **v0.1.0:** the first public beta on Android and Linux. It had the Berean Standard Bible offline,
+  highlights and notes, the answered-prayer log, the journal, the dashboard and the commentary rail.
+- **v0.1.1:** Windows and macOS builds.
 
-**Code signing (next):**
-- *macOS* — Apple Developer Program ($99/yr) → Developer ID cert → sign + **notarize** in CI
-  (`APPLE_CERTIFICATE`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` secrets). Removes Gatekeeper
-  friction and is also the prerequisite for the App Store / iOS.
-- *Windows* — an Authenticode/OV or EV code-signing cert (~$100–300/yr, e.g. via a CA) → sign the
-  NSIS installer. Optional for beta; removes SmartScreen warnings.
+### v0.2.0 (July 2026)
 
-### iOS (roadmap — blocked on Apple account)
-Tauri targets iOS from the same codebase (`tauri ios init` / `build`). Blockers, in order:
-1. **Apple Developer Program** ($99/yr) — required to sign for *any* real device, even free apps.
-2. **Distribution channel** — since the app is free and open-source:
-   - **TestFlight** (up to 10k testers) — easiest for a beta; still needs a review but lighter.
-   - **App Store** — full review; free apps are fine, but review scrutinizes the "bring your own AI
-     key" flow and any external links.
-   - **AltStore / sideloading** — no App Store, but the user must resign every 7 days (free account)
-     or via their own dev account; poor UX. Not recommended as the primary channel.
-3. **Build infra** — iOS bundles must build on macOS CI (`macos-latest`) with Xcode + signing certs.
+- Optional cross-device sync through the hosted server or a self-hosted one.
+- The *Soul Food* Bible-in-a-year plan.
+- A fix for the blank screen on Linux caused by WebKit's DMABUF renderer.
 
-Plan: land macOS signing first (shares the Apple account + certs), then `tauri ios init`, a manual
-signed TestFlight build, then wire an iOS CI job once the certs are in secrets.
+### v0.3 (July–August 2026)
 
-## Profiles & cross-device sync (design — decision pending)
+- **v0.3.0:** Memory Lane, the guided reading-plan mode, journal and prayer cross-links, first-run
+  onboarding, custom prayer categories, swipe to turn the chapter, a resizable study rail and a
+  collapsible sidebar, and an AppImage that uses the system WebKit.
+- **v0.3.1:** reminders scheduled by the operating system, and layout fixes for the Pixel Fold and
+  tablets.
+- **v0.3.2:** the Faithfulness review, the Commentary page, end-to-end encryption of the journal,
+  prayers and notes, the Missler Inspired commentary, and notifications that open the right page.
+- **v0.3.3 to v0.3.6:** the audio Bible with background playback on Android through a native
+  playlist, which carries on from chapter to chapter to the end of the Bible.
+- **v0.3.7 to v0.3.9:** all-files access on Android as a Kotlin plugin, a folder picker for the
+  Missler library, and Missler audio on the phone.
+- **v0.3.10 and v0.3.11:** the reading plan and account preferences follow you between devices.
+  v0.3.11 also added the release guard, because v0.3.10's release commit deleted the feature it
+  announced.
 
-**Goal:** optional user profiles so reading progress, streaks, prayers, journal, highlights, notes,
-and plans sync across a person's devices (desktop ↔ phone ↔ …). Two deployment modes, from the same
-codebase:
-- **(a) User-controlled / self-hosted** — the sync server is open-source; a user runs their own and
-  points the app at it. Their data, their box.
-- **(b) Optionally hosted by Matt** — the same server, run on the OneQode OpenStack cloud we already
-  have deploy access to. Users who don't want to self-host just sign up.
+### v0.4.0 (25 September 2026)
 
-**Non-negotiables:** offline-first stays (local is always the source of truth; sync is additive);
-"local-only, no account" remains the default. Ideally **end-to-end encrypted** so even the hosted
-mode can't read journals/prayers — this is what makes "under their control" true even when Matt hosts.
+- Pausing and resuming from earphones no longer loses the sound on Android.
+- A Now Playing page that follows the day's readings.
+- Android Auto: today's reading, the whole Bible, the devotional, recent items and voice requests.
+- Spurgeon's *Morning and Evening* read aloud from recorded MP3s, with the phone's own voice as a
+  fallback.
+- Daily-reading reminders at 2 pm and 8 pm that stop once you have read.
 
-### Options evaluated
+### v0.5.0 (pending approval)
 
-| Option | Open + self-host? | E2E | Keeps Dexie? | Effort | Notes |
-|---|---|---|---|---|---|
-| **A. Evolu** (recommended) | ✅ MIT, self-host relay | ✅ built-in | ❌ moves synced data to SQLite | Medium | Local-first engine: SQLite-WASM client + E2E binary sync protocol + self-hostable relay; works browser/Electron/**React Native**. *Also delivers the long-planned SQLite swap + enables FTS / sqlite-vec later.* |
-| **B. Hand-rolled minimal E2E sync** | ✅ we write it | ✅ (via `@noble` crypto) | ✅ stays on Dexie | Medium-High | Oplog + last-write-wins + a tiny sync server on OneQode. Max control, no data-layer change, but we build & maintain the crypto + server + conflict logic ourselves. |
-| **C. Dexie Cloud** | ⚠️ self-host = paid commercial license | ✅ | ✅ | Low | Fastest (we already use Dexie), but the self-host edition isn't free/open — fails the "open, under their control" ideal for mode (a). Hosted free tier = 3 users/100MB. |
-| CouchDB/PouchDB | ✅ | ➖ add-on | ❌ replace Dexie w/ PouchDB | High | Classic offline sync, but dated and a bigger rewrite than Evolu. |
+Everything below is merged on `integrate/v0.5` and not yet released.
 
-**Recommendation: A (Evolu).** It's the only option that satisfies *open + self-hostable + optionally-
-hosted + E2E* in one MIT codebase, supports our exact platforms (browser desktop + React Native
-mobile), and folds in the SQLite migration that was already roadmapped — so we get sync **and** FTS
-**and** a future local `sqlite-vec` study companion off one move. The cost is migrating the synced
-tables from Dexie → Evolu's SQLite (kept behind the existing `src/db/` repo seam; unsynced/ephemeral
-UI state can stay in Zustand/IndexedDB).
+- **Backup and export.** Back up everything that syncs to one JSON file, restore it on any device
+  (restoring merges and never deletes), and export the journal, prayers and notes as Markdown in a
+  zip. Devices without sync get a monthly backup reminder.
+- **Sync that no longer loses or leaks data.** A Dexie middleware now records every change in the
+  same transaction as the write. Edits made during a sync, edits from a device with a fast clock,
+  and plan days ticked on two devices all survive. Turning on encryption replaces the readable
+  copies on the server, and a second device asks for the recovery phrase instead of making a second
+  key. Device-only settings stay on the device, and journal HTML is sanitised before it is shown.
+  The client works with the v0.4.0 server in production. The v0.5 server adds token expiry, sign
+  out on all devices, password change, account deletion and per-row errors, but it is not deployed.
+- **Finding and landing.** Every reference opens on its verse with a brief highlight and a "Back
+  to…" bar. The Bible tab remembers the verse you were on, and reading a plan no longer moves it.
+  Search understands typed references such as "jn 3:16" and searches your journal, prayers and
+  notes. Ctrl+K opens a command palette, and the arrow keys turn chapters.
+- **The unfolded Fold.** The sidebar starts collapsed and the study rail takes at most 40% of the
+  width, so the text stays readable. Tapping a verse on a touch screen opens a sheet of labelled
+  actions.
+- **Journal and prayers.** Journal drafts save as you type and survive Escape, Android back and a
+  closed app. Deleting an entry asks first and can be undone. Prayers can be edited, deleted and
+  archived, with an Archived list to restore from. "Prayed" can be undone. A pray-through mode
+  walks through today's prayers one at a time. Onboarding is a proper dialog with Back and Skip.
+- **Reading history.** Every day a chapter is read is kept, so re-reading a chapter no longer
+  breaks the streak. A History page shows a year's calendar, streaks and progress by book. The
+  dashboard has an "On this day" card for prayers answered and entries written on this date in
+  earlier years.
+- **Faithfulness review.** It filters by year and month, shows the verses and journal entries
+  linked to each prayer, has a month-by-month bar of answered prayers, and offers Share or Copy
+  text on Android.
+- **One look across the app.** Shared page headers, tabs, chips and switches; one Today card on the
+  dashboard; a section index in Settings; one commentary view for the page and the rail; one list
+  of pages for the sidebar, the bottom bar and the palette; darker, more legible colours; 44 px touch
+  targets, labelled inputs, a skip link and visible focus.
+- **Sleep timer.** Now Playing can stop the narration after a set time, at the end of the chapter or
+  at the end of the day's reading. The sound fades over about ten seconds and pauses. Android Auto
+  has a moon button for it.
+- **Audio fixes.** Native playback reports its position twice a second instead of forty times, and
+  not at all while the app is hidden. Play works after a network error. Closing the mini-player
+  stops the audio. Navigation prompts in the car pause the narration instead of talking over it.
+  On Linux, skipping chapters no longer queues downloads, the sound device is released when idle,
+  a bad seek cannot crash the app, and media keys work through MPRIS.
+- **Security.** A Content Security Policy, capabilities split by platform, and plain `http://`
+  limited to the local network.
+- **Engineering.** Pages load on demand, which halves the JavaScript loaded at start-up. Strong's
+  lookups fetch about 100 kB instead of 1.3 MB. Only Latin font subsets ship. CI runs typecheck,
+  lint, tests and a build on every pull request. `pnpm-workspace.yaml`, which holds the three-day
+  dependency cooldown, is committed. Devotional completions record the year, and the verse of the
+  day changes at local midnight.
 
-**Migration shape (if A):**
-1. Introduce Evolu alongside Dexie behind `src/db/`. Model synced entities (prayers, journal,
-   highlights, notes, reading-progress, streaks, plans, settings) as Evolu tables.
-2. One-time importer: copy existing Dexie rows → Evolu on first run, then read/write via Evolu.
-3. Ship an "Account" screen: **local-only** (default) · **self-hosted** (enter relay URL) ·
-   **hosted** (sign up on the Matt-run relay). Mnemonic/passphrase = the E2E key; add recovery-code UX.
-4. Stand up the Evolu **relay** on OneQode (mode b) via the `oneqode-deploy` flow; document the
-   self-host `docker run` (mode a).
+## Next
 
-### Decision (2026-07-10): **Evolu (A)** ✅
-Chosen for the maintenance offload (Evolu owns auth/sync/conflict/security) with a Matt-hosted relay as
-the idiot-proof default and self-host as an optional toggle. E2E is *deferred* as a goal but Evolu
-provides it inherently (bonus); the only UX cost is a save-once recovery phrase to add a device.
+### Waiting on the server
 
-**Spike findings (2026-07-10):**
-- **Evolu needs React 19** (`@evolu/react@10` peer `react>=19`; we're on 18.3.1). So step 0 is a
-  React 18→19 bump (Radix/Tiptap/Zustand/react-router/Vite6 all support 19). Branch `spike/evolu-sync`
-  has the Evolu deps installed as a starting point.
-- Current API: `@evolu/common` + `@evolu/react` + `@evolu/react-web`; `createEvolu(evoluReactWebDeps)(
-  Schema, { name, transports:[{type:"WebSocket", url}] })`; schema via `Evolu.id()`/`Evolu.NonEmptyString100`
-  /`Evolu.SqliteBoolean` (auto system cols createdAt/updatedAt/isDeleted/ownerId); `useEvolu().insert/update`,
-  `evolu.createQuery`+`useQuery`. Default public relay `wss://free.evoluhq.com`; self/Matt-host sets a
-  custom `transports` url. Relay self-host via `@evolu/relay-node` (`createNodeJsRelay` + a SQLite driver).
-- OPFS persistence: **confirmed** Evolu bundles the `opfs-sahpool` VFS (`installOpfsSAHPoolVfs` in its
-  sqlite-wasm) → **no COOP/COEP cross-origin-isolation headers required** (those would break the webview
-  loading external images/fonts/HelloAO — so this was the key risk, now cleared). React 18→19 upgrade
-  also verified clean (typecheck + build). Remaining unknown: OPFS actually *persisting* inside
-  webkit2gtk (Linux/Mac desktop) + Android System WebView — needs an on-device check once wired (headless
-  Chromium couldn't be driven in this env, and it only proxies the low-risk Chromium/Android path anyway).
+- **Deploy the v0.5 sync server.** SSH to `bol-sync-01` times out at the host firewall, even from
+  the same subnet, so the fix needs the OpenStack noVNC console. Before deploying, confirm that the
+  VM's `.env` sets `TOKEN_SECRET`, because the new server refuses to start without it. If the
+  server sits behind Cloudflare, set `TRUSTED_PROXIES` too. Account deletion, which Google Play
+  requires for apps with accounts, only appears after this deploy.
+- **Reading-history sync.** The `readingLog` table syncs only to a server that advertises the
+  `readingLog` feature. Until the deploy, each device keeps its own history, and nothing fails.
 
-**Build order:**
-1. **React 19 bump + spike** — upgrade React, wire a minimal Evolu table, verify SQLite-WASM
-   persistence works inside the Tauri webviews (webkit2gtk on Linux/Mac via WKWebView, Android System
-   WebView) with NO cross-origin-isolation headers. Browser (`pnpm dev`) + Android WebView are
-   Chromium-ish (low risk); webkit2gtk/WKWebView need an actual on-device check.
-2. Model synced entities as Evolu tables behind `src/db/`; keep ephemeral UI state in Zustand.
-3. One-time Dexie→Evolu importer on first run.
-4. Account screen: local-only (default) · hosted (the app-hosted relay) · self-host (relay URL).
-5. Deploy the Evolu relay on the app cloud; document self-host `docker run`.
+### Needs Matt's phone
 
-## Notifications — proper, cross-platform (requested 2026-07-10) — BUILT 2026-07-11 (device-test pending)
+- A home-screen widget with the verse of the day, today's plan and a Pray button.
+- Sharing text from another app into a new prayer or journal entry.
+- Downloading Bible audio for offline listening.
+- Share images for verses and answered prayers.
+- Notification actions: "Mark done" on the devotional reminder, and "Listen now" on reading
+  reminders.
+- A PDF of the Faithfulness review on Android. `window.print()` is probably ignored by the Android
+  WebView, so the phone offers Share and Copy text for now.
+- A reminder time for each prayer.
+- Confirming that prayer, memory and devotional reminders arrive while the app is closed.
+- Checking the v0.5 work on the Fold and the Linux desktop: backup and restore through the system
+  file picker, the audio fixes, the sleep timer with the screen locked, and the Android back gesture.
 
-Rebuilt `src/lib/notify.ts` on **`tauri-plugin-notification`**: real OS notifications, and in the
-installed app **OS-scheduled** daily reminders (`Schedule.at`, repeat daily) so they fire when the app
-isn't focused (and closed on mobile). Tapping deep-links (`onAction` → navigate). Foreground web-Notification
-checks are now browser-only (Tauri uses the OS schedules → no double-notify). `syncReminderSchedules()`
-reconciles schedules with the toggles on every change.
+### Code work
 
-- **Reading-plan reminder** — daily nudge, **default ON on enroll** (`setActivePlan` sets `notifyPlan`),
-  tap → dashboard. ✅
-- **Devotional reminder** — opt-in, at its set time, tap → devotional. ✅ (check-off action: TODO — needs
-  `registerActionTypes` + action buttons.)
-- **Memory + prayer reminders** — daily, share a "Reminder time" setting; tap → Memory Lane / Prayers. ✅
-- All toggleable in Settings (added plan toggle + shared reminder-time control). Verified: tsc/build/
-  cargo check clean, plugin v2.3.3 + `notification:default` capability, routes render, toggles work.
-- **STILL TODO (needs a device):** confirm actual OS delivery + scheduled/closed-app delivery on Android
-  and Linux desktop; confirm deep-link taps navigate; per-prayer individual reminders; devotional check-off
-  action button; Android notification channel setup if needed. The closed-app case is the real risk.
+- **Media3 1.6 or later**, from 1.4.1, with `compileSdk` raised from 34. Run the Robolectric suite
+  and test on the phone.
+- **Keys in localStorage.** The E2E data key and the AI provider key are stored in plain text in
+  localStorage (review item S8). Move them to the OS keystore.
+- **Prayer counts merge as whole rows.** `prayedCount` and array-valued settings still take the
+  newer row whole, so prayers counted on two devices while offline lose one side. Merge them per
+  field, as plan progress now does.
+- **Faith's Checkbook read aloud.** Only *Morning and Evening* has recordings. The phone-voice
+  fallback already exists.
+- **Duplicate reading-log days after an Android freeze.** A chapter that finishes while Android has
+  the app frozen can be logged on two days, because the in-app callback logs the time the app wakes.
+- A plans calendar view, a page listing every highlight and note, and a wider range of text sizes.
+- `react-router` 7, which clears the last two `pnpm audit` advisories.
 
-## Reading plans — "Soul Food" Bible-in-a-year (requested 2026-07-10)
+### Larger pieces
 
-Add a built-in **OT · NT · Psalm · Proverbs** daily plan (the J. Vernon McGee / Chuck Missler-style
-4-track "Bible in a year" — a portion from each track every day). Generate the 365-day schedule into
-the plans system (`PlanProgress`/`setDayDone`), surface it beside the existing plans, and wire it to the
-reading-plan reminder above.
+- **Red-letter words of Jesus.** The Berean Standard Bible data has no markup for them, so this
+  needs a separate data source.
+- **Local AI search** over scripture, commentary and your own notes, with `sqlite-vec`.
+- **Move to breadoflife.app.** Move the website and the sync server to `sync.breadoflife.app`, keep
+  breadoflife.dev redirecting, and make the sync URL configurable without a rebuild.
+- **Signing.** A Developer ID certificate and notarisation for macOS, then iOS through TestFlight on
+  the same Apple account. Windows signing is optional.
 
-## Later (unchanged)
-- Matt's own commentary corpus as a pluggable source (`~/dev/commentary-parser`).
-- Local `sqlite-vec` AI study companion (pairs naturally with the SQLite move in A).
-- Red-letter words-of-Jesus (BSB lacks the markup — needs a data source).
+### Later
 
----
+- The SQLite swap for user data. It is deferred because IndexedDB already works offline in every
+  webview, and a SQLite backend cannot run in the browser test loop. Revisit it with local AI search.
+- Matt's own commentary corpus from `~/dev/commentary-parser` as a commentary source.
+- Licensed translations (NASB, Amplified) through API.Bible behind the user's own key.
+- *The Word for Today*, built on `feat/word-for-today` and held until UCB grants written permission
+  (see [`WORD-FOR-TODAY.md`](WORD-FOR-TODAY.md)).
 
-# ✅ Shipped in v0.3.0 (integrated 2026-07-11)
+## Decided against
 
-The v0.3 candidate work below was built on isolated branches and merged to `main` for the 0.3.0 tag.
-Landed in this release:
-
-- **Memory Lane** — memorise verses from the reader (Brain action) → SM-2 spaced-repetition deck at
-  `/memory`, with due-today counts, fill-in-the-blank tests, a review streak, opt-in daily reminder,
-  a 15-verse starter set, and cross-device sync of cards (Dexie `memory`, `version(9)`).
-- **On-rails guided reading-plan mode** — starting a plan day drops into a guided reader that ticks
-  off each passage, tracks partial per-day completion (`chapterProgress`), and resumes where left off.
-- **Journal ↔ prayer cross-referencing** — link either side; each references the other.
-- **First-run onboarding** — offer hosted-sync account / skip / self-host + a short walkthrough.
-- **Home sync prompt**, **custom prayer categories**, **prayer pull-to-refresh**.
-- **Study layout** — commentary rail default-open on desktop, **resizable** rail, **collapsible
-  Spotify-style sidebar**, new **References** tab (journal/prayer refs for the chapter).
-- **Mobile swipe gestures** — swipe left/right to change chapter.
-- **Reminders toggle fix**, **Settings shows real app version**.
-- **Fixed Linux AppImage** for rolling distros (strips the bundled ubuntu WebKit → uses system webkit).
-
-Still deferred (tracked below and further down): "Link this device" full backfill, Faithfulness
-review PDF, E2E encryption, the `breadoflife.app` migration, and the Missler commentary corpus/audio.
-
----
-
-# v0.3 candidate work (captured 2026-07-10 from user feedback)
-
-## Bugs / polish
-- **Settings shows "v0.1"** — hardcoded; must read the real app version (import package version). Fix inline.
-- **Reminders toggle**: pressing "Off" doesn't switch back to "On" (Settings → Reminders — the Off/On button state is stuck). Fix the toggle logic.
-- **Commentary/study rail** should default to OPEN ("appear") on the Bible page on desktop/fold. (An open-on-mount effect exists; verify it actually works in v0.2.0 and make it reliably default-open on ≥md.)
-- **Proton Pass / password-manager name is "tauri.localhost"** when creating an account on phone — should be `breadoflife.dev` (or the app name). Driven by the webview origin/hostname; set a proper hostname/identifier (Tauri `app` config / a real origin) so autofill shows the right name.
-
-## Prayers
-- **Custom categories** — let users add their own prayer categories (beyond personal/family/community/thanksgiving/world).
-- **Pull-to-refresh** (mobile) to force a sync.
-- **Journal ↔ prayer cross-referencing** — link prayers to journal entries and vice-versa.
-
-## Journal
-- **Rich Bible-verse linking** — a "tag in the Bible" flow: from the journal editor, jump to the Bible, select verse(s), hit OK → return to the journal with those verses inserted as hyperlinks (tap to open the passage later).
-- **Read-view by default after submit** — submitting an entry shows a read view; an **Edit** button re-opens the editor.
-- **Journal ↔ prayer cross-ref** (see Prayers).
-
-## Bible / study rail (desktop + fold)
-- **Resizable commentary side panel** — drag the divider to make it wider/thinner.
-- **Collapsible left nav** — a minimise button that collapses the sidebar to icons-only and expands back (Spotify-style).
-- **New "References" tab in the study rail** — shows journal/prayer entries that reference the current verse/chapter.
-
-## Sync
-- **"Link this device" full backfill** (HIGH PRIORITY — biggest real sync hole): on first sign-in, explicitly enqueue ALL existing local synced-table rows into the outbox (with a progress UI) so pre-existing data uploads. **Root cause of the reported edge case** (an early prayer created before sync existed never uploaded — only NEW changes go through the outbox/hooks; pre-existing rows are never marked dirty). This makes multi-device onboarding trustworthy.
-- **E2E encryption** — BUILT 2026-07-11 (device-test pending). Journal/prayers/notes are AES-256-GCM
-  encrypted client-side before push (`src/db/crypto.ts`, Web Crypto, no deps); the relay stores only
-  ciphertext. Key model = random 256-bit data key ↔ 24-word BIP39 recovery phrase (device-local key,
-  never synced). `enableE2E`/`restoreE2E`/`disableE2E`/`getE2EStatus` in sync.ts + an E2ESettings card.
-  Low-sensitivity metadata (progress/highlights/settings/plans) stays clear. Verified: crypto (14) +
-  transform (8, incl. no-plaintext-leak) + UI enable flow. **STILL TODO (device):** 2-device encrypted
-  round-trip through the relay; the needsKey/restore UX on a fresh device; deciding whether restore
-  should hard-reset the cursor (currently does). Built on branch off main; not yet released.
-
-## Onboarding
-- **First-run onboarding** — offer to create a hosted-sync account (or skip / self-host) during onboarding, and run a short walkthrough of the main features.
-- **Unobtrusive home prompt** — a subtle prompt at the bottom of the dashboard to create a sync account (or set up self-hosted sync) if not signed in.
-
-## Memory verses (new feature — design + build)
-- A **memory-verse pool**: add verses while reading (a "memorise" action in the reader, like highlight/note), plus a curated starter set.
-- **Spaced repetition** (SM-2-ish, offline) — a short **daily card deck** built from memory-flagged verses + highlights ("Memory Lane"). Uses data people already create in the reader.
-- **Gamification** — rewards/streaks for reviewing; occasional **fill-in-the-blank test** cards. Pair with tasteful notifications ("today's verse to hide in your heart").
-- Rationale in the user's words: memory verses are one of the best weapons (cf. Jesus using Deuteronomy). Grok's framing: a short daily card deck.
-
-## Answered-prayer "Faithfulness review" (new feature)
-- Monthly/yearly **auto-story**: answered prayers + answer notes + linked verses + journal tags, exported as a warm **PDF / share card**. Leans into the emotional core (the answered-prayer log) rather than more study tools.
-
-## Domain / infra
-- **Migrate to `breadoflife.app`** (user owns it; also owns breadoflife.dev). Move the site + `sync.breadoflife.app`; ensure all features/data migrate cleanly (accounts, sync URL, DNS). Keep breadoflife.dev working/redirecting during transition. Put behind a config so the sync URL etc. can be swapped without a rebuild ideally.
-- **Fix the AppImage on Arch/rolling distros** — it bundles an older (ubuntu-built) webkit that clashes with newer system webkit → blank screen. Fix the Linux build to rely on system webkit (don't bundle it) or otherwise resolve the clash. (.deb/AUR already use system webkit and work.)
-- **Docs hygiene** — README + ROADMAP + the in-app version were lagging; keep them updated each release (Grok flagged this).
-
-## Reading plans — "on-rails" guided reading mode (requested 2026-07-11)
-Starting/continuing a plan's day should drop the user into a focused, guided reader that walks the day's
-chapters one at a time until complete:
-- A Bible-reader variant that runs through the day's `Reading[]` sequentially. Full study features stay
-  available (commentary / cross-refs / Strong's rail). A progress indicator ("Chapter 2 of 4 today").
-- Advancing: "Mark read & next" (and/or reaching the end of a chapter) ticks off that chapter and moves on.
-- **Tracks PARTIAL completion** — extend `PlanProgress` (currently `completedDays: number[]`) to record
-  chapters completed within a day (e.g. per-day completed-chapter set or a cursor), persisted as you go, so a
-  half-finished day is remembered.
-- On finishing the day: a warm completion message/celebration.
-- **Leave-guard**: if the user navigates away mid-day, a gentle confirm ("You're partway through today's
-  reading — leave anyway?"), but partial progress is still saved.
-- Entry points: PlansPage ("Start today's reading") + the dashboard "Today's plan" tile.
-- Files: `src/pages/PlansPage.tsx`, `src/data/plans.ts` (Plan/Reading), `src/db/index.ts` (PlanProgress —
-  new Dexie version for partial tracking), `src/db/repos.ts` (setDayDone + a new setChapterDone), a new
-  guided-reader route/component reusing `src/components/bible/Reader.tsx` + `StudyRail.tsx`, `BiblePage.tsx`.
-
-## Swipe gestures on mobile / fold (requested 2026-07-11)
-- In the Bible reader on touch devices, **swipe left/right to go to next/previous chapter**. Add other
-  sensible same-gestures where natural (e.g. edge-swipe to open/close the study rail). Use lightweight touch
-  handlers (no heavy deps); don't break text selection, parallel view, or vertical scroll. Files:
-  `src/components/bible/Reader.tsx`, `src/pages/BiblePage.tsx` (chapter nav via the UI store `goTo`/next-prev).
-
-## Chuck Missler commentary corpus (source located 2026-07-11 — build the parser + pluggable source)
-Matt located the real Missler files: **`/run/media/contra/Infinar/Chuck Missler/The Holy Bible - Chuck Missler -  Line by Line - OT and NT - mp3 with pdf notes`** (note the DOUBLE space before "Line"). Contains `Briefings/`, `NT/`, `OT/` — **157 PDF notes** (+ mp3 audio) of his "Line by Line" study.
-Task (post-compaction): finally set up the **commentary parser + builder** — extract the PDF notes into the app's pluggable commentary format (like the existing public-domain commentaries: Matthew Henry/JFB/Clarke/Gill/K&D/Tyndale via HelloAO, tracked per chapter in `StudyRail`), keyed by OSIS/BBCCCVVV so it slots into the study rail as a selectable source. Reuse/adapt the earlier work in `~/dev/commentary-parser` and the pdf-to-text approach from [[unlimited-ocr-amd-triage]] (born-digital PDFs → `pdf_to_text.py`, fast; OCR only if scanned). COPYRIGHT: Missler's Notes are copyrighted (it's the McGee-adjacent situation) — build it as a **local-only / personal** pluggable source (gitignored data; don't commit or redistribute the notes), OR a build step users run against their own legally-obtained files. The audio (mp3) could also feed the per-chapter audio feature later.
-
-## Missler audio + richer commentary (separate project — brief written 2026-07-11)
-Beyond the PDF-notes parser above: also (a) make Missler's **mp3s available as per-chapter audio** in the
-reader (the app already has per-chapter audio via `AudioPlayer`/HelloAO — add Missler as an option keyed by
-chapter), and (b) **transcribe all ~626 mp3 (~14GB) → transcripts → an even richer, verse-aligned commentary**
-(ASR on the local AMD ROCm box). Full self-contained project brief + app-integration guide for a dedicated
-agent: **`~/dev/missler-commentary/BRIEF.md`**. COPYRIGHT: local-only/personal, gitignored, never redistributed
-(don't bundle 14GB or the copyrighted notes in the public repo/release — use a configurable local library path).
+- **Evolu for sync.** Evolu needs OPFS, and WebKitGTK does not implement the OPFS sync access
+  handle, so it cannot save data in the Linux desktop app. Sync uses Dexie with our own delta sync
+  instead.
+- **Dexie Cloud.** Self-hosting it needs a paid commercial licence, which rules out a free
+  self-hosted server.
+- **CouchDB and PouchDB.** They would replace Dexie for an older sync model, a bigger rewrite than
+  the problem needs.
+- **Social features** such as a prayer wall or shared reading plans. The app is a private place for
+  one person's devotional life.
+- **A cross-reference graph.** It is busy to look at and adds little to daily reading.
+- **Audio speed per source.** One speed already carries across the queue and into the car.
+- **Importing from other Bible apps.** They have no stable export formats.
