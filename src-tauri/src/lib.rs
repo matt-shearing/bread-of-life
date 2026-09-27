@@ -3,6 +3,9 @@
 // See docs/DESKTOP.md.
 #[cfg(desktop)]
 mod desktop_audio;
+// Media keys and the desktop media widget for that player (MPRIS on Linux).
+#[cfg(desktop)]
+mod media_keys;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,8 +33,12 @@ pub fn run() {
     // Media3 plugin below, and the desktop crates are not in its dependency graph).
     #[cfg(desktop)]
     {
+        use tauri::Manager;
         builder = builder
-            .manage(desktop_audio::DesktopAudio::default())
+            .setup(|app| {
+                app.manage(desktop_audio::DesktopAudio::new(app.handle().clone()));
+                Ok(())
+            })
             .invoke_handler(tauri::generate_handler![
                 desktop_audio::desktop_audio_load,
                 desktop_audio::desktop_audio_play,

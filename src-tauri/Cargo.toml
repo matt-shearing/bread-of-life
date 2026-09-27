@@ -36,6 +36,12 @@ rodio = { version = "0.22.2", default-features = false, features = [
 ] }
 percent-encoding = "2"
 
+# Media keys and the desktop's media widget for the Rust player: MPRIS over D-Bus. WebKitGTK
+# publishes MPRIS only for an <audio> element that plays, and none does on Linux. The dbus
+# backend links the libdbus that tao already needs. See src/media_keys.rs.
+[target.'cfg(target_os = "linux")'.dependencies]
+souvlaki = { version = "0.8.3", default-features = false, features = ["use_dbus"] }
+
 # Android "All files access" (MANAGE_EXTERNAL_STORAGE) bridge — a proper Kotlin
 # Tauri plugin (see plugins/all-files). Android-only; lets the app read the Missler
 # library in place from Downloads / any shared-storage folder once granted.
