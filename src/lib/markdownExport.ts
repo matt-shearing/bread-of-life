@@ -270,7 +270,8 @@ function verseLabel(osis: string): string {
 /** Characters no file system (or Obsidian link) is happy with. */
 function safeFileName(s: string): string {
   return s
-    .replace(/[\\/:*?"<>|#^[\]\u0000-\u001f]/g, " ")
+    .replace(/[\\/:*?"<>|#^[\]]/g, " ")
+    .replace(/\p{Cc}/gu, " ") // control characters
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80)

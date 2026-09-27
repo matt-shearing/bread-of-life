@@ -4,7 +4,8 @@ import { Send, Sparkles, Trash2, Settings as SettingsIcon } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { getChapter, verses } from "@/data/bible";
 import { refLabel } from "@/lib/osis";
-import { streamCompanion, PROVIDERS, type ChatMessage } from "@/ai/client";
+import { PROVIDERS } from "@/ai/providers";
+import type { ChatMessage } from "@/ai/client";
 import { Button, Card, Textarea } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -72,6 +73,8 @@ export function CompanionPage() {
     setLoading(true);
     try {
       const system = await buildSystem(ho, chapter);
+      // The provider client loads on the first question, not with the page.
+      const { streamCompanion } = await import("@/ai/client");
       await streamCompanion(ai, system, next, (chunk) => {
         setMessages((m) => {
           const copy = m.slice();

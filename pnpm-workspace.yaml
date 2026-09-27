@@ -1,0 +1,22 @@
+# Supply-chain hardening — dependency cooldown.
+#
+# Refuse to resolve any package version published in the last 3 days (4320 min).
+# Compromised releases are almost always detected and yanked within hours; the
+# keyv/cacheable worm of 2026-08-04 is the reference case. pnpm falls back to an
+# older version that still satisfies the range rather than failing the install.
+#
+# This lives in the repo (not just ~/.config/pnpm/rc) so CI runners inherit it.
+#
+# Urgent security patch newer than the window:
+#   pnpm add <pkg> --minimum-release-age=0
+minimumReleaseAge: 4320
+
+# Our own packages are published and consumed immediately — exempt them.
+minimumReleaseAgeExclude:
+  - '@oneqode/*'
+
+# esbuild's postinstall only re-checks its platform binary, which pnpm already
+# installed; vite works without it. Declared (as off) so pnpm 11 doesn't fail the
+# install asking about it. pnpm 10 (CI) ignores this key and skips it anyway.
+allowBuilds:
+  esbuild: false

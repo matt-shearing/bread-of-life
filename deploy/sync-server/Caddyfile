@@ -1,11 +1,21 @@
 {
 	email {$ACME_EMAIL}
 	order rate_limit before basic_auth
+	servers {
+		# Which address counts as the client (Caddy's {client_ip}). Caddy believes the
+		# CF-Connecting-IP header only from the ranges listed in TRUSTED_PROXIES. The
+		# default trusts nobody, so the connecting address is used: right when clients
+		# reach Caddy directly. Behind Cloudflare every connection comes from Cloudflare,
+		# so set TRUSTED_PROXIES to Cloudflare's ranges (see README) or all users share
+		# one rate-limit bucket.
+		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
+		client_ip_headers CF-Connecting-IP
+	}
 }
 {$SYNC_DOMAIN} {
 	rate_limit {
 		zone sync {
-			key {remote_host}
+			key {client_ip}
 			events {$RATE_EVENTS}
 			window {$RATE_WINDOW}
 		}

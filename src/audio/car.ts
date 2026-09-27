@@ -189,7 +189,8 @@ async function recordCompletion(c: NativeCompletion): Promise<void> {
     const day = await getDevotionDay(devotionalById(car.devotionalId), car.day).catch(() => undefined);
     const label = car.slot === "morning" ? "Morning" : "Evening";
     const found = day?.readings.findIndex((r) => r.label === label) ?? -1;
-    const id = devotionDoneId(car.devotionalId, car.day, found >= 0 ? found : car.slot === "morning" ? 0 : 1);
+    // The completion time places the "MM-DD" day in its year.
+    const id = devotionDoneId(car.devotionalId, car.day, found >= 0 ? found : car.slot === "morning" ? 0 : 1, c.completedAt);
     // Keep the first completion time if the app already marked it.
     if (!(await db.devotions.get(id))) await setDevotionDone(id, true);
     return;

@@ -5,7 +5,7 @@
  * This is the belt to sync's braces: a file you can keep anywhere, that restores
  * onto any device running the app.
  *
- * What is in a backup: exactly the tables that sync (SYNCED_TABLES in src/db/sync.ts) —
+ * What is in a backup: exactly the rows that sync (src/db/syncSchema.ts) —
  * highlights, notes, prayers, journal, reading progress, settings, plans, devotions,
  * custom plans and memory verses. What is not: caches (downloaded commentary and
  * Bible translations, which re-download), and sync bookkeeping (the outbox and the
@@ -16,19 +16,16 @@
  * old backup onto a device that has moved on keeps the newer local work, and
  * restoring the same file twice changes nothing the second time.
  */
-import { db } from "@/db";
-import { importRows, SYNCED_KEY_PATH, SYNCED_TABLES, type SyncedTable } from "@/db/sync";
+import { db, type PlanProgress } from "@/db";
+import { syncNow } from "@/db/sync";
+import { KEY_PATH as SYNCED_KEY_PATH, SYNCED_TABLES, syncsRow, type SyncedTable } from "@/db/syncSchema";
+import { nextOutboxAt, nextStamp, untracked } from "@/db/syncTracking";
+import { mergePlans, samePlanProgress } from "@/db/planMerge";
 import { localDayKey } from "@/lib/day";
 
 export const BACKUP_APP = "bread-of-life";
 export const BACKUP_FORMAT = 1;
 
-/**
- * Settings that describe THIS device rather than its owner, so they are left out of a
- * backup and ignored in one: a Missler library path is a folder on one particular
- * disk, and pointing another device at it would switch the feature on and break it.
- */
-export const DEVICE_LOCAL_SETTINGS: ReadonlySet<string> = new Set(["misslerLibraryPath"]);
 
 type Row = Record<string, unknown>;
 
@@ -56,9 +53,13 @@ export function backupFileName(now: number = Date.now()): string {
   return `bread-of-life-backup-${localDayKey(now)}.json`;
 }
 
-const isSetting = (t: SyncedTable) => t === "settings";
-const isDeviceLocal = (t: SyncedTable, row: Row) =>
-  isSetting(t) && typeof row.key === "string" && DEVICE_LOCAL_SETTINGS.has(row.key);
+/**
+ * Rows that describe THIS device rather than its owner stay out of a backup and are
+ * ignored in one. That is every `settings` row sync doesn't carry (the allow-list in
+ * src/db/syncSchema.ts): a Missler library path, say, is a folder on one particular
+ * disk, and pointing another device at it would switch the feature on and break it.
+ */
+const isDeviceLocal = (t: SyncedTable, row: Row) => !syncsRow(t, String(row[SYNCED_KEY_PATH[t]]));
 
 /** Read every user table in one transaction, so the snapshot is consistent. */
 export async function createBackup(appVersion: string, now: number = Date.now()): Promise<BackupFile> {
@@ -162,8 +163,8 @@ export function parseBackup(text: string): ParsedBackup {
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /**
- * When a row was last changed. `updatedAt` is stamped on every write by the sync hooks;
- * rows written before those hooks existed lack it, so fall back to the newest
+ * When a row was last changed. `updatedAt` is stamped on every write by the sync
+ * middleware (src/db/syncTracking.ts); rows written before sync existed lack it, so fall back to the newest
  * timestamp the row itself carries.
  */
 export function rowStamp(table: SyncedTable, row: Row): number {
@@ -194,16 +195,27 @@ function canonical(v: unknown): string {
 export type Decision = "add" | "update" | "keep" | "same";
 
 /**
- * What restoring `incoming` over `local` should do:
- *  - add:    nothing local with this key.
+ * What restoring `incoming` over `local` should do, and the row to write if anything:
+ *  - add:    nothing local with this key; write the backup's row as it is.
  *  - same:   identical already; nothing to write.
- *  - update: the backup's copy is strictly newer.
+ *  - update: the backup's copy is strictly newer; write it, keeping its own stamp.
  *  - keep:   the local copy is newer (or as new) and differs; it stays.
+ *
+ * Reading-plan progress is the exception, as it is for a pull: the two copies merge day
+ * by day (src/db/planMerge.ts), so a day ticked only in the backup comes back without
+ * un-ticking days finished here since. A merge that adds something is new content, so
+ * it gets a fresh stamp and uploads over the server's copy (where it merges again).
  */
-export function decide(table: SyncedTable, local: Row | undefined, incoming: Row): Decision {
-  if (!local) return "add";
-  if (canonical(local) === canonical(incoming)) return "same";
-  return rowStamp(table, incoming) > rowStamp(table, local) ? "update" : "keep";
+export function decide(table: SyncedTable, local: Row | undefined, incoming: Row): { d: Decision; row?: Row } {
+  if (!local) return { d: "add", row: incoming };
+  if (canonical(local) === canonical(incoming)) return { d: "same" };
+  if (table === "plans") {
+    const merged = mergePlans(local as unknown as PlanProgress, incoming as unknown as PlanProgress);
+    if (samePlanProgress(merged, local as unknown as PlanProgress)) return { d: "keep" };
+    const updatedAt = Math.max(nextStamp(local.updatedAt), (num(incoming.updatedAt) ?? 0) + 1);
+    return { d: "update", row: { ...(merged as unknown as Row), updatedAt } };
+  }
+  return rowStamp(table, incoming) > rowStamp(table, local) ? { d: "update", row: incoming } : { d: "keep" };
 }
 
 /* ---------------------------------- preview ---------------------------------- */
@@ -243,7 +255,7 @@ export async function previewRestore(parsed: ParsedBackup): Promise<RestorePlan>
     const locals = (await db.table(t).bulkGet(rows.map((r) => r[keyPath] as string))) as (Row | undefined)[];
     const tally: TableTally = { inFile: rows.length, add: 0, update: 0, keep: 0, same: 0 };
     rows.forEach((r, i) => {
-      tally[decide(t, locals[i], r)]++;
+      tally[decide(t, locals[i], r).d]++;
     });
     tables[t] = tally;
     for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += tally[k];
@@ -259,14 +271,23 @@ export interface RestoreResult {
 }
 
 /**
- * Apply a restore. The decisions are made again inside the write transaction, so an
- * edit made while the preview was open is still respected. Written rows keep their
- * own `updatedAt` and are queued for upload (see importRows in src/db/sync.ts).
+ * Apply a restore, in one transaction over every user table and the outbox.
+ *
+ * The transaction is flagged `untracked` (src/db/syncTracking.ts), so the sync
+ * middleware neither restamps nor queues these writes. Restamping is the danger: every
+ * restored row would then count as edited now, and a month-old backup would beat edits
+ * made since on other devices the moment it uploaded. Instead each row keeps its own
+ * `updatedAt`, and exactly the rows written are queued by hand in the same transaction,
+ * so they upload and the server's last-write-wins sorts them out.
+ *
+ * The decisions are made again here rather than reused from the preview, so an edit
+ * made while the preview was open is still respected.
  */
 export async function applyRestore(parsed: ParsedBackup): Promise<RestoreResult> {
   const result: RestoreResult = { added: 0, updated: 0, kept: 0, unchanged: 0 };
-  await importRows(async () => {
-    const written: { table: SyncedTable; id: string }[] = [];
+  let queued = 0;
+  await db.transaction("rw", [...SYNCED_TABLES.map((t) => db.table(t)), db.outbox], async (tx) => {
+    untracked(tx);
     for (const t of SYNCED_TABLES) {
       const rows = importable(t, parsed.backup.tables[t]);
       if (!rows.length) continue;
@@ -275,20 +296,26 @@ export async function applyRestore(parsed: ParsedBackup): Promise<RestoreResult>
       const ids = rows.map((r) => r[keyPath] as string);
       const locals = (await table.bulkGet(ids)) as (Row | undefined)[];
       const toPut: Row[] = [];
+      const entries: { key: string; table: string; id: string; op: "upsert"; at: number }[] = [];
       rows.forEach((r, i) => {
-        const d = decide(t, locals[i], r);
-        if (d === "add" || d === "update") {
-          toPut.push(r);
-          written.push({ table: t, id: ids[i] });
-          if (d === "add") result.added++;
-          else result.updated++;
-        } else if (d === "keep") result.kept++;
+        const { d, row } = decide(t, locals[i], r);
+        if (row) {
+          toPut.push(row);
+          entries.push({ key: `${t}:${ids[i]}`, table: t, id: ids[i], op: "upsert", at: nextOutboxAt() });
+        }
+        if (d === "add") result.added++;
+        else if (d === "update") result.updated++;
+        else if (d === "keep") result.kept++;
         else result.unchanged++;
       });
-      if (toPut.length) await table.bulkPut(toPut);
+      if (toPut.length) {
+        await table.bulkPut(toPut);
+        await db.outbox.bulkPut(entries);
+        queued += entries.length;
+      }
     }
-    return written;
   });
+  if (queued) void syncNow(); // uploads now if there is an account; does nothing otherwise
   return result;
 }
 

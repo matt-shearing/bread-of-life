@@ -6,15 +6,23 @@
 //   - Strong's Greek + Hebrew lexicon JSON
 // Outputs (public/data/strongs/):
 //   - <HO>.json      per-book: { "chapter.verse": [ { w, s }, ... ] }
-//   - lexicon.json   { <strongId>: { lemma, xlit, gloss, def } }  (only used ids)
+//   - lexicon/<shard>.json  { <strongId>: { lemma, xlit, gloss, def } }  (only used ids),
+//     split by Strong's number range — see src/data/lexiconShard.ts
+//
+// MACHINE-SPECIFIC: the input paths below point at Matt's local source data
+// (a sibling bread-of-life-25 checkout). This is a one-off ingestion tool, not
+// part of the build or CI; point the paths at your own copies to re-run it.
+// Needs Node 22.18+ (imports a TypeScript module directly).
 
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { writeLexiconShards } from './lexicon-shards.mjs';
 
 const USFM_DIR = '/home/contra/dev/bread-of-life-25/bibles/usfm/engbsb_usfm';
 const GREEK = '/home/contra/dev/bread-of-life-25/data/strongs/strongs-greek.json';
 const HEBREW = '/home/contra/dev/bread-of-life-25/data/strongs/strongs-hebrew.json';
-const OUT_DIR = '/home/contra/dev/bread-of-life-2026/public/data/strongs';
+const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '../public/data/strongs');
 
 const DEF_MAX = 600;
 
@@ -130,7 +138,7 @@ for (const id of usedStrongs) {
   };
 }
 
-writeFileSync(join(OUT_DIR, 'lexicon.json'), JSON.stringify(lexicon));
+writeLexiconShards(join(OUT_DIR, 'lexicon'), lexicon);
 
 console.log(JSON.stringify({
   books: bookCount,
