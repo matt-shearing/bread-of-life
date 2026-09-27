@@ -139,6 +139,25 @@ export function saveDataKey(key: Uint8Array): void {
 export function clearDataKey(): void {
   localStorage.removeItem(KEY_STORAGE);
 }
-export function isE2EEnabled(): boolean {
-  return loadDataKey() !== null;
+
+/**
+ * A data key belongs to one sync account. When this device signs in to a DIFFERENT
+ * account, park the current key under the old account and bring back the new account's
+ * key if this device has held it before (or none). Otherwise account B's journal would be
+ * encrypted with account A's key, which B's other devices can't read.
+ */
+export function switchDataKeyAccount(from: string | null, to: string): void {
+  try {
+    const current = localStorage.getItem(KEY_STORAGE);
+    if (from && current) localStorage.setItem(`${KEY_STORAGE}:${from}`, current);
+    const parked = localStorage.getItem(`${KEY_STORAGE}:${to}`);
+    if (parked) {
+      localStorage.setItem(KEY_STORAGE, parked);
+      localStorage.removeItem(`${KEY_STORAGE}:${to}`);
+    } else {
+      localStorage.removeItem(KEY_STORAGE);
+    }
+  } catch {
+    /* storage unavailable: nothing to switch */
+  }
 }
