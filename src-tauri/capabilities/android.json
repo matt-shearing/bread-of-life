@@ -1,7 +1,31 @@
 {
   "identifier": "android",
-  "description": "Android-only permissions: the All files access (MANAGE_EXTERNAL_STORAGE) bridge, the reading-reminder glue, and the phone's text-to-speech voice for spoken devotionals.",
-  "platforms": ["android"],
-  "windows": ["main"],
-  "permissions": ["all-files:default", "reminders:default", "device-tts:default"]
+  "description": "Android only: the All files access (MANAGE_EXTERNAL_STORAGE) bridge, the reading-reminder glue, the phone's text-to-speech voice for spoken devotionals, and reading a Missler library from shared storage.",
+  "platforms": [
+    "android"
+  ],
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "all-files:default",
+    "reminders:default",
+    "device-tts:default",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        {
+          "path": "/storage/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [
+        {
+          "path": "/storage/**"
+        }
+      ]
+    }
+  ]
 }

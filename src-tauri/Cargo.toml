@@ -36,18 +36,21 @@ rodio = { version = "0.22.2", default-features = false, features = [
 ] }
 percent-encoding = "2"
 
-# Native background audio (Media3 ExoPlayer + foreground MediaSessionService) — mobile
-# only; desktop keeps its own Rust player. See docs/NATIVE-AUDIO.md.
-[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-# Vendored fork of tauri-plugin-native-audio (v1.0.5) adding native PLAYLIST support
-# (setQueue/next/previous + index in state) so ExoPlayer advances the day's readings
-# itself in the background. See src-tauri/plugins/native-audio + docs/NATIVE-AUDIO.md.
-tauri-plugin-native-audio = { path = "plugins/native-audio" }
+# Media keys and the desktop's media widget for the Rust player: MPRIS over D-Bus. WebKitGTK
+# publishes MPRIS only for an <audio> element that plays, and none does on Linux. The dbus
+# backend links the libdbus that tao already needs. See src/media_keys.rs.
+[target.'cfg(target_os = "linux")'.dependencies]
+souvlaki = { version = "0.8.3", default-features = false, features = ["use_dbus"] }
 
 # Android "All files access" (MANAGE_EXTERNAL_STORAGE) bridge — a proper Kotlin
 # Tauri plugin (see plugins/all-files). Android-only; lets the app read the Missler
 # library in place from Downloads / any shared-storage folder once granted.
 [target.'cfg(target_os = "android")'.dependencies]
+# Native background audio: Media3 ExoPlayer in a MediaLibraryService, the lock screen,
+# earphone buttons and Android Auto. A vendored fork of tauri-plugin-native-audio 1.0.5,
+# since rewritten for this app (Android only; the upstream iOS half was removed). Desktop
+# keeps its own Rust player. See plugins/native-audio and docs/NATIVE-AUDIO.md.
+tauri-plugin-native-audio = { path = "plugins/native-audio" }
 tauri-plugin-all-files = { path = "plugins/all-files" }
 # Reading-reminder glue (see plugins/reminders): exact-alarm permissions in its
 # manifest, and the notification tap that cold-started the app. Android-only.

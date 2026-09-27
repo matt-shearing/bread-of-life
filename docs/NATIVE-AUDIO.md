@@ -1,141 +1,226 @@
-# Background audio — native engine plan
+# Audio playback: how it works
 
-The audio Bible plays through a **swappable playback engine** (`src/audio/engine.ts`).
-Today the default is `Html5Engine` (an `Audio()` element); OS transport controls come from
-the web Media Session (`src/audio/controller.ts`). That gives lock-screen metadata + controls,
-but **not** reliable playback when the app is fully backgrounded/closed on Android — a WebView's
-media gets suspended and there's no foreground service holding the process alive.
+Narration, devotionals and Missler audio all play through one controller
+(`src/audio/controller.ts`) and one of three engines (`src/audio/engine.ts`). The controller
+owns the queue, auto-advance, marking readings done and the mini-player's state. The engine
+plays.
 
-## Why (the AntennaPod answer)
-Every real background-audio app plays natively inside a **foreground `MediaSessionService`**
-(Media3 / ExoPlayer), declared with `foregroundServiceType="mediaPlayback"` + the
-`FOREGROUND_SERVICE(_MEDIA_PLAYBACK)` permissions. The ongoing media notification is what keeps
-the OS from killing playback and shows the transport controls. A WebView can't do this from JS.
+| Platform | Engine | Who plays | Lock screen, keys, widgets |
+|---|---|---|---|
+| Android app | `NativeEngine` | Media3 ExoPlayer in the native-audio plugin | The plugin's media session (notification, lock screen, earphones, Android Auto) |
+| Linux app | `TauriDesktopEngine` | Rust (`src-tauri/src/desktop_audio.rs`) | MPRIS from Rust (`src-tauri/src/media_keys.rs`) |
+| Browser, macOS and Windows apps | `Html5Engine` | An `<audio>` element | The web Media Session, driven by the controller |
 
-## The seam (already in place — Option 1 done)
-- `src/audio/engine.ts` — `AudioEngine` interface (`load / play / pause / seekTo / currentTime /
-  duration / release` + `handlers` for time/duration/ended/play/pause/loading) and `Html5Engine`.
-  `selectEngine()` chooses the engine; `usesWebMediaSession` tells the controller whether to run
-  the web Media Session (true for HTML5, **false** for native).
-- `src/audio/controller.ts` — owns the QUEUE, auto-advance, mark-read-on-finish, mini-player state,
-  and (web) Media Session. It only calls the engine; it never touches an `Audio()` element directly.
+`selectEngine()` picks the engine once, at start.
 
-So swapping in native playback is a **drop-in `NativeEngine` implementing the same interface** —
-nothing else in the app changes (mini-player, "Listen the whole day", mark-read all keep working).
+## The controller and the engine seam
 
-## Remaining native wiring (do AFTER `fix/missler-android-media` merges to main)
-Two agents editing the Android/`src-tauri` config at once = conflicts, so this half is deferred.
+An engine implements `AudioEngine`:
 
-1. **Plugin.** Evaluate [`tauri-plugin-native-audio`](https://github.com/uvarov-frontend/tauri-plugin-native-audio)
-   (v1.0.5; Media3 ExoPlayer + MediaSessionService + foreground service; API: `initialize` /
-   `setSource({src,id,title,artist,artworkUrl})` / `play` / `pause` / `seekTo` / `getState` /
-   `addStateListener`; **no queue** — fine, our controller owns the queue). Caveat: young/small
-   (≈8★, AI-built), 0 open issues. If it's not solid, write a minimal own Media3 `MediaSessionService`
-   plugin exposing the same handful of calls.
-2. **`NativeEngine`** in `src/audio/engine.ts`: implement `AudioEngine` over the plugin
-   (`setSource` on `load`, forward `addStateListener` → `handlers.onTime/onEnded/...`),
-   `usesWebMediaSession = false`. Make `selectEngine()` return it when
-   `"__TAURI_INTERNALS__" in window && isMobile`.
-3. **Android config** (the conflict-prone part): plugin's Rust + JS deps, gradle, and manifest
-   `<service>` + `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_MEDIA_PLAYBACK` / `POST_NOTIFICATIONS` /
-   `WAKE_LOCK` permissions + `src-tauri/capabilities`.
-4. **Verify on device** (unavoidable — no audio sink in CI): playback, background-when-closed,
-   lock-screen controls, auto-advance on track end, mark-read firing. Desktop stays on `Html5Engine`.
+- `load`, `play`, `pause`, `seekTo`, `currentTime`, `duration`, `release`, and optionally
+  `setRate` (`supportsRate`).
+- A native-queue engine (`supportsNativeQueue`, Android only) also implements `loadQueue`,
+  `queueNext`, `queuePrev` and `queueSkipTo`. It is handed the whole queue and advances by
+  itself, even in the background. The other engines play one track at a time and the
+  controller steps through the queue.
+- `usesWebMediaSession` says whether the controller should drive the web Media Session.
+  Only `Html5Engine` needs it.
 
-## Foreground service and earphone buttons (fixed 2026-09)
+The engine reports through `EngineHandlers`: time, duration, loading, play and pause, ended,
+and on Android also `onIndexChange`, `onFinished`, `onExternalQueue`, `onRate` and
+`onPendingCompletions`. On Linux `onRemote` carries media-key commands.
+
+The controller's state is a plain object behind `useSyncExternalStore`. `set()` notifies
+subscribers only when something changed. Components read it with
+`useAudioSelector((s) => …)`, so only what shows the time re-renders while audio plays;
+`useAudio()` returns everything and re-renders on every change.
+
+## Android: the native-audio plugin
+
+`src-tauri/plugins/native-audio` began as tauri-plugin-native-audio 1.0.5 and has been
+rewritten for this app. It is Android only. The app calls it only through
+`src/audio/nativeAudio.ts`, a typed wrapper; nothing else builds `plugin:native-audio|…`
+strings.
+
+### Files
+
+- `NativeAudioPlugin.kt`: `NativeAudioRuntime` owns the one ExoPlayer, the
+  `MediaLibrarySession` and the progress tick; `NativeAudioPlugin` holds the commands.
+- `NativeAudioService.kt`: the `MediaLibraryService` (notification and foreground state).
+- `LibrarySessionCallback.kt`: the session callback and `SessionCommands` (the car's custom
+  buttons and speed list).
+- `CarLibrary.kt`, `CarData.kt`, `BibleCatalog.kt`, `RefParser.kt`: the Android Auto browse
+  tree, media ids, voice search, and `PlaybackStore` (SharedPreferences for the car snapshot,
+  Recent, Continue listening and completions; the file is still `tauri_native_audio_car`).
+- `ArtworkTiles.kt`: the car's artwork tiles and `ArtworkTilesProvider`.
+
+### Commands
+
+Command names are snake_case in `build.rs`, in the permissions and in JS. Tauri calls the
+Kotlin method with the camelCase name (`set_queue` calls `setQueue`).
+
+| Command | What it does |
+|---|---|
+| `initialize` | Builds the player and session and asks for the notification permission. The app calls it before its first playback, not at start. |
+| `get_state` | The current state. Does not build the player. |
+| `set_queue` | Loads a playlist (`items`, `startIndex`) and prepares it. |
+| `skip_to` | Jumps to `index` of the loaded playlist at `positionSec` and plays. Rejects "stale queue" when `queueGeneration` is not the loaded one. |
+| `play`, `pause` | Through `Util.handlePlayButtonAction`, as Media3 does for the lock screen, so Play works after a playback error. |
+| `stop` | Unloads the playlist, moves the queue generation on and releases the service binding. The mini-player's ✕. |
+| `next`, `previous` | The next chapter; the previous chapter, or the start of this one after 3 s. |
+| `seek_to`, `set_rate` | Seek within the item; set the speed for the whole queue. |
+| `get_queue` | The loaded playlist with each item's chapter and plan position, to adopt a queue the app did not load. |
+| `set_car_snapshot` | Stores the app's snapshot for Android Auto (today's plan day, devotional audio, narrator, subtitle). |
+| `take_completions`, `ack_completions` | Plan chapters and devotionals heard to the end, and their acknowledgement. `take_car_completions` and `ack_car_completions` are the v0.4.0 names, kept until v0.5. |
+| `get_debug_log` | The last 300 audio events, for bug reports (Settings, "Copy audio log"). |
+| `register_listener`, `remove_listener` | Handled by Tauri's base `Plugin` class for the state event. They must stay allowed. |
+
+`set_car_snapshot`, the completions and `get_state` read `PlaybackStore` directly and never
+build ExoPlayer, so a session that plays nothing creates no player and asks for no
+permission.
+
+### The state event
+
+`native_audio_state` carries:
+
+- `status`, `currentTime`, `duration`, `isPlaying`, `buffering`, `rate`, `error`, `index`.
+- `capturedAtMs`: monotonic time of the snapshot. JS drops any event older than one it has
+  applied, because events queued in a frozen WebView can arrive after a fresher `get_state`.
+- `queueGeneration`: bumped by every queue change and by `stop`.
+- `queueOrigin`: `"app"`, or `"external"` when the queue came through the session: Android
+  Auto, a voice request, the system's resume card, or an earphone press that resumed Continue
+  listening after the app's stop. v0.4.0 said `"car"`; JS accepts both.
+- `finished`: the indexes of this queue generation that played to their natural end.
+- `pendingCompletions`: how many completions wait for the app. The store keeps it as a
+  counter.
+
+Native sends the event on every player change, and on a timer while something plays and the
+app's activity is on screen: every 500 ms. While the activity is not on screen it sends
+nothing on the timer; the tick still runs every 5 s to save the Continue-listening position.
+Visibility comes from the plugin's `onResume` and `onStop`. When the app becomes visible
+again, native sends the state at once, and `NativeEngine` also reads `get_state` on
+`visibilitychange`.
+
+### How the app's queue and native's stay in step
+
+- `playQueue` calls `set_queue`. Events from the queue it replaces (an older generation) are
+  ignored from then on.
+- A jump in Now Playing, or "Next reading", calls `skip_to`. Until native reports the target
+  index, events still showing another index were captured before the jump and are ignored.
+  If native has a different queue by then (the car replaced it), `skip_to` fails and the app
+  sends the whole queue with `set_queue` instead.
+- An external queue is adopted: the app fetches it with `get_queue` and shows it. The app
+  also adopts whatever native holds at start.
+- `stop` unloads native's queue; the app ignores native until it loads or adopts a queue
+  again.
+
+### What counts as heard
+
+Only a chapter that plays to its natural end counts. Native tells the two apart by Media3's
+transition reason: `AUTO` (and the end of the playlist) is heard; `SEEK` is a skip, whether it
+came from the app, the car's Next or "Next reading", or the lock screen. The app marks each
+index in `finished` once.
+
+Native also records every plan chapter (`plan/…` media id) and devotional (`dev/…`) that ends
+naturally, whoever loaded the queue, because the app may be gone or frozen by then. The app
+gives devotionals it plays the car's id (`dev/spurgeon-morning-evening%3A09-25%3Am`) for this
+reason. It collects them at start, on returning to the foreground and when an event reports
+some waiting (at most every 5 s), records each with `setChapterDone` or `setDevotionDone`
+(`src/audio/nativeCompletions.ts`, `src/audio/carSnapshot.ts`), then acknowledges them. An
+entry that fails three times is dropped so that it cannot hold back the rest. Recording is
+idempotent.
+
+### Audio focus
+
+Narration is tagged as speech. When another app asks to duck (a navigation prompt in the car),
+ExoPlayer pauses speech instead of lowering it, then resumes.
+
+## Earphone buttons and the foreground service (fixed 2026-09)
 
 **Symptom.** Pause from the earphone button, press it again: sound returns for a couple of
 seconds, then stops, while the lock-screen progress bar keeps moving.
 
 **Cause.** An earphone, lock-screen or notification command never passes through the app's
-JavaScript or `NativeAudioRuntime.play()`. Android delivers it to the `MediaSession`, and Media3
-calls the session's player directly. The service used to be started only by `play()`
-(`startForegroundService`), and its notification came from a hand-rolled
-`PlayerNotificationManager`, with `MediaSessionService.onUpdateNotification` overridden to do
-nothing, which switched off Media3's own foreground handling. On pause the service left the
-foreground. If Android then stopped it (background-service limits about a minute after it
-leaves the foreground, or the paused notification being swiped away), nothing brought it back:
-`onDestroy` had detached the `PlayerNotificationManager`, and the earphone play path never
-called `startService`. ExoPlayer played with no foreground service, Android cached and froze
-the process within seconds, and the sound stopped. The system UI kept extrapolating the last
-"playing" state, which is why the position appeared to keep moving.
+JavaScript or `NativeAudioRuntime.play()`. Android delivers it to the `MediaSession`, and
+Media3 calls the session's player directly. The service used to be started only by `play()`,
+and its notification came from a hand-rolled `PlayerNotificationManager` that switched off
+Media3's own foreground handling. Once Android stopped the paused service, nothing brought it
+back, ExoPlayer played with no foreground service, and Android froze the process.
 
 **What the code does now.**
 
 - `NativeAudioService` lets Media3 own the notification and the foreground state
-  (`DefaultMediaNotificationProvider`, subclassed only to show back 10 s / play-pause /
-  forward 10 s). Media3 promotes the service on every play, whatever sent it, and demotes it
-  on pause while keeping the notification.
+  (`DefaultMediaNotificationProvider`, showing back 10 s, play-pause and forward 10 s).
 - `NativeAudioRuntime` binds to the service while anything is loaded, so background limits
-  cannot stop it during a pause. The binding is dropped on `dispose` and when the app is
-  swiped away while paused.
+  cannot stop it during a pause. The binding is dropped by `stop` and when the app is swiped
+  away while paused.
 - Every play reaches ExoPlayer through the session's `ForwardingPlayer`, whose `play()` and
-  `setPlayWhenReady(true)` do the set-up a play needs (clear the pending seek and error, make
-  sure the service is bound). The app's own Play button goes through the same wrapper.
-- The app never calls `startForegroundService` itself, so there is no `startForeground`
-  deadline to miss.
-- The notification and lock-screen artwork is the app icon, supplied by the session's bitmap
-  loader rather than stored in each of the queue's (up to ~1,000) items.
-- JS trusts native after a resume: `NativeEngine` re-reads `getState` whenever the WebView
-  becomes visible, and drops queued state events older than the newest snapshot
-  (`capturedAtMs`).
+  `setPlayWhenReady(true)` do the set-up a play needs. The app's own Play goes through it too.
+- The app never calls `startForegroundService`, so there is no `startForeground` deadline to
+  miss.
+- The notification artwork is the app icon, supplied by the session's bitmap loader rather
+  than stored in each of the queue's (up to about 1,200) items.
 
-**Evidence for the next report.** Every media-button event, controller command (with the
-sending package and whether it was the media notification, Android Auto or a legacy
-Bluetooth controller), play/pause request, audio-focus suppression change and service
-lifecycle event goes into a 300-line ring buffer, read with the `get_debug_log` plugin command.
-It is also written to logcat under the tag `BoLAudio` in debug builds, or in a release build
-after `adb shell setprop log.tag.BoLAudio DEBUG`.
+**Evidence for the next report.** Every media-button event, controller command, play and
+pause request, audio-focus change and service lifecycle event goes into the debug log
+(`get_debug_log`). It also goes to logcat under the tag `BoLAudio` in debug builds, or in a
+release build after `adb shell setprop log.tag.BoLAudio DEBUG`.
 
-**Tests.** `src-tauri/plugins/native-audio/android/src/test/.../HeadsetResumeTest.kt`
-(Robolectric) drives the real Media3 service with earphone-button intents. CI runs it after
-the APK build in `.github/workflows/android.yml`.
+## Android Auto
 
-## Android Auto (2026-09)
+The service is a Media3 `MediaLibraryService`, so Android Auto can browse the app and play
+from it without the app open. User-facing steps and the GrapheneOS set-up are in
+`docs/MOBILE.md` ("Android Auto").
 
-The service is a Media3 `MediaLibraryService`, and the one session is a `MediaLibrarySession`,
-so Android Auto can browse the app and play from it without the app open. User-facing steps
-and the GrapheneOS set-up are in `docs/MOBILE.md` ("Android Auto").
-
-- **Declarations** (plugin `AndroidManifest.xml`, merged into the app): the
-  `com.google.android.gms.car.application` meta-data pointing at `res/xml/automotive_app_desc.xml`
-  (`<uses name="media"/>`); the service exported with the `MediaLibraryService`,
+- **Declarations** (the plugin's `AndroidManifest.xml`, merged into the app): the
+  `com.google.android.gms.car.application` meta-data pointing at
+  `res/xml/automotive_app_desc.xml`; the service, exported, with the `MediaLibraryService`,
   `MediaSessionService` and `android.media.browse.MediaBrowserService` actions; and
-  `CarArtworkProvider`. CI checks each of these in the built APK with `aapt`.
+  `ArtworkTilesProvider`. CI checks each in the built APK with `aapt`.
 - **Browse tree** (`CarLibrary.kt`): Today, Bible, Devotional (only when there is audio),
   Recent. Media ids describe themselves (`ch/JHN/3`, `plan/<plan>/<day>/<reading>/<book>/<chapter>`,
   `dev/<id>`), so any id can be turned back into a queue (`MediaIds` in `CarData.kt`).
-- **Data without the app**: the Bible comes from `BibleCatalog.kt` (books, chapter counts, and
-  the narration URL pattern shared with `src/audio/audioUrl.ts`; both are tested against
-  `src/audio/audio-url-cases.json`). Today and Devotional come from a snapshot the app pushes
-  (`set_car_snapshot`, built in `src/audio/car.ts`), kept in SharedPreferences. Recent and
-  Continue listening are recorded natively from what actually played.
-- **Queues from the car** go through the session, so the `ForwardingPlayer` sees
-  `setMediaItems` and marks the queue `queueOrigin = "car"` with a new `queueGeneration`. The
-  app adopts such a queue (`get_queue`) instead of reading its indexes against its own queue,
-  and does not mark anything read from it.
-- **What was heard.** Only a chapter that plays to its natural end counts. Native tells the two
-  apart by Media3's transition reason: `AUTO` (and the end of the playlist) is heard; `SEEK` is
-  a skip, whether it came from the app, the car's Next or "Next reading", or the lock screen's
-  buttons. Each state event carries `finished`, every index of the current queue generation
-  that ended naturally, so the app marks exactly those (once each), even when a run of them
-  happened while the WebView was frozen and arrives as one late event. Separately, native
-  stores every plan chapter and car devotional (`plan/…`, `dev/…`) that ends naturally,
-  whoever loaded the queue: the app may be gone, frozen, or holding a queue it adopted from the
-  car and then replaced. The app collects them when an event reports `pendingCompletions`, when
-  it returns to the foreground and at start (`take_car_completions`, then `ack_car_completions`
-  after `setChapterDone` / `setDevotionDone`; the "car" in the names is historical). Recording
-  is idempotent, so a chapter the app also marked itself does no harm. The progress checkpoint
-  was not reused: it holds one position, and completions need a queue that survives until the
-  app next runs.
-- **Buttons**: custom session commands for back 30 s, next reading and speed
-  (`CarCommands`). Previous/next move a whole chapter when the command comes from Android Auto
-  and 10 s otherwise (earphones, lock screen).
+- **Data without the app**: the Bible comes from `BibleCatalog.kt`, which builds narration
+  URLs with the same pattern as `src/audio/audioUrl.ts` (both are tested against
+  `src/audio/audio-url-cases.json`). Today and Devotional come from the app's snapshot
+  (`set_car_snapshot`, built in `src/audio/carSnapshot.ts`). Recent and Continue listening are
+  recorded natively, for streamable URLs only (never a cache file).
+- **Buttons**: back 30 s, next reading and speed (`SessionCommands`). The speed button steps
+  through the app's own speeds (`src/audio/speeds.json`). Previous and next move a whole
+  chapter when the command comes from Android Auto and 10 s otherwise (earphones, lock screen).
 - **Voice**: `onSetMediaItems` receives the search query; `RefParser.kt` reads book names,
   abbreviations, spoken ordinals and number words. "Resume" goes to `onPlaybackResumption`.
 - **Artwork**: amber tiles drawn natively and cached, served from
-  `content://<app id>.nativeaudio.artwork/...`. Tab icons are vector drawables.
+  `content://<app id>.nativeaudio.artwork/...`. The provider draws only the paths the library
+  lists. Tab icons are vector drawables.
 
-**Tests.** `AndroidAutoTest.kt` connects a Media3 `MediaBrowser` to the real session and
-browses, plays, searches and presses the custom buttons. `CarArtworkSamplesTest.kt` writes
-sample tiles to `build/car-artwork-samples/` (uploaded by CI).
+## Linux: the Rust player
+
+WebKitGTK plays `<audio>` through GStreamer and aborts the web process on a host without
+`gst-plugins-good` (see `docs/DESKTOP.md`), so on Linux the app plays in Rust.
+
+- `desktop_audio_load` returns at once and fetches in the background. A newer load abandons
+  an older fetch part-way. A play sent while a track loads is applied when it is ready.
+- The sound device opens for a track and closes on stop, on an error and at the end of a
+  track, so the device can suspend and a replaced device is found with the next track. It
+  stays open while paused.
+- The webview polls `desktop_audio_state` every 250 ms while something plays or loads, and
+  not while paused or stopped.
+- Media keys and the desktop's media widget: the app registers as an MPRIS player
+  (`org.mpris.MediaPlayer2.breadoflife`) when the first track loads, and the widget's commands
+  reach the controller as `desktop-media-control` events.
+
+## Tests
+
+- `pnpm test:audio` (`scripts/test-audio-queue.mjs`): the real controller and engines against
+  stubs of the plugin and React. Jumps, skips and heard chapters, adopting external queues,
+  stop, `dev/` ids, lazy start, change-only notifications and selectors, the completions
+  drain, and the Linux engine.
+- `pnpm test:audio-url`: the narration URL pattern, shared with the Kotlin side.
+- Robolectric (`src-tauri/plugins/native-audio/android/src/test`, run by CI after the APK
+  build): `HeadsetResumeTest` (earphone buttons and the service), `AndroidAutoTest` (a Media3
+  `MediaBrowser` against the real session), `PlaybackReviewTest` (play after an error, speech
+  focus, stop, `skip_to`, completions, artwork paths, speeds), `AudioUrlAgreementTest`, and
+  `ArtworkTilesSamplesTest`, which writes sample tiles to `build/car-artwork-samples/`.
+- `cd src-tauri && cargo test`: the Rust player's URL resolution, position handling and MP3
+  duration scan, and the MPRIS command mapping.

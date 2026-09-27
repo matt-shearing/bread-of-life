@@ -20,7 +20,7 @@ import { getAnyPlan, type Plan } from "@/data/plans";
 import { refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
-import { useAudio, playQueue, pause } from "@/audio/controller";
+import { useAudioSelector, playQueue, pause } from "@/audio/controller";
 import { buildReadingQueue } from "@/audio/queue";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
@@ -44,7 +44,8 @@ export function GuidedReaderPage() {
   const requestedReading = searchParams.has("reading") ? Number(searchParams.get("reading")) : null;
   const navigate = useNavigate();
   const { goTo, goToPortion, translation, railOpen, toggleRail, setRailOpen } = useUI();
-  const { queue, index: audioIndex, playing } = useAudio();
+  // Not the time: this whole page must not re-render twice a second while audio plays.
+  const { queue, audioIndex, playing } = useAudioSelector((s) => ({ queue: s.queue, audioIndex: s.index, playing: s.playing }));
 
   const [plan, setPlan] = useState<Plan | null | undefined>(undefined); // undefined = loading
   const [cursor, setCursor] = useState(0);

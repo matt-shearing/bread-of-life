@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Headphones, Pause, Play } from "lucide-react";
 import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip } from "@/components/ui";
 import { useUI } from "@/store/ui";
-import { useAudio, playQueue, toggle, isCurrentChapter } from "@/audio/controller";
+import { useAudioSelector, playQueue, toggle, isCurrentChapter } from "@/audio/controller";
 import { trackFromAudio, buildContinuousQueue } from "@/audio/queue";
 import { recordProgress } from "@/db/repos";
 import { cn } from "@/lib/cn";
@@ -25,7 +25,7 @@ export function AudioPlayer({
   onStart?: (label: string) => void;
 }) {
   const { ho, chapter, translation } = useUI();
-  const { playing } = useAudio();
+  const playing = useAudioSelector((s) => s.playing);
   const narrators = audio ? Object.keys(audio) : [];
   const [narrator, setNarrator] = useState(narrators[0] ?? "");
 

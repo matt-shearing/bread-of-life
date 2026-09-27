@@ -36,9 +36,10 @@ import {
   seekTo,
   setRate,
   toggle,
-  useAudio,
+  useAudioSelector,
   type Track,
 } from "@/audio/controller";
+import { speeds as SPEEDS } from "@/audio/speeds.json";
 import { groupDayReadings, type ReadingGroup } from "@/audio/readingGroups";
 import { playDevotionalReading } from "@/audio/devotionalAudio";
 import { mmdd } from "@/data/devotional";
@@ -48,6 +49,7 @@ import { bookByHo, refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { formatClock as fmt, MONTH_NAMES } from "@/lib/day";
 
 /**
  * Now Playing — the full view behind the mini-player. A full-screen sheet on a phone
@@ -62,7 +64,6 @@ import { cn } from "@/lib/cn";
  */
 
 const PARAM = "np";
-const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
 /** Open the Now Playing sheet over whatever page is showing. */
 export function useOpenNowPlaying() {
@@ -74,15 +75,6 @@ export function useOpenNowPlaying() {
     params.set(PARAM, "1");
     navigate({ pathname: location.pathname, search: `?${params}` }, { state: { npPushed: true } });
   }, [navigate, location.pathname, location.search]);
-}
-
-function fmt(s: number): string {
-  if (!Number.isFinite(s) || s < 0) s = 0;
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = Math.floor(s % 60);
-  const mm = h ? String(m).padStart(2, "0") : String(m);
-  return `${h ? `${h}:` : ""}${mm}:${String(ss).padStart(2, "0")}`;
 }
 
 function prefersReducedMotion(): boolean {
@@ -106,8 +98,7 @@ function isPhoneWidth(): boolean {
 export function NowPlaying() {
   const location = useLocation();
   const navigate = useNavigate();
-  const audio = useAudio();
-  const track = audio.queue[audio.index];
+  const track = useAudioSelector((s) => s.queue[s.index]);
   const open = new URLSearchParams(location.search).get(PARAM) === "1";
 
   const close = useCallback(() => {
@@ -132,7 +123,12 @@ export function NowPlaying() {
 }
 
 function NowPlayingSheet({ track, onClose }: { track: Track; onClose: () => void }) {
-  const { queue, index, playing, loading } = useAudio();
+  const { queue, index, playing, loading } = useAudioSelector((s) => ({
+    queue: s.queue,
+    index: s.index,
+    playing: s.playing,
+    loading: s.loading,
+  }));
   const navigate = useNavigate();
   const goTo = useUI((s) => s.goTo);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -375,40 +371,23 @@ function Cover({
   playing: boolean;
 } & HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className="relative aspect-square w-full max-w-[clamp(7.5rem,calc(100dvh-26rem),18rem)] touch-none select-none md:max-w-[clamp(10rem,calc(100dvh-25rem),22rem)] lg:max-w-[18rem] lg:touch-auto"
-      {...rest}
-    >
-      <div
-        className={cn(
-          "absolute inset-0 rounded-[28px] bg-primary/25 blur-2xl transition-opacity duration-700 dark:bg-primary/20",
-          playing ? "opacity-100" : "opacity-40",
-        )}
+    <CoverFrame playing={playing} {...rest}>
+      <BookOpen
+        className="absolute -bottom-6 -right-6 text-primary-600/10 dark:text-primary-300/10"
+        style={{ width: 150, height: 150 }}
         aria-hidden="true"
       />
-      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[28px] border border-primary-200/70 bg-gradient-to-br from-primary-50 via-primary-100 to-primary-200 text-primary-900 shadow-xl dark:border-primary-500/20 dark:from-[hsl(30_22%_17%)] dark:via-[hsl(28_20%_14%)] dark:to-[hsl(26_18%_11%)] dark:text-primary-100">
-        <BookOpen
-          className="absolute -bottom-6 -right-6 text-primary-600/10 dark:text-primary-300/10"
-          style={{ width: 150, height: 150 }}
-          aria-hidden="true"
-        />
-        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-700/80 dark:text-primary-300/80">
-          {kicker}
-        </div>
-        <div className="mt-2 px-4 text-center font-serif text-xl font-bold leading-tight">{bookName}</div>
-        <div className="mt-1 font-serif text-[5.5rem] font-bold leading-none tabular-nums text-primary-700 dark:text-primary-400">
-          {chapter}
-        </div>
-        <div className="mt-3 h-4">{playing && <EqBars className="text-primary-600 dark:text-primary-400" />}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-700/80 dark:text-primary-300/80">
+        {kicker}
       </div>
-    </div>
+      <div className="mt-2 px-4 text-center font-serif text-xl font-bold leading-tight">{bookName}</div>
+      <div className="mt-1 font-serif text-[5.5rem] font-bold leading-none tabular-nums text-primary-700 dark:text-primary-400">
+        {chapter}
+      </div>
+      <div className="mt-3 h-4">{playing && <EqBars className="text-primary-600 dark:text-primary-400" />}</div>
+    </CoverFrame>
   );
 }
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 /** The devotional's "artwork": sunrise or sunset, the date, and the key reference. */
 function DevotionalCover({
@@ -426,6 +405,29 @@ function DevotionalCover({
   const [m, d] = day.split("-").map(Number);
   const Icon = slot === "morning" ? Sunrise : Sunset;
   return (
+    <CoverFrame playing={playing} {...rest}>
+      <Icon
+        className="absolute -bottom-6 -right-6 text-primary-600/10 dark:text-primary-300/10"
+        style={{ width: 150, height: 150 }}
+        aria-hidden="true"
+      />
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-700/80 dark:text-primary-300/80">
+        <Icon style={{ width: 14, height: 14 }} aria-hidden="true" />
+        {slot === "morning" ? "Morning" : "Evening"}
+      </div>
+      <div className="mt-1 font-serif text-[5.5rem] font-bold leading-none tabular-nums text-primary-700 dark:text-primary-400">
+        {d}
+      </div>
+      <div className="font-serif text-xl font-bold leading-tight">{MONTH_NAMES[m - 1]}</div>
+      {reference && <div className="mt-1 px-4 text-center text-sm text-primary-800/80 dark:text-primary-200/80">{reference}</div>}
+      <div className="mt-2 h-4">{playing && <EqBars className="text-primary-600 dark:text-primary-400" />}</div>
+    </CoverFrame>
+  );
+}
+
+/** The square "artwork" both covers share: a warm tile with a glow while playing. */
+function CoverFrame({ playing, children, ...rest }: { playing: boolean; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+  return (
     <div
       className="relative aspect-square w-full max-w-[clamp(7.5rem,calc(100dvh-26rem),18rem)] touch-none select-none md:max-w-[clamp(10rem,calc(100dvh-25rem),22rem)] lg:max-w-[18rem] lg:touch-auto"
       {...rest}
@@ -438,21 +440,7 @@ function DevotionalCover({
         aria-hidden="true"
       />
       <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[28px] border border-primary-200/70 bg-gradient-to-br from-primary-50 via-primary-100 to-primary-200 text-primary-900 shadow-xl dark:border-primary-500/20 dark:from-[hsl(30_22%_17%)] dark:via-[hsl(28_20%_14%)] dark:to-[hsl(26_18%_11%)] dark:text-primary-100">
-        <Icon
-          className="absolute -bottom-6 -right-6 text-primary-600/10 dark:text-primary-300/10"
-          style={{ width: 150, height: 150 }}
-          aria-hidden="true"
-        />
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-700/80 dark:text-primary-300/80">
-          <Icon style={{ width: 14, height: 14 }} aria-hidden="true" />
-          {slot === "morning" ? "Morning" : "Evening"}
-        </div>
-        <div className="mt-1 font-serif text-[5.5rem] font-bold leading-none tabular-nums text-primary-700 dark:text-primary-400">
-          {d}
-        </div>
-        <div className="font-serif text-xl font-bold leading-tight">{MONTHS[m - 1]}</div>
-        {reference && <div className="mt-1 px-4 text-center text-sm text-primary-800/80 dark:text-primary-200/80">{reference}</div>}
-        <div className="mt-2 h-4">{playing && <EqBars className="text-primary-600 dark:text-primary-400" />}</div>
+        {children}
       </div>
     </div>
   );
@@ -509,7 +497,7 @@ function SkipIcon({ dir, n }: { dir: "back" | "forward"; n: number }) {
 
 /** Large scrubber: drag or click to seek, arrow keys ±5 s. Shows elapsed and remaining. */
 function Scrubber() {
-  const { currentTime, duration } = useAudio();
+  const { currentTime, duration } = useAudioSelector((s) => ({ currentTime: s.currentTime, duration: s.duration }));
   const barRef = useRef<HTMLDivElement>(null);
   const [dragAt, setDragAt] = useState<number | null>(null);
   const shown = dragAt ?? currentTime;
@@ -579,7 +567,7 @@ function Scrubber() {
 }
 
 function SpeedControl() {
-  const { rate } = useAudio();
+  const rate = useAudioSelector((s) => s.rate);
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -656,7 +644,7 @@ function useDayReadings(planId: string | null, day: number | null): DayData {
 type RowStatus = "playing" | "done" | "next" | "later" | "unread";
 
 function DayList({ track, day }: { track: Track; day: DayData }) {
-  const { queue, index } = useAudio();
+  const { queue, index } = useAudioSelector((s) => ({ queue: s.queue, index: s.index }));
   const groups = day.groups ?? [];
   const cur = track.readingGroup ?? -1;
   const doneCount = groups.filter((g) => g.items.every((i) => day.done.has(i))).length;
@@ -913,7 +901,7 @@ function UpNextList({ queue, index }: { queue: Track[]; index: number }) {
       </ol>
       {more > 0 && (
         <p className="mt-3 px-1 text-xs text-muted-foreground">
-          …and {more} more, through to Revelation.
+          …and {more} more{queue[queue.length - 1] ? `, through to ${queue[queue.length - 1].title}` : ""}.
         </p>
       )}
     </div>

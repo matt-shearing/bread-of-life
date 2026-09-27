@@ -12,6 +12,7 @@ import {
   type MisslerStatus,
 } from "@/data/missler";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
+import { isAndroid } from "@/lib/platform";
 
 interface Progress {
   done: number;
@@ -30,7 +31,6 @@ interface Progress {
  * downloads the whole library over HTTP into the app's own storage — always
  * readable, no permissions. Serve the built folder from your PC and paste the URL.
  */
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 
 /** Best-effort human-readable string for an unknown thrown value — Tauri invoke
  *  rejections are often plain objects/strings, not Error instances, so String(e)

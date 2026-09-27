@@ -15,6 +15,7 @@ import {
   type ReadingReminderState,
 } from "@/lib/readingReminders";
 import { planDailyReminders, toNative, type DailyReminder, type PlannedDaily } from "@/lib/dailyReminders";
+import { isMobile, isTauri, isTauriAndroid } from "./platform";
 
 /**
  * Notifications. Two delivery paths:
@@ -30,8 +31,7 @@ import { planDailyReminders, toNative, type DailyReminder, type PlannedDaily } f
  *   in a browser.
  */
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const isAndroid = isTauri && typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+const isAndroid = isTauriAndroid;
 /**
  * Can the OS deliver our scheduled notifications? Only on mobile. The DESKTOP build of
  * tauri-plugin-notification (2.3.x) ignores `schedule` entirely and shows the
@@ -39,8 +39,7 @@ const isAndroid = isTauri && typeof navigator !== "undefined" && /android/i.test
  * it at launch. On desktop, as in a browser, reminders come from the in-app checks
  * below while the app is open.
  */
-export const osSchedulesReminders =
-  isTauri && typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+export const osSchedulesReminders = isTauri && isMobile;
 
 type NotifPlugin = typeof import("@tauri-apps/plugin-notification");
 let _plugin: Promise<NotifPlugin> | null = null;

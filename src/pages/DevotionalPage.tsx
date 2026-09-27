@@ -15,14 +15,11 @@ import { useUI } from "@/store/ui";
 import { Button, Card, Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
 import { cn } from "@/lib/cn";
+import { MONTH_NAMES } from "@/lib/day";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 function label(key: string): string {
   const [m, d] = key.split("-").map(Number);
-  return `${MONTHS[m - 1]} ${d}`;
+  return `${MONTH_NAMES[m - 1]} ${d}`;
 }
 
 export function DevotionalPage() {

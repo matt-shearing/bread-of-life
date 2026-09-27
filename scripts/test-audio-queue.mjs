@@ -1,18 +1,19 @@
 /**
- * Regression tests for the Android (native-queue) path of the audio controller:
- * src/audio/controller.ts driving NativeEngine in src/audio/engine.ts.
+ * Regression tests for the audio controller (src/audio/controller.ts) on Android, driving
+ * NativeEngine (src/audio/engine.ts) through the typed plugin wrapper (nativeAudio.ts);
+ * the native completions drain (nativeCompletions.ts); and the Linux desktop engine.
  *
  * Run: pnpm test:audio   (or: node scripts/test-audio-queue.mjs)
  *
- * Needs Node 23.6+ (imports the TypeScript sources directly). The native plugin,
- * `@tauri-apps/api/core` and React are replaced with small in-memory stubs via a
- * module-resolution hook, so the REAL controller and engine run unchanged.
+ * Needs Node 23.6+ (imports the TypeScript sources directly). `@tauri-apps/api/core` and
+ * React are replaced with small in-memory stubs via a module-resolution hook, so the REAL
+ * controller and engines run unchanged.
  *
- * The bug this guards: after jumping in a plan day's queue, progress ticks the native
- * player captured BEFORE `set_queue` landed (still carrying the old index) reached JS
+ * The first bug this guarded: after jumping in a plan day's queue, progress ticks the
+ * native player captured BEFORE the jump landed (still carrying the old index) reached JS
  * and were taken as "the player advanced", so jumping BACK marked the chapters between
  * as read (and could complete the plan day), and jumping forward flicked the mini-player
- * back to the old chapter.
+ * back to the old chapter. Jumps are now `skip_to` within the loaded queue.
  */
 import { registerHooks } from "node:module";
 import { test } from "node:test";
@@ -20,29 +21,32 @@ import assert from "node:assert/strict";
 
 const STUBS = {
   react: "data:text/javascript," + encodeURIComponent(`
+    export function useRef(current) { return { current }; }
     export function useSyncExternalStore(subscribe, get) {
+      globalThis.__capture?.(subscribe, get);
       globalThis.__audioSubscribe?.(subscribe, get);
       return get();
     }`),
-  "tauri-plugin-native-audio-api": "data:text/javascript," + encodeURIComponent(`
-    export let listener = null;
-    export async function initialize() {}
-    export async function addStateListener(cb) { listener = cb; globalThis.__nativeEmit = cb; }
-    export async function getState() { return globalThis.__native.snapshot(); }
-    export async function play() {}
-    export async function pause() {}
-    export async function seekTo() {}
-    export async function setRate() {}
-    export async function setSource() {}`),
   "@tauri-apps/api/core": "data:text/javascript," + encodeURIComponent(`
-    export async function invoke(cmd, args) { return globalThis.__native.invoke(cmd, args); }`),
+    export async function invoke(cmd, args) {
+      globalThis.__calls.push(cmd);
+      return globalThis.__native.invoke(cmd, args);
+    }
+    export async function addPluginListener(plugin, event, cb) {
+      globalThis.__calls.push("addPluginListener:" + plugin + ":" + event);
+      globalThis.__nativeEmit = cb;
+      return { unregister() {} };
+    }`),
 };
+globalThis.__calls = [];
+const src = new URL("../src/", import.meta.url);
 
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier in STUBS) return { url: STUBS[specifier], shortCircuit: true };
-    // The audio sources import their siblings without an extension, as Vite allows.
-    if (/^\.\/\w+$/.test(specifier) && context.parentURL?.includes("/src/audio/")) {
+    // The sources import their siblings without an extension, and "@/…" for src/, as Vite allows.
+    if (specifier.startsWith("@/")) return next(new URL(`${specifier.slice(2)}.ts`, src).href, context);
+    if (/^\.\/\w+$/.test(specifier) && /\/src\/(audio|lib)\//.test(context.parentURL ?? "")) {
       return next(`${specifier}.ts`, context);
     }
     return next(specifier, context);
@@ -66,11 +70,14 @@ const native = {
   index: 0,
   gen: 0,
   finished: [],
+  playing: true,
+  time: 1,
   gate: Promise.resolve(),
   snapshot(index = native.index) {
     return {
-      status: "playing", currentTime: 1, duration: 60, isPlaying: true, buffering: false, rate: 1, index,
-      capturedAtMs: ++native.clock, queueGeneration: native.gen, queueOrigin: "app", finished: [...native.finished],
+      status: native.playing ? "playing" : "idle", currentTime: native.time, duration: 60, isPlaying: native.playing,
+      buffering: false, rate: 1, index, capturedAtMs: ++native.clock, queueGeneration: native.gen, queueOrigin: "app",
+      finished: [...native.finished],
     };
   },
   /** The current chapter ran to its end and ExoPlayer moved on by itself. */
@@ -95,8 +102,25 @@ const native = {
       native.index = args.startIndex;
       native.gen++;
       native.finished = [];
+      native.playing = true;
       globalThis.__nativeEmit(native.snapshot()); // setQueue() ends with emitState()
       return native.snapshot(); // ...and the command resolves with getState()
+    }
+    if (cmd === "plugin:native-audio|skip_to") {
+      // NativeAudioRuntime.skipTo: a seek within the playlist, refused for another queue.
+      if (args.queueGeneration != null && args.queueGeneration !== native.gen) throw "stale queue";
+      native.index = args.index;
+      native.playing = true;
+      globalThis.__nativeEmit(native.snapshot());
+      return native.snapshot();
+    }
+    if (cmd === "plugin:native-audio|stop") {
+      native.gen++;
+      native.index = 0;
+      native.finished = [];
+      native.playing = false;
+      globalThis.__nativeEmit(native.snapshot());
+      return native.snapshot();
     }
     return native.snapshot();
   },
@@ -115,6 +139,19 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
 await tick();
 c.useAudio();
 
+test("nothing native is built until the first play (no notification prompt at start)", async () => {
+  // At import the engine only listens and asks whether something already plays.
+  assert.ok(globalThis.__calls.includes("addPluginListener:native-audio:native_audio_state"));
+  assert.ok(globalThis.__calls.includes("plugin:native-audio|get_state"));
+  assert.ok(!globalThis.__calls.includes("plugin:native-audio|initialize"), JSON.stringify(globalThis.__calls));
+  c.playQueue([{ ho: "GEN", chapter: 1, src: "https://x/0.mp3", title: "Genesis 1", subtitle: "BSB" }]);
+  await tick();
+  const i = globalThis.__calls.indexOf("plugin:native-audio|initialize");
+  assert.ok(i >= 0 && i < globalThis.__calls.indexOf("plugin:native-audio|set_queue"), "initialize before the first queue");
+  c.stop();
+  await tick();
+});
+
 const tracks = [0, 1, 2, 3, 4, 5].map((i) => ({
   ho: "GEN",
   chapter: i + 1,
@@ -124,12 +161,13 @@ const tracks = [0, 1, 2, 3, 4, 5].map((i) => ({
   planReadingIndex: i,
 }));
 
-/** Run `jumpTo(to)` with set_queue held open while `during` delivers stale ticks. */
+/** Run `jumpTo(to)` with skip_to held open while stale ticks arrive. */
 async function jumpWithStaleTicks(to, staleIndexes) {
   let release;
   native.gate = new Promise((r) => (release = r));
   // Ticks the native player captured BEFORE set_queue ran: they carry the old index.
   const stale = staleIndexes.map((i) => native.snapshot(i));
+  globalThis.__calls.length = 0;
   c.jumpTo(to);
   for (const s of stale) globalThis.__nativeEmit(s);
   release();
@@ -138,6 +176,9 @@ async function jumpWithStaleTicks(to, staleIndexes) {
   // A late duplicate of a stale tick (queued while the WebView was busy) must not win either.
   for (const s of stale) globalThis.__nativeEmit(s);
   await tick();
+  // A jump moves within native's playlist; the whole queue is not sent again.
+  assert.ok(globalThis.__calls.includes("plugin:native-audio|skip_to"), JSON.stringify(globalThis.__calls));
+  assert.ok(!globalThis.__calls.includes("plugin:native-audio|set_queue"), "no set_queue for a jump");
 }
 
 test("jumping back in the queue marks nothing read and lands on the chosen chapter", async () => {
@@ -173,7 +214,7 @@ test("jumping forward never flicks the mini-player back to the old chapter", asy
   c.stop();
 });
 
-test("rapid jumps: only the newest set_queue's answer is applied", async () => {
+test("rapid jumps: the player ends on the last chapter chosen", async () => {
   const marked = [];
   c.playQueue(tracks, { startIndex: 0, onComplete: (_t, k) => marked.push(k) });
   await tick();
@@ -324,6 +365,8 @@ test("a queue started from the car is adopted, and marks nothing in the app's qu
     return orig(cmd, args);
   };
   // Its index (1) must not be read as "the day's queue advanced past Genesis 1".
+  // (Native's generation only ever rises; the car's queue is the next one.)
+  native.gen = 99;
   globalThis.__nativeEmit({ ...native.snapshot(1), queueGeneration: 99, queueOrigin: "car" });
   await tick();
   assert.deepEqual(marked, [], "nothing in the old queue was listened to");
@@ -343,4 +386,311 @@ test("native saying car completions are waiting reaches the handler", async () =
   globalThis.__nativeEmit({ ...native.snapshot(0), pendingCompletions: 2 });
   assert.equal(seen, 2);
   c.setNativeCompletionsHandler(null);
+});
+
+/* ------------------------------- review fixes (B1 B3 B9) ------------------------------- */
+
+/** Mount a hook the way React does: re-render only when its snapshot changes. */
+function mount(hook) {
+  let sub, get;
+  globalThis.__capture = (s, g) => {
+    sub = s;
+    get = g;
+  };
+  hook();
+  globalThis.__capture = null;
+  const m = { value: get(), renders: 0, unsubscribe: null };
+  m.unsubscribe = sub(() => {
+    const v = get();
+    if (!Object.is(v, m.value)) {
+      m.value = v;
+      m.renders++;
+    }
+  });
+  return m;
+}
+
+test("an unchanged native tick notifies nobody, and a selector on `playing` ignores the time", async () => {
+  native.time = 1;
+  c.playQueue(tracks, { startIndex: 0 });
+  await tick();
+  globalThis.__nativeEmit(native.snapshot(0));
+  const whole = mount(() => c.useAudio());
+  const playing = mount(() => c.useAudioSelector((s) => s.playing));
+  const clock = mount(() => c.useAudioSelector((s) => ({ t: s.currentTime, d: s.duration })));
+
+  globalThis.__nativeEmit(native.snapshot(0)); // same values; only capturedAtMs moves
+  c.setRate(c.useAudio().rate); // a patch that changes nothing
+  assert.equal(whole.renders, 0, "nothing changed, so nothing re-renders");
+
+  native.time = 2;
+  globalThis.__nativeEmit(native.snapshot(0));
+  native.time = 3;
+  globalThis.__nativeEmit(native.snapshot(0));
+  assert.equal(whole.renders, 2, "the whole state follows the time");
+  assert.equal(clock.renders, 2, "so does a component that shows it");
+  assert.equal(playing.renders, 0, "a component that shows only play/pause does not");
+
+  native.playing = false;
+  globalThis.__nativeEmit(native.snapshot(0));
+  assert.equal(playing.renders, 1);
+  assert.equal(playing.value, false);
+  for (const m of [whole, playing, clock]) m.unsubscribe();
+  native.playing = true;
+  native.time = 1;
+  c.stop();
+  await tick();
+});
+
+test("closing the player unloads native's queue, and an earphone press cannot bring it back unseen", async () => {
+  c.playQueue(tracks, { startIndex: 2 });
+  await tick();
+  globalThis.__nativeEmit(native.snapshot());
+  globalThis.__calls.length = 0;
+  c.stop();
+  await tick();
+  assert.ok(globalThis.__calls.includes("plugin:native-audio|stop"), JSON.stringify(globalThis.__calls));
+  assert.ok(!globalThis.__calls.includes("plugin:native-audio|pause"), "not just a pause");
+  let s = c.useAudio();
+  assert.equal(s.queue.length, 0);
+  assert.equal(s.index, -1);
+
+  // A late event from the old queue, and native's own "stopped" state: nothing reappears.
+  globalThis.__nativeEmit({ ...native.snapshot(2), queueGeneration: native.gen - 1, isPlaying: true, status: "playing" });
+  globalThis.__nativeEmit(native.snapshot());
+  s = c.useAudio();
+  assert.equal(s.queue.length, 0);
+  assert.equal(s.index, -1);
+  assert.equal(s.playing, false);
+
+  // An earphone press now resumes Continue listening through the session: native reports
+  // it as an external queue, which the app adopts, so the mini-player shows it.
+  const resumed = [{ mediaId: "ch/ROM/8", src: "https://audio.bible.helloao.org/api/BSB/ROM/8/audio/david.mp3", title: "Romans 8", subtitle: "BSB", ho: "ROM", chapter: 8 }];
+  const orig = native.invoke;
+  native.invoke = async (cmd, args) => {
+    if (cmd === "plugin:native-audio|get_queue") return { items: resumed, index: 0, queueGeneration: native.gen };
+    return orig(cmd, args);
+  };
+  native.gen++;
+  native.playing = true;
+  globalThis.__nativeEmit({ ...native.snapshot(0), queueOrigin: "external" });
+  await tick();
+  native.invoke = orig;
+  assert.ok(c.isCurrentChapter("ROM", 8));
+  assert.equal(c.useAudio().playing, true);
+  c.stop();
+  await tick();
+});
+
+test("a devotional started in the app carries its dev/ media id, so native records it", async () => {
+  const sent = [];
+  const orig = native.invoke;
+  native.invoke = async (cmd, args) => {
+    if (cmd === "plugin:native-audio|set_queue") sent.push(args);
+    return orig(cmd, args);
+  };
+  c.playQueue([{
+    ho: "",
+    chapter: 0,
+    src: "https://github.com/x/releases/download/devotional-audio-v1/morning/09-25.mp3",
+    title: "Morning — 25 September · Spurgeon",
+    subtitle: "Romans 3:26 · C. H. Spurgeon",
+    devotional: { devotionalId: "spurgeon-morning-evening", day: "09-25", slot: "morning", index: 0, ref: "Romans 3:26", voice: "recording" },
+  }]);
+  await tick();
+  native.invoke = orig;
+  // The same id the car uses (carDevotionalId), encoded as native's MediaIds.devotional does.
+  assert.equal(sent[0].items[0].mediaId, "dev/spurgeon-morning-evening%3A09-25%3Am");
+  const { parseCarDevotionalId } = await import("../src/audio/devotionalIds.ts");
+  assert.deepEqual(parseCarDevotionalId(decodeURIComponent(sent[0].items[0].mediaId.slice(4))), {
+    devotionalId: "spurgeon-morning-evening", day: "09-25", slot: "morning",
+  });
+  c.stop();
+  await tick();
+});
+
+test("a jump into a queue native no longer holds falls back to handing over the whole queue", async () => {
+  c.playQueue(tracks, { startIndex: 0 });
+  await tick();
+  globalThis.__nativeEmit(native.snapshot(0));
+  // The car replaced the queue a moment ago; the app has not heard yet.
+  native.gen++;
+  globalThis.__calls.length = 0;
+  c.jumpTo(4);
+  await tick();
+  await tick();
+  assert.ok(globalThis.__calls.includes("plugin:native-audio|skip_to"));
+  assert.ok(globalThis.__calls.includes("plugin:native-audio|set_queue"), JSON.stringify(globalThis.__calls));
+  assert.ok(c.isCurrentChapter("GEN", 5));
+  c.stop();
+  await tick();
+});
+
+/* ----------------------------------- completions (B5) ----------------------------------- */
+
+const { createCompletionsDrain, PENDING_THROTTLE_MS, MAX_ATTEMPTS } = await import("../src/audio/nativeCompletions.ts");
+
+function fakeStore(entries) {
+  const store = { items: entries.map((e) => ({ completedAt: 0, kind: "plan", ...e })), takes: 0, acks: [] };
+  store.deps = {
+    take: async () => {
+      store.takes++;
+      return { items: store.items.slice() };
+    },
+    ack: async (upTo) => {
+      store.acks.push(upTo);
+      store.items = store.items.filter((c) => c.seq > upTo);
+    },
+    warn: () => {},
+  };
+  return store;
+}
+
+test("one completion that keeps failing no longer blocks the others", async () => {
+  const store = fakeStore([{ seq: 1 }, { seq: 2 }, { seq: 3 }]);
+  const recorded = [];
+  let now = 0;
+  const d = createCompletionsDrain({
+    ...store.deps,
+    now: () => now,
+    record: async (c) => {
+      if (c.seq === 2) throw new Error("bad entry");
+      recorded.push(c.seq);
+    },
+  });
+  await d.drain();
+  assert.deepEqual(store.acks, [1], "what came before the failure is acknowledged");
+  for (let i = 1; i < MAX_ATTEMPTS; i++) {
+    now += PENDING_THROTTLE_MS;
+    await d.drain();
+  }
+  assert.deepEqual(store.items, [], "the bad entry is dropped after its last attempt, and the rest recorded");
+  assert.deepEqual(recorded, [1, 3]);
+});
+
+test("a burst of 'completions waiting' events drains at most twice", async () => {
+  const store = fakeStore([{ seq: 7 }]);
+  let now = 1_000_000;
+  let recordCalls = 0;
+  const d = createCompletionsDrain({ ...store.deps, now: () => now, record: async () => void recordCalls++ });
+  // 40 state events a second, each saying one is waiting (the old 25 ms tick).
+  for (let i = 0; i < 40; i++) {
+    d.onPending(1);
+    now += 25;
+    await Promise.resolve();
+  }
+  await tick();
+  assert.ok(store.takes >= 1 && store.takes <= 2, `took ${store.takes} times`);
+  assert.equal(recordCalls, 1);
+  assert.deepEqual(store.acks, [7]);
+});
+
+/* ---------------------------------- Linux desktop (B6 B7) ---------------------------------- */
+
+const { createDesktopEngineForTest } = await import("../src/audio/engine.ts");
+
+function desktop() {
+  const rust = {
+    state: { position: 0, duration: 0, playing: false, loading: false, ended: false, error: null, generation: 0 },
+    calls: [],
+  };
+  const invoke = async (cmd, args) => {
+    rust.calls.push([cmd, args]);
+    if (cmd === "desktop_audio_state") return { ...rust.state };
+    if (cmd === "desktop_audio_load") {
+      rust.state = { ...rust.state, generation: rust.state.generation + 1, loading: true, ended: false, error: null };
+    }
+    return null;
+  };
+  const engine = createDesktopEngineForTest(invoke);
+  const seen = [];
+  engine.handlers = {
+    onTime: (t) => seen.push(["time", t]),
+    onDuration: (d) => seen.push(["duration", d]),
+    onPlay: () => seen.push(["play"]),
+    onPause: () => seen.push(["pause"]),
+    onLoading: (b) => seen.push(["loading", b]),
+    onEnded: () => seen.push(["ended"]),
+  };
+  return { rust, engine, seen };
+}
+
+test("desktop: the poll turns Rust's state into handler calls, only on change", async () => {
+  const { rust, engine, seen } = desktop();
+  engine.load({ src: "https://x/JHN/1/audio/david.mp3#t=12", title: "John 1", subtitle: "BSB · David" });
+  engine.play();
+  await tick();
+  const load = rust.calls.find(([c]) => c === "desktop_audio_load");
+  assert.deepEqual(load[1], { url: "https://x/JHN/1/audio/david.mp3", startSec: 12, title: "John 1", artist: "BSB · David" });
+  assert.ok(rust.calls.findIndex(([c]) => c === "desktop_audio_play") > rust.calls.indexOf(load), "play follows load");
+
+  rust.state = { ...rust.state, loading: false, playing: true, position: 12, duration: 300 };
+  seen.length = 0;
+  await engine.poll();
+  assert.deepEqual(seen, [["duration", 300], ["loading", false], ["play"]]);
+  seen.length = 0;
+  await engine.poll();
+  assert.deepEqual(seen, [], "an unchanged poll calls nothing");
+  rust.state.position = 12.25;
+  await engine.poll();
+  assert.deepEqual(seen, [["time", 12.25]]);
+  engine.release();
+});
+
+test("desktop: 'ended' and 'error' fire once per load", async () => {
+  const { rust, engine, seen } = desktop();
+  engine.load({ src: "https://x/a.mp3", title: "A", subtitle: "" });
+  await tick();
+  rust.state = { ...rust.state, loading: false, playing: false, ended: true };
+  await engine.poll();
+  await engine.poll();
+  assert.equal(seen.filter(([e]) => e === "ended").length, 1);
+
+  engine.load({ src: "https://x/b.mp3", title: "B", subtitle: "" });
+  await tick();
+  rust.state = { ...rust.state, loading: false, error: "cannot fetch audio" };
+  seen.length = 0;
+  await engine.poll();
+  await engine.poll();
+  assert.equal(seen.filter(([e]) => e === "pause").length, 1, "one error, one pause");
+  assert.equal(seen.filter(([e]) => e === "ended").length, 0, "the new load's generation has not ended");
+  engine.release();
+});
+
+test("desktop: loads never wait for a download, so a superseded chapter does not hold up the next", async () => {
+  // Rust's desktop_audio_load returns at once and fetches in the background; the engine
+  // must not queue later commands behind anything slow either.
+  const { rust, engine } = desktop();
+  for (const n of [2, 3, 4, 5, 6]) engine.load({ src: `https://x/${n}.mp3`, title: `${n}`, subtitle: "" });
+  engine.play();
+  await tick();
+  const loads = rust.calls.filter(([c]) => c === "desktop_audio_load").map(([, a]) => a.url);
+  assert.deepEqual(loads, [2, 3, 4, 5, 6].map((n) => `https://x/${n}.mp3`));
+  assert.equal(rust.calls.at(-1)[0], "desktop_audio_play");
+  engine.release();
+});
+
+test("desktop: polling stops while paused and starts again with the next command", async () => {
+  const { rust, engine } = desktop();
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    engine.load({ src: "https://x/a.mp3", title: "A", subtitle: "" });
+    await tick();
+    rust.state = { ...rust.state, loading: false, playing: false, position: 5, duration: 60 };
+    now += 10_000; // past the grace period after the load
+    const before = rust.calls.filter(([c]) => c === "desktop_audio_state").length;
+    await engine.poll(); // paused: the poll stops itself
+    await new Promise((r) => setTimeout(r, 600));
+    const after = rust.calls.filter(([c]) => c === "desktop_audio_state").length;
+    assert.equal(after, before + 1, "no polls while paused");
+    engine.play();
+    rust.state.playing = true;
+    await new Promise((r) => setTimeout(r, 600));
+    assert.ok(rust.calls.filter(([c]) => c === "desktop_audio_state").length > after, "polling again after play");
+  } finally {
+    Date.now = realNow;
+    engine.release();
+  }
 });

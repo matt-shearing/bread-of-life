@@ -1,5 +1,5 @@
 import { Headphones, Loader2, Pause, Play } from "lucide-react";
-import { toggle, useAudio } from "@/audio/controller";
+import { toggle, useAudioSelector } from "@/audio/controller";
 import {
   SPOKEN_DEVOTIONAL_ID,
   formatListenDuration,
@@ -34,15 +34,19 @@ export function ListenButton({
 }) {
   const mode = useListenMode(dayKey, reading);
   const prep = usePrepareState();
-  const { queue, index: qi, playing, loading, currentTime, duration: audioDuration } = useAudio();
+  const { cur, playing, loading, finished } = useAudioSelector((s) => ({
+    cur: s.queue[s.index]?.devotional,
+    playing: s.playing,
+    loading: s.loading,
+    // Loaded and not yet finished: this button becomes pause/resume. Once it has played to
+    // the end, it goes back to "Listen" so a tap starts it again from the top. Worked out
+    // here so the button does not re-render on every time update.
+    finished: !s.playing && s.duration > 0 && s.currentTime >= s.duration - 0.5,
+  }));
   const slot = slotOf(reading);
   if (devotionalId !== SPOKEN_DEVOTIONAL_ID || !slot) return null;
 
   const id = `${slot}/${dayKey}`;
-  const cur = queue[qi]?.devotional;
-  // Loaded and not yet finished: this button becomes pause/resume. Once it has played to
-  // the end, it goes back to "Listen" so a tap starts it again from the top.
-  const finished = !playing && audioDuration > 0 && currentTime >= audioDuration - 0.5;
   const isThis = !!cur && cur.devotionalId === devotionalId && cur.day === dayKey && cur.index === index && !finished;
   const preparing = prep.id === id;
   const failed = prep.error?.id === id ? prep.error.message : null;

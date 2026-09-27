@@ -67,11 +67,6 @@ export class WebSpeechEngine implements AudioEngine {
   private tick: ReturnType<typeof setInterval> | null = null;
   private voice: SpeechSynthesisVoice | null = null;
 
-  // One track at a time; the controller drives the queue.
-  loadQueue() {}
-  queueNext() {}
-  queuePrev() {}
-
   constructor() {
     void speechVoices().then((v) => (this.voice = pickVoice(v)));
   }

@@ -1,16 +1,24 @@
-import { useSyncExternalStore } from "react";
-import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack, type NativeQueueItem } from "./engine";
+import { useRef, useSyncExternalStore } from "react";
+import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack, type RemoteCommand } from "./engine";
+import type { NativeQueueItem } from "./nativeAudio";
 import { WebSpeechEngine } from "./speechEngine";
+import { parseChapterAudioUrl } from "./audioUrl";
+import { carDevotionalId } from "./devotionalIds";
 import type { SpeechSegment } from "@/lib/devotionalSpeech";
 
 /**
  * A single, app-wide audio player for scripture narration. It lives OUTSIDE the React
- * tree (one `Audio()` element) so playback survives route changes and the mini-player,
- * and it drives the OS **Media Session** (lock-screen / notification transport controls,
- * like a podcast app). A queue lets a plan day play straight through all its readings.
+ * tree, so playback survives route changes, and it owns the queue, auto-advance,
+ * mark-read and the mini-player's state. The actual playing is done by an engine
+ * (engine.ts): the Android native player, the Rust player on the Linux desktop, or an
+ * `<audio>` element elsewhere, where the controller also drives the web Media Session
+ * (lock-screen / notification controls). A queue lets a plan day play straight through
+ * all its readings.
  *
  * Kept as a plain singleton + `useSyncExternalStore` (not a second Zustand store, and not
- * persisted — playback position changes too often to write to localStorage).
+ * persisted — playback position changes too often to write to localStorage). Components
+ * subscribe to just the fields they show with `useAudioSelector`, so the twice-a-second
+ * time updates only re-render what displays the time.
  */
 
 export interface Track {
@@ -70,8 +78,8 @@ const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0
 let state: AudioState = EMPTY;
 const listeners = new Set<() => void>();
 
-// The swappable playback engine (HTML5 today; native Media3 later). The queue,
-// auto-advance, mark-read and Media Session all live here in the controller.
+// The playback engine for this platform (see selectEngine). The queue, auto-advance,
+// mark-read and the web Media Session all live here in the controller.
 const mainEngine: AudioEngine = selectEngine();
 // A second engine, created on first use, for tracks read aloud by the browser's
 // speechSynthesis (a devotional with no recording on a desktop browser). The controller
@@ -161,6 +169,7 @@ function handlersFor(e: AudioEngine): EngineHandlers {
     onRate: live(h.onRate),
     onPendingCompletions: live(h.onPendingCompletions),
     onEnded: live(h.onEnded),
+    onRemote: live(h.onRemote),
   };
 }
 
@@ -171,7 +180,8 @@ const sharedHandlers: EngineHandlers = {
   },
   onPause: () => {
     set({ playing: false });
-    setMediaPlaybackState("paused");
+    // The pause that follows stop() finds nothing loaded: the OS controls should say "none".
+    setMediaPlaybackState(state.queue.length ? "paused" : "none");
   },
   onTime: (t) => {
     set({ currentTime: t });
@@ -190,7 +200,7 @@ const sharedHandlers: EngineHandlers = {
   onFinished: (indexes) => markHeard(indexes),
   // Android Auto (or the system's resume card) loaded a queue the app did not: take it as
   // ours so the mini-player and Now Playing show it. Its plan chapters are recorded by
-  // native (they reach the app through take_car_completions), so nothing marks here.
+  // native (they reach the app through take_completions), so nothing marks here.
   onExternalQueue: (items, index) => {
     const queue = items.map(trackFromNative);
     onTrackComplete = null;
@@ -207,10 +217,18 @@ const sharedHandlers: EngineHandlers = {
     // Native: the last track's natural end arrives in onFinished like every other.
     if (!engine.supportsNativeQueue) advanceQueue(); // HTML5: one track ended, step forward
   },
+  // Media keys and the desktop's media widget (Linux MPRIS, from Rust).
+  onRemote: (c: RemoteCommand) => {
+    if (c.action === "seek") seekTo(c.position);
+    else if (c.action === "seekBy") seekBy(c.offset);
+    else if (c.action === "previous") prev();
+    else if (c.action === "stop") stop();
+    else ({ play, pause, toggle, next })[c.action]();
+  },
 };
 mainEngine.handlers = handlersFor(mainEngine);
 
-/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/car.ts). */
+/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/nativeCompletions.ts). */
 let onNativeCompletions: ((count: number) => void) | null = null;
 export function setNativeCompletionsHandler(fn: ((count: number) => void) | null) {
   onNativeCompletions = fn;
@@ -219,7 +237,17 @@ export function setNativeCompletionsHandler(fn: ((count: number) => void) | null
 function emit() {
   listeners.forEach((l) => l());
 }
+/** Apply `patch`, and tell subscribers only when something in it actually changed. Native
+ *  events repeat most fields every time, and a new state object re-renders every reader. */
 function set(patch: Partial<AudioState>) {
+  let changed = false;
+  for (const k in patch) {
+    if (!Object.is(state[k as keyof AudioState], patch[k as keyof AudioState])) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return;
   state = { ...state, ...patch };
   emit();
 }
@@ -241,13 +269,16 @@ function trackFromNative(item: NativeQueueItem): Track {
 /**
  * The name the native player (and Android Auto's Recent and Continue listening) knows a
  * track by: a plan day's chapter as "plan/<plan>/<day>/<reading>/<book>/<chapter>", any
- * other Bible chapter as "ch/<book>/<chapter>". Mirrors MediaIds in CarData.kt. Other audio
- * (Missler, devotionals) has none.
+ * other Bible chapter as "ch/<book>/<chapter>", a spoken devotional as "dev/<car id>".
+ * Mirrors MediaIds in CarData.kt. Native records a plan chapter or devotional that plays to
+ * its end under this id, so it is marked done even if the app is gone by then. Missler
+ * audio has none.
  */
 export function nativeMediaId(t: Track): string | undefined {
-  const m = /\/([0-9A-Z]{3})\/(\d+)\/audio\/[A-Za-z0-9_-]+\.mp3$/.exec(t.src.split(/[?#]/)[0]);
-  const isChapter = !!m && m[1] === t.ho && Number(m[2]) === t.chapter;
-  if (!isChapter) return undefined;
+  const d = t.devotional;
+  if (d) return `dev/${encodeURIComponent(carDevotionalId(d.devotionalId, d.day, d.slot))}`;
+  const parsed = parseChapterAudioUrl(t.src);
+  if (!parsed || parsed.ho !== t.ho || parsed.chapter !== t.chapter) return undefined;
   if (t.planId != null && t.planDay != null && t.planReadingIndex != null) {
     return `plan/${encodeURIComponent(t.planId)}/${t.planDay}/${t.planReadingIndex}/${t.ho}/${t.chapter}`;
   }
@@ -335,7 +366,7 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
     heard = new Set(); // a new queue: native's list starts empty with it
     set({ index: start, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(tracks[start]);
-    engine.loadQueue(tracks.map(toEngineTrack), start);
+    engine.loadQueue?.(tracks.map(toEngineTrack), start);
   } else {
     loadIndex(start, true);
   }
@@ -353,7 +384,7 @@ export function toggle() {
 }
 export function next() {
   if (engine.supportsNativeQueue) {
-    engine.queueNext(); // native player advances; onIndexChange updates us
+    engine.queueNext?.(); // native player advances; onIndexChange updates us
     return;
   }
   if (state.index < state.queue.length - 1) loadIndex(state.index + 1, true);
@@ -367,7 +398,7 @@ export function next() {
 }
 export function prev() {
   if (engine.supportsNativeQueue) {
-    engine.queuePrev();
+    engine.queuePrev?.();
     return;
   }
   // restart current if we're >3s in, else go to the previous track
@@ -382,19 +413,18 @@ export function prev() {
 export function jumpTo(index: number) {
   if (index < 0 || index >= state.queue.length) return;
   if (engine.supportsNativeQueue) {
-    // The native player holds the whole playlist; `load` would replace it with one
-    // track. Re-hand it the same playlist starting at `index` instead. Native starts a new
-    // list of chapters heard with it (skipping ahead is not listening).
-    heard = new Set();
+    // The native player holds the whole playlist: skip within it. A skip is not listening,
+    // so nothing between is marked, and the chapters already heard stay heard.
     set({ index, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(state.queue[index]);
-    engine.loadQueue(state.queue.map(toEngineTrack), index);
+    engine.queueSkipTo?.(index, state.queue.map(toEngineTrack));
     return;
   }
   loadIndex(index, true);
 }
 
-/** Whether the active engine can change playback speed (the Linux desktop one can't). */
+/** Whether the active engine can change playback speed (the Linux desktop one can't).
+ *  The speeds offered are src/audio/speeds.json, shared with Android Auto's speed button. */
 export const canSetRate = !!mainEngine.supportsRate;
 
 export function setRate(rate: number) {
@@ -423,15 +453,51 @@ export function stop() {
 
 /* ---------------------------------- react ------------------------------------ */
 
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+/** The whole audio state. Re-renders on every change, the time included: prefer
+ *  `useAudioSelector` for anything that does not show the time. */
 export function useAudio(): AudioState {
-  return useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
-    () => state,
-    () => EMPTY,
-  );
+  return useSyncExternalStore(subscribe, () => state, () => EMPTY);
+}
+
+/** Equal when both are the same value, or objects with the same keys holding the same values. */
+export function shallowEqual<T>(a: T, b: T): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const ka = Object.keys(a) as (keyof T)[];
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && Object.is(a[k], b[k]));
+}
+
+/**
+ * Part of the audio state: the component re-renders only when what `select` returns
+ * changes (compared shallowly), not on every time update.
+ *
+ *   const { playing, loading } = useAudioSelector((s) => ({ playing: s.playing, loading: s.loading }));
+ */
+export function useAudioSelector<T>(select: (s: AudioState) => T, isEqual: (a: T, b: T) => boolean = shallowEqual): T {
+  const last = useRef<{ from: AudioState; value: T } | null>(null);
+  const read = () => {
+    const prev = last.current;
+    if (prev && prev.from === state) return prev.value;
+    const value = select(state);
+    // Same selection from a newer state: keep the old value so React sees no change.
+    const kept = prev && isEqual(prev.value, value) ? prev.value : value;
+    last.current = { from: state, value: kept };
+    return kept;
+  };
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/** For tests: how many components (or hooks) are subscribed. */
+export function audioSubscriberCount(): number {
+  return listeners.size;
 }
 
 /** Is the given chapter the one currently loaded in the player? */

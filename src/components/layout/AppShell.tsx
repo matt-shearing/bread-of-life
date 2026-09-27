@@ -7,7 +7,7 @@ import { NowPlaying } from "@/components/audio/NowPlaying";
 import { useUI } from "@/store/ui";
 import { useAutoTheme } from "@/lib/useAutoTheme";
 import { useReadingReminders } from "@/lib/useReadingReminders";
-import { registerCarDevotionalSource, useCarSync } from "@/audio/car";
+import { registerCarDevotionalSource, useCarSync } from "@/audio/carSnapshot";
 import { carDevotionals } from "@/audio/devotionalAudio";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
