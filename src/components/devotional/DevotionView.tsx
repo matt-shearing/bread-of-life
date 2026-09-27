@@ -1,10 +1,9 @@
-import type { ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BookHeart, BookOpen, Check, Sunrise, Sunset } from "lucide-react";
 import { db } from "@/db";
 import { setDevotionDone } from "@/db/repos";
 import type { Devotional, DevotionDay, DevotionReading } from "@/data/devotional";
-import { Button } from "@/components/ui";
+import { Button, Tabs } from "@/components/ui";
 import { ListenButton } from "./ListenButton";
 import { cn } from "@/lib/cn";
 import { devotionDoneId } from "@/lib/devotionDone";
@@ -35,18 +34,8 @@ export function DevotionView({
   const done = useLiveQuery(() => db.devotions.get(doneId), [doneId]);
   const isDone = !!done;
 
-  return (
-    <div>
-      {day.readings.length > 1 && (
-        <div className="mb-4 flex items-center gap-1 rounded-lg bg-muted p-1">
-          {day.readings.map((r, i) => (
-            <SlotTab key={i} active={i === index} onClick={() => setIndex(i)} icon={labelIcon(r.label)}>
-              {r.label || `Reading ${i + 1}`}
-            </SlotTab>
-          ))}
-        </div>
-      )}
-
+  const body = (
+    <>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         {reading.ref ? (
           <button
@@ -83,31 +72,20 @@ export function DevotionView({
           {dev.name} · {dev.author} · Public Domain
         </span>
       </div>
-    </div>
+    </>
   );
-}
 
-function SlotTab({
-  active,
-  onClick,
-  icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+  // Morning and Evening are tabs over the one reading panel.
+  if (day.readings.length < 2) return <div>{body}</div>;
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-        active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-      )}
+    <Tabs
+      label="Reading"
+      value={String(index)}
+      onValueChange={(v) => setIndex(Number(v))}
+      listClassName="mb-4"
+      tabs={day.readings.map((r, i) => ({ value: String(i), label: r.label || `Reading ${i + 1}`, icon: labelIcon(r.label) }))}
     >
-      {icon}
-      {children}
-    </button>
+      {body}
+    </Tabs>
   );
 }

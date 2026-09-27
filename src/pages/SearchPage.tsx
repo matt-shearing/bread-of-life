@@ -9,7 +9,7 @@ import { formatReference, parseReference } from "@/lib/reference";
 import { htmlToText } from "@/lib/htmlToText";
 import { useUI } from "@/store/ui";
 import { useOpenRef } from "@/lib/useOpenRef";
-import { Card, Input } from "@/components/ui";
+import { Card, Input, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 function escapeRe(s: string) {
@@ -180,14 +180,17 @@ export function SearchPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-8">
-        <h1 className="mb-1 font-serif text-3xl font-bold">Search</h1>
-        <p className="mb-5 text-sm text-muted-foreground">
+        <PageHeader
+          className="mb-5"
+          title="Search"
+          subtitle={<>
           Type a reference to go straight there, or words to search the {searchedName} (BSB) and your own journal,
           prayers and notes.
           {translation !== "BSB" && reading && (
             <> Verses are matched in the BSB and open in your reading translation, {reading.short}.</>
           )}
-        </p>
+        </>}
+        />
 
         <form
           role="search"

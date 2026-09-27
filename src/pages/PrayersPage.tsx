@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -46,6 +46,8 @@ import {
   DialogDescription,
   DialogTitle,
   Input,
+  PageHeader,
+  Tabs,
   Textarea,
 } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -294,17 +296,15 @@ export function PrayersPage() {
           transition: refreshing || pull === 0 ? "transform 0.2s ease" : undefined,
         }}
       >
-        <div className="mb-6 flex items-center gap-3">
-          <div>
-            <h1 className="font-serif text-3xl font-bold">Prayers</h1>
-            <p className="text-sm text-muted-foreground">
-              Bring your requests to God — and look back on what He has done.
-            </p>
-          </div>
-          <Button className="ml-auto shrink-0 whitespace-nowrap" onClick={() => setAdding(true)}>
-            <Plus size={16} /> New prayer
-          </Button>
-        </div>
+        <PageHeader
+          title="Prayers"
+          subtitle="Bring your requests to God — and look back on what He has done."
+          actions={
+            <Button onClick={() => setAdding(true)}>
+              <Plus size={16} /> New prayer
+            </Button>
+          }
+        />
 
         {/* stats — only once there is something to count */}
         {stats.active + stats.answered > 0 && (
@@ -318,20 +318,20 @@ export function PrayersPage() {
 
         <PrayThroughButton className="mb-4" />
 
-        {/* tabs */}
-        <div className="mb-4 flex gap-1 rounded-lg bg-muted p-1" role="tablist" aria-label="Prayer lists">
-          <TabBtn active={tab === "active"} onClick={() => setTab("active")}>
-            <HandHeart size={16} className="hidden min-[400px]:block" /> Active ({stats.active})
-          </TabBtn>
-          <TabBtn active={tab === "answered"} onClick={() => setTab("answered")}>
-            <Sparkles size={16} className="hidden min-[400px]:block" /> Answered ({stats.answered})
-          </TabBtn>
-          {(stats.archived > 0 || tab === "archived") && (
-            <TabBtn active={tab === "archived"} onClick={() => setTab("archived")}>
-              <Archive size={16} className="hidden min-[400px]:block" /> Archived ({stats.archived})
-            </TabBtn>
-          )}
-        </div>
+        {/* tabs (the panel below is the list; Radix Tabs gives the roles and arrow keys) */}
+        <Tabs
+          label="Prayer lists"
+          value={tab}
+          onValueChange={setTab}
+          listClassName="mb-4"
+          tabs={[
+            { value: "active" as Tab, label: `Active (${stats.active})`, icon: <HandHeart size={16} className="hidden min-[400px]:block" /> },
+            { value: "answered" as Tab, label: `Answered (${stats.answered})`, icon: <Sparkles size={16} className="hidden min-[400px]:block" /> },
+            ...(stats.archived > 0 || tab === "archived"
+              ? [{ value: "archived" as Tab, label: `Archived (${stats.archived})`, icon: <Archive size={16} className="hidden min-[400px]:block" /> }]
+              : []),
+          ]}
+        >
 
         {tab === "answered" && stats.answered > 0 && (
           <button
@@ -364,6 +364,7 @@ export function PrayersPage() {
             ))}
           </div>
         )}
+        </Tabs>
       </div>
 
       {adding && <PrayerDialog onClose={() => setAdding(false)} />}
@@ -380,23 +381,6 @@ function Stat({ label, value, accent }: { label: string; value: number | string;
       <div className={cn("text-2xl font-bold", accent && "text-success")}>{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </Card>
-  );
-}
-
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        "flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 py-2 text-sm font-medium transition-colors [@media(pointer:coarse)]:min-h-[44px]",
-        active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

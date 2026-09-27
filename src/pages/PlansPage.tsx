@@ -8,7 +8,7 @@ import { buildReadingRange, getPlans, type Plan } from "@/data/plans";
 import { BOOKS, refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { useOpenRef } from "@/lib/useOpenRef";
-import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, Input } from "@/components/ui";
+import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, Input, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 function firstIncomplete(total: number, done: number[]): number {
@@ -59,24 +59,24 @@ export function PlansPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
-        <div className="mb-1 flex items-center gap-3">
-          <h1 className="font-serif text-3xl font-bold">Reading Plans</h1>
-          <Button className="ml-auto" onClick={() => setCreating(true)}>
-            <Plus size={16} /> Create plan
-          </Button>
-        </div>
-        <p className="mb-6 text-sm text-muted-foreground">
-          Build a rhythm in the Word. Progress is tracked by chapters read — never by the clock — so you
-          can’t fall behind.
-        </p>
+        <PageHeader
+          title="Reading Plans"
+          subtitle="Build a rhythm in the Word. Progress is tracked by chapters read — never by the clock — so you can’t fall behind."
+          actions={
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={16} /> Create plan
+            </Button>
+          }
+        />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {plans.map((p) => {
             const done = byId.get(p.id)?.completedDays.length ?? 0;
             const pct = Math.round((done / p.days.length) * 100);
             return (
-              <Card
+              <button
+                type="button"
                 key={p.id}
-                className="cursor-pointer p-5 hover:border-primary/40"
+                className="rounded-lg border border-border bg-card p-5 text-left text-card-foreground shadow-card transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => setSelectedId(p.id)}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -97,7 +97,7 @@ export function PlansPage() {
                     {done}/{p.days.length}
                   </span>
                 </div>
-              </Card>
+              </button>
             );
           })}
         </div>
@@ -141,16 +141,19 @@ function PlanDetail({
           <ArrowLeft size={16} /> All plans
         </Button>
 
-        <div className="mb-6 flex items-start gap-3">
-          <div>
-            <h1 className="font-serif text-3xl font-bold">{plan.name}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {completed.length} of {plan.days.length} days complete
-              {today < plan.days.length ? ` · next up: Day ${today + 1}` : " · finished 🎉"}
-            </p>
-          </div>
-          <div className="ml-auto flex flex-col gap-2">
+        <PageHeader
+          title={plan.name}
+          subtitle={
+            <>
+              <p>{plan.description}</p>
+              <p className="mt-1 text-xs">
+                {completed.length} of {plan.days.length} days complete
+                {today < plan.days.length ? ` · next up: Day ${today + 1}` : " · finished 🎉"}
+              </p>
+            </>
+          }
+          actions={
+          <>
             {today < plan.days.length && (
               <Button
                 size="sm"
@@ -182,8 +185,9 @@ function PlanDetail({
                 <Trash2 size={15} /> Delete plan
               </Button>
             )}
-          </div>
-        </div>
+          </>
+          }
+        />
 
         <div className="space-y-2">
           {plan.days.map((readings, day) => {

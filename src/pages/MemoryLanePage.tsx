@@ -8,7 +8,7 @@ import { getChapterFor } from "@/data/bible";
 import { MEMORY_STARTERS } from "@/data/memoryStarters";
 import { useUI } from "@/store/ui";
 import { useOpenRef } from "@/lib/useOpenRef";
-import { Button, Card, CardContent } from "@/components/ui";
+import { Button, Card, CardContent, PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 const GRADES: { grade: Grade; label: string; hint: string; className: string }[] = [
@@ -163,18 +163,12 @@ export function MemoryLanePage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl px-4 py-6 md:px-8 md:py-8">
-        <div className="mb-6 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 font-serif text-3xl font-bold">
-              <Brain size={26} className="text-primary-600" />
-              Memory Lane
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Hide His word in your heart — a short daily review deck.
-            </p>
-          </div>
-          <StreakBadge streak={memoryStreak} />
-        </div>
+        <PageHeader
+          icon={<Brain size={26} className="shrink-0 text-primary-700 dark:text-primary-400" aria-hidden />}
+          title="Memory Lane"
+          subtitle="Hide His word in your heart — a short daily review deck."
+          actions={<StreakBadge streak={memoryStreak} />}
+        />
 
         {cards.length === 0 ? (
           <Card className="p-8 text-center">

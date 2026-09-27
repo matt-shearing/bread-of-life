@@ -21,7 +21,10 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  ChipGroup,
   Input,
+  PageBody,
+  PageHeader,
 } from "@/components/ui";
 import { RichEditor } from "@/components/journal/RichEditor";
 import { htmlToText } from "@/lib/htmlToText";
@@ -95,20 +98,16 @@ export function JournalPage() {
   const newDraft = useNewDraftTitle();
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 md:px-8 md:py-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div>
-            <h1 className="font-serif text-3xl font-bold">Journal</h1>
-            <p className="text-sm text-muted-foreground">Reflections, notes, and what God is teaching you.</p>
-          </div>
-          <Button
-            className="ml-auto shrink-0 whitespace-nowrap"
-            onClick={() => setDialog({ id: null, mode: "edit" })}
-          >
-            <Plus size={16} /> New entry
-          </Button>
-        </div>
+    <PageBody width="lg">
+        <PageHeader
+          title="Journal"
+          subtitle="Reflections, notes, and what God is teaching you."
+          actions={
+            <Button onClick={() => setDialog({ id: null, mode: "edit" })}>
+              <Plus size={16} /> New entry
+            </Button>
+          }
+        />
 
         {newDraft !== null && !dialog && (
           <button
@@ -153,24 +152,14 @@ export function JournalPage() {
                 />
               </div>
               {allTags.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by tag">
-                  {allTags.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      aria-pressed={tag === t}
-                      onClick={() => setTag(tag === t ? null : t)}
-                      className={cn(
-                        "inline-flex min-h-[28px] items-center rounded-full border px-2.5 py-0.5 text-xs",
-                        CHIP_TOUCH,
-                        tag === t
-                          ? "border-primary bg-primary/10 text-primary-700 dark:text-primary-300"
-                          : "border-border text-muted-foreground hover:bg-accent",
-                      )}
-                    >
-                      #{t}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ChipGroup
+                    label="Filter by tag"
+                    allowDeselect
+                    value={tag}
+                    onValueChange={setTag}
+                    options={allTags.map((t) => ({ value: t, label: `#${t}` }))}
+                  />
                   {tag && (
                     <button
                       type="button"
@@ -242,7 +231,6 @@ export function JournalPage() {
             )}
           </>
         )}
-      </div>
 
       {dialog && (
         <EntryDialog
@@ -251,7 +239,7 @@ export function JournalPage() {
           onClose={() => setDialog(null)}
         />
       )}
-    </div>
+    </PageBody>
   );
 }
 
