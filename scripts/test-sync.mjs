@@ -356,6 +356,26 @@ for (const flavor of ["v0.4.0", "current"]) {
       assert.equal((await A.db.journal.get("j1"))?.body, "alice's entry", "still on the device");
     });
 
+    test("B12: the previous account's encryption doesn't follow the device into a new account", async () => {
+      resetNet();
+      const srv = await server(flavor);
+      const A = await signedIn(srv, "carol@x.org");
+      assert.ok((await A.sync.enableE2E()).ok);
+      await A.sync.syncNow();
+      await A.sync.signOut();
+      const r = await A.sync.signup("selfhost", srv.url, "dave@x.org", "password123");
+      assert.ok(r.ok);
+      await A.sync.resolveAccountChoice("upload");
+      await A.sync.syncNow();
+      const e2e = await A.sync.getE2EStatus();
+      assert.equal(e2e.enabled, false, "carol's key is parked, not used for dave");
+      assert.equal(e2e.accountEncrypted, false);
+      // Back to carol: her key comes back.
+      await A.sync.signOut();
+      await A.sync.login("selfhost", srv.url, "carol@x.org", "password123");
+      assert.equal((await A.sync.getE2EStatus()).enabled, true);
+    });
+
     test("B14: a row from before sync existed doesn't beat a newer server copy", async () => {
       resetNet();
       const srv = await server(flavor);

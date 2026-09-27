@@ -235,6 +235,11 @@ async function authRequest(
   if (switching) {
     await db.outbox.clear(); // the previous account's queue
     await db.syncHeld.clear();
+    // The previous account's encryption marker; this account's arrives with its first pull.
+    await db.transaction("rw", db.settings, async (tx) => {
+      untracked(tx);
+      await db.settings.delete(E2E_CHECK_KEY);
+    });
   }
   if (!needsAccountChoice) {
     // First sign-in on this account: enqueue ALL existing local rows so pre-sync data
