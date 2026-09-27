@@ -166,7 +166,7 @@ export function MemoryLanePage() {
         <div className="mb-6 flex items-start justify-between gap-3">
           <div>
             <h1 className="flex items-center gap-2 font-serif text-3xl font-bold">
-              <Brain style={{ width: 26, height: 26 }} className="text-primary-600" />
+              <Brain size={26} className="text-primary-600" />
               Memory Lane
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -178,7 +178,7 @@ export function MemoryLanePage() {
 
         {cards.length === 0 ? (
           <Card className="p-8 text-center">
-            <Brain style={{ width: 40, height: 40 }} className="mx-auto mb-3 text-primary-400" />
+            <Brain size={40} className="mx-auto mb-3 text-primary-400" />
             <h2 className="font-serif text-xl font-semibold">Your memory pool is empty</h2>
             <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
               Add verses as you read — tap a verse and choose <span className="font-medium">Memorise</span> — or
@@ -186,7 +186,7 @@ export function MemoryLanePage() {
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <Button onClick={addStarters} disabled={addingStarters}>
-                <Sparkles style={{ width: 16, height: 16 }} />
+                <Sparkles size={16} />
                 {addingStarters ? "Adding…" : "Add starter verses"}
               </Button>
               <Button variant="outline" onClick={() => navigate("/bible")}>
@@ -226,7 +226,7 @@ export function MemoryLanePage() {
 
             <div className="mt-6 text-center">
               <Button variant="outline" size="sm" onClick={addStarters} disabled={addingStarters}>
-                <Sparkles style={{ width: 15, height: 15 }} />
+                <Sparkles size={15} />
                 {addingStarters ? "Adding…" : "Add starter verses"}
               </Button>
             </div>
@@ -247,7 +247,7 @@ function StreakBadge({ streak }: { streak: number }) {
           : "border-border text-muted-foreground",
       )}
     >
-      <Flame style={{ width: 16, height: 16 }} className={streak > 0 ? "text-amber-500" : ""} />
+      <Flame size={16} className={streak > 0 ? "text-amber-500" : ""} />
       {streak} day{streak === 1 ? "" : "s"}
     </div>
   );
@@ -275,7 +275,7 @@ function ReviewCard({
         <span className="font-serif text-xl font-bold text-primary-700 dark:text-primary-300">{card.reference}</span>
         {isTest && (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary-700 dark:text-primary-300">
-            <PenLine style={{ width: 12, height: 12 }} />
+            <PenLine size={12} />
             fill the blanks
           </span>
         )}
@@ -291,7 +291,7 @@ function ReviewCard({
             <p className="text-muted-foreground">Recall the verse from memory, then reveal it.</p>
           )}
           <Button className="mt-6" onClick={onReveal}>
-            <Eye style={{ width: 16, height: 16 }} />
+            <Eye size={16} />
             Reveal verse
           </Button>
         </div>
@@ -324,14 +324,14 @@ function SessionDone({ streak, reviewed, onBack }: { streak: number; reviewed: n
   return (
     <Card className="p-10 text-center">
       <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-        <Check style={{ width: 32, height: 32 }} className="text-primary-600" />
+        <Check size={32} className="text-primary-600" />
       </div>
       <h2 className="font-serif text-2xl font-bold">Well done!</h2>
       <p className="mt-2 text-muted-foreground">
         You reviewed {reviewed} verse{reviewed === 1 ? "" : "s"} today.
       </p>
       <div className="mt-4 flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400">
-        <Flame style={{ width: 18, height: 18 }} />
+        <Flame size={18} />
         <span className="font-semibold">{streak}-day streak</span>
       </div>
       <Button className="mt-6" onClick={onBack}>
@@ -366,7 +366,7 @@ function PoolRow({ card, onOpen }: { card: MemoryCard; onOpen: () => void }) {
         aria-label="Remove from Memory Lane"
         className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
       >
-        <Trash2 style={{ width: 16, height: 16 }} />
+        <Trash2 size={16} />
       </button>
     </div>
   );

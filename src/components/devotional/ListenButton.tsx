@@ -51,12 +51,11 @@ export function ListenButton({
   const preparing = prep.id === id;
   const failed = prep.error?.id === id ? prep.error.message : null;
   const duration = formatListenDuration(mode);
-  const icon = { width: 15, height: 15 };
-
+  
   if (isThis) {
     return (
       <Button size={size} variant="secondary" onClick={toggle} className={className} aria-label={playing ? "Pause the reading" : "Resume the reading"}>
-        {loading ? <Loader2 style={icon} className="animate-spin" /> : playing ? <Pause style={icon} /> : <Play style={icon} />}
+        {loading ? <Loader2 size={15} className="animate-spin" /> : playing ? <Pause size={15} /> : <Play size={15} />}
         {playing ? "Pause" : "Resume"}
       </Button>
     );
@@ -83,7 +82,7 @@ export function ListenButton({
         aria-label={title ?? "Listen"}
         data-listen-mode={mode.kind}
       >
-        {preparing ? <Loader2 style={icon} className="animate-spin" /> : <Headphones style={icon} />}
+        {preparing ? <Loader2 size={15} className="animate-spin" /> : <Headphones size={15} />}
         {preparing ? `Preparing voice… ${Math.round(prep.progress * 100)}%` : "Listen"}
         {!preparing && duration && <span className="font-normal tabular-nums text-muted-foreground">· {duration}</span>}
       </Button>

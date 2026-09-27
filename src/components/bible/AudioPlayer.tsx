@@ -69,7 +69,7 @@ export function AudioPlayer({
           onClick={() => (isThis ? toggle() : void start(narrator))}
           aria-label="Play chapter audio"
         >
-          {showPause ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+          {showPause ? <Pause size={18} /> : <Headphones size={18} />}
         </Button>
       </Tooltip>
       {narrators.length > 1 && (
@@ -92,7 +92,7 @@ export function AudioPlayer({
                   n === narrator && "bg-accent",
                 )}
               >
-                {n === narrator && <Play style={{ width: 12, height: 12 }} className="text-primary-600" />}
+                {n === narrator && <Play size={12} className="text-primary-600" />}
                 {n}
               </button>
             ))}

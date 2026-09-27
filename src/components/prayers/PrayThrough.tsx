@@ -91,7 +91,7 @@ export function PrayThroughButton({
             className,
           )}
         >
-          <HandHeart style={{ width: 20, height: 20 }} className="shrink-0 text-primary-600" />
+          <HandHeart size={20} className="shrink-0 text-primary-600" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">{label}</span>
             <span className="block text-xs text-muted-foreground">
@@ -109,7 +109,7 @@ export function PrayThroughButton({
           className={cn("whitespace-nowrap", className)}
           onClick={() => setSession(scope)}
         >
-          <HandHeart style={{ width: 16, height: 16 }} /> Pray through{scope === "due" ? ` (${n})` : ""}
+          <HandHeart size={16} /> Pray through{scope === "due" ? ` (${n})` : ""}
         </Button>
       )}
       {session && <PrayerSession scope={session} onClose={() => setSession(null)} />}
@@ -220,7 +220,7 @@ export function PrayerSession({ scope, onClose }: { scope: PrayThroughScope; onC
               aria-label={done ? "Close" : "End session"}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <X style={{ width: 20, height: 20 }} />
+              <X size={20} />
             </DialogPrimitive.Close>
             <DialogPrimitive.Title className="text-sm font-medium text-muted-foreground">
               {scope === "due" ? "Today's prayers" : "Pray through"}
@@ -294,21 +294,21 @@ export function PrayerSession({ scope, onClose }: { scope: PrayThroughScope; onC
                           Back
                         </Button>
                         <Button variant="success" className="h-12" disabled={busy} onClick={() => void onAnswered()}>
-                          <CheckCircle2 style={{ width: 18, height: 18 }} /> Mark answered
+                          <CheckCircle2 size={18} /> Mark answered
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <div className="mt-10 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                       <Button className="h-14 text-base" disabled={busy} onClick={() => void onPrayed()}>
-                        <HandHeart style={{ width: 18, height: 18 }} /> Prayed
+                        <HandHeart size={18} /> Prayed
                       </Button>
                       <Button
                         variant="outline"
                         className="h-14 border-success/40 text-success hover:bg-success/10"
                         onClick={() => setAnswering(true)}
                       >
-                        <CheckCircle2 style={{ width: 18, height: 18 }} /> Answered…
+                        <CheckCircle2 size={18} /> Answered…
                       </Button>
                       <Button variant="ghost" className="h-14" onClick={() => advance("skipped")}>
                         Skip
@@ -337,7 +337,7 @@ function Summary({
   if (total === 0) {
     return (
       <div className="text-center" data-testid="pray-through-summary">
-        <HandHeart style={{ width: 36, height: 36 }} className="mx-auto text-primary-500" />
+        <HandHeart size={36} className="mx-auto text-primary-500" />
         <p className="mt-4 text-lg font-semibold">Nothing is waiting today</p>
         <p className="mt-2 text-sm text-muted-foreground">You have prayed for everything on today's list.</p>
         <Button className="mt-8 h-12 px-8" onClick={onClose}>
@@ -354,7 +354,7 @@ function Summary({
   if (summary.left) parts.push(`${summary.left} left for later.`);
   return (
     <div className="text-center" data-testid="pray-through-summary">
-      <Sparkles style={{ width: 36, height: 36 }} className="mx-auto text-primary-500" />
+      <Sparkles size={36} className="mx-auto text-primary-500" />
       <p className="mt-4 text-xl font-semibold">Amen.</p>
       <p className="mx-auto mt-3 max-w-md text-base leading-relaxed text-muted-foreground">
         {parts.length ? parts.join(" ") : "You ended before praying for any of these. They'll be here when you're ready."}

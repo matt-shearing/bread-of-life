@@ -588,7 +588,7 @@ function ReadingReminderSettings() {
                   title="Remove this time"
                   onClick={() => setSlots(slots.filter((_, j) => j !== i))}
                 >
-                  <X style={{ width: 16, height: 16 }} />
+                  <X size={16} />
                 </Button>
               )}
             </div>

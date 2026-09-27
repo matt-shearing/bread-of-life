@@ -288,7 +288,7 @@ export function GuidedReaderPage() {
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/80 px-3 py-2.5 backdrop-blur md:px-4 md:py-3">
         <Tooltip label="Leave guided reading">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Leave guided reading">
-            <ArrowLeft style={{ width: 18, height: 18 }} />
+            <ArrowLeft size={18} />
           </Button>
         </Tooltip>
         <div className="min-w-0">
@@ -316,7 +316,7 @@ export function GuidedReaderPage() {
                         : "border-border text-muted-foreground hover:border-primary/40",
                   )}
                 >
-                  {done ? <Check style={{ width: 13, height: 13 }} /> : i + 1}
+                  {done ? <Check size={13} /> : i + 1}
                 </button>
               </Tooltip>
             );
@@ -331,7 +331,7 @@ export function GuidedReaderPage() {
               onClick={() => void listenToDay()}
               aria-label={listening ? "Pause today's readings" : "Listen to today's readings"}
             >
-              {listening ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+              {listening ? <Pause size={18} /> : <Headphones size={18} />}
             </Button>
           </Tooltip>
           <Tooltip label="Previous chapter">
@@ -342,7 +342,7 @@ export function GuidedReaderPage() {
               disabled={cursor === 0}
               aria-label="Previous chapter"
             >
-              <ChevronLeft style={{ width: 18, height: 18 }} />
+              <ChevronLeft size={18} />
             </Button>
           </Tooltip>
           <Tooltip label="Next chapter">
@@ -353,16 +353,16 @@ export function GuidedReaderPage() {
               disabled={cursor >= total - 1}
               aria-label="Next chapter"
             >
-              <ChevronRight style={{ width: 18, height: 18 }} />
+              <ChevronRight size={18} />
             </Button>
           </Tooltip>
           <TranslationPicker />
           <Tooltip label={railOpen ? "Hide study panel" : "Show study panel"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle study panel">
               {railOpen ? (
-                <PanelRightClose style={{ width: 18, height: 18 }} />
+                <PanelRightClose size={18} />
               ) : (
-                <PanelRightOpen style={{ width: 18, height: 18 }} />
+                <PanelRightOpen size={18} />
               )}
             </Button>
           </Tooltip>
@@ -404,11 +404,11 @@ export function GuidedReaderPage() {
             >
               {currentDone ? (
                 <>
-                  <ArrowRight style={{ width: 17, height: 17 }} /> Next chapter
+                  <ArrowRight size={17} /> Next chapter
                 </>
               ) : (
                 <>
-                  <Check style={{ width: 17, height: 17 }} /> Mark read &amp; next
+                  <Check size={17} /> Mark read &amp; next
                 </>
               )}
             </Button>
@@ -453,7 +453,7 @@ function DayCompleteCard({
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/70 p-6 backdrop-blur-sm">
       <Card className="max-w-md p-8 text-center shadow-card">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-success/15">
-          <CheckCircle2 style={{ width: 30, height: 30 }} className="text-success" />
+          <CheckCircle2 size={30} className="text-success" />
         </div>
         <h2 className="font-serif text-2xl font-bold">Day {day + 1} complete</h2>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -461,7 +461,7 @@ function DayCompleteCard({
           done — a faithful day in the Word. See you tomorrow.
         </p>
         <div className="mt-5 flex items-center justify-center gap-2">
-          <Sparkles style={{ width: 15, height: 15 }} className="text-primary-500" />
+          <Sparkles size={15} className="text-primary-500" />
           <Button onClick={onLeave}>Back to plan</Button>
         </div>
       </Card>

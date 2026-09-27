@@ -62,7 +62,7 @@ export function PlansPage() {
         <div className="mb-1 flex items-center gap-3">
           <h1 className="font-serif text-3xl font-bold">Reading Plans</h1>
           <Button className="ml-auto" onClick={() => setCreating(true)}>
-            <Plus style={{ width: 16, height: 16 }} /> Create plan
+            <Plus size={16} /> Create plan
           </Button>
         </div>
         <p className="mb-6 text-sm text-muted-foreground">
@@ -138,7 +138,7 @@ function PlanDetail({
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-4 py-6 md:px-8 md:py-8">
         <Button variant="ghost" size="sm" className="mb-4 -ml-2" onClick={onBack}>
-          <ArrowLeft style={{ width: 16, height: 16 }} /> All plans
+          <ArrowLeft size={16} /> All plans
         </Button>
 
         <div className="mb-6 flex items-start gap-3">
@@ -159,11 +159,11 @@ function PlanDetail({
                   navigate(`/guided/${plan.id}/${today}`);
                 }}
               >
-                <Play style={{ width: 15, height: 15 }} /> Start today's reading
+                <Play size={15} /> Start today's reading
               </Button>
             )}
             <Button variant={isActive ? "secondary" : "outline"} size="sm" onClick={makeActive}>
-              <Star style={{ width: 15, height: 15 }} /> {isActive ? "Active plan" : "Set as active"}
+              <Star size={15} /> {isActive ? "Active plan" : "Set as active"}
             </Button>
             {started && (
               <Button
@@ -174,12 +174,12 @@ function PlanDetail({
                   if (isActive) setActivePlan(null);
                 }}
               >
-                <RotateCcw style={{ width: 15, height: 15 }} /> Reset
+                <RotateCcw size={15} /> Reset
               </Button>
             )}
             {isCustom && (
               <Button variant="ghost" size="sm" onClick={onDelete}>
-                <Trash2 style={{ width: 15, height: 15 }} /> Delete plan
+                <Trash2 size={15} /> Delete plan
               </Button>
             )}
           </div>
@@ -206,7 +206,7 @@ function PlanDetail({
                     isDone ? "border-success bg-success text-success-foreground" : "border-border",
                   )}
                 >
-                  {isDone && <Check style={{ width: 15, height: 15 }} />}
+                  {isDone && <Check size={15} />}
                 </button>
                 <div className="w-14 shrink-0 text-sm font-semibold text-muted-foreground">Day {day + 1}</div>
                 <div className="flex flex-1 flex-wrap gap-1.5">
@@ -224,10 +224,10 @@ function PlanDetail({
                 </div>
                 {isToday && !isDone && (
                   <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-primary-600 sm:flex">
-                    <BookOpen style={{ width: 13, height: 13 }} /> Today
+                    <BookOpen size={13} /> Today
                   </span>
                 )}
-                {isDone && <CheckCircle2 style={{ width: 16, height: 16 }} className="shrink-0 text-success" />}
+                {isDone && <CheckCircle2 size={16} className="shrink-0 text-success" />}
               </Card>
             );
           })}

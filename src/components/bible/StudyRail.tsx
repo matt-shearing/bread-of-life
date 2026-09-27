@@ -91,7 +91,7 @@ export function StudyRail() {
                 showLabel={allLabels || active}
                 label={t.label}
                 onClick={() => setRailTab(t.id)}
-                icon={<Icon style={{ width: 16, height: 16 }} />}
+                icon={<Icon size={16} />}
               />
             );
           })}
@@ -103,7 +103,7 @@ export function StudyRail() {
           title="Close study panel"
           className="flex w-11 shrink-0 items-center justify-center border-l border-border text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          <X style={{ width: 18, height: 18 }} />
+          <X size={18} />
         </button>
       </div>
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
@@ -492,9 +492,9 @@ function ReferencesPanel() {
             >
               <div className="flex items-center gap-1.5">
                 {r.kind === "journal" ? (
-                  <NotebookPen style={{ width: 13, height: 13 }} className="shrink-0 text-primary-600" />
+                  <NotebookPen size={13} className="shrink-0 text-primary-600" />
                 ) : (
-                  <HandHeart style={{ width: 13, height: 13 }} className="shrink-0 text-rose-500" />
+                  <HandHeart size={13} className="shrink-0 text-rose-500" />
                 )}
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.title}</span>
                 <span className="shrink-0 text-[11px] text-muted-foreground">

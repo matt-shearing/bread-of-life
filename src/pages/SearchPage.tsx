@@ -200,7 +200,7 @@ export function SearchPage() {
         >
           <div className="relative min-w-0 flex-1">
             <SearchIcon
-              style={{ width: 18, height: 18 }}
+              size={18}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
             <Input
@@ -249,12 +249,12 @@ export function SearchPage() {
             onClick={goRef}
             className="mb-5 flex w-full items-center gap-3 rounded-lg border border-primary/40 bg-primary/10 p-4 text-left transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <BookOpen style={{ width: 20, height: 20 }} className="shrink-0 text-primary-700 dark:text-primary-300" />
+            <BookOpen size={20} className="shrink-0 text-primary-700 dark:text-primary-300" />
             <span className="min-w-0 flex-1">
               <span className="block font-serif text-lg font-bold">Go to {formatReference(ref)}</span>
               <span className="block text-xs text-muted-foreground">Press Enter to open it in the reader</span>
             </span>
-            <ArrowRight style={{ width: 18, height: 18 }} className="shrink-0 text-muted-foreground" />
+            <ArrowRight size={18} className="shrink-0 text-muted-foreground" />
           </button>
         )}
 
@@ -278,7 +278,7 @@ export function SearchPage() {
                       onClick={() => setQuery(r)}
                       className="flex min-h-10 items-center gap-1.5 rounded-full border border-border px-3 text-sm hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <Clock style={{ width: 13, height: 13 }} className="text-muted-foreground" />
+                      <Clock size={13} className="text-muted-foreground" />
                       {r}
                     </button>
                   ))}
@@ -319,11 +319,11 @@ export function SearchPage() {
                 >
                   <div className="flex items-center gap-1.5 text-sm font-medium">
                     {m.kind === "journal" ? (
-                      <NotebookPen style={{ width: 14, height: 14 }} className="shrink-0 text-primary-600" />
+                      <NotebookPen size={14} className="shrink-0 text-primary-600" />
                     ) : m.kind === "prayer" ? (
-                      <HandHeart style={{ width: 14, height: 14 }} className="shrink-0 text-rose-500" />
+                      <HandHeart size={14} className="shrink-0 text-rose-500" />
                     ) : (
-                      <StickyNote style={{ width: 14, height: 14 }} className="shrink-0 text-primary-600" />
+                      <StickyNote size={14} className="shrink-0 text-primary-600" />
                     )}
                     <span className="truncate">
                       <Snippet text={m.title} terms={terms} />
@@ -355,7 +355,7 @@ export function SearchPage() {
                   onClick={() => setScope("all")}
                   className="ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                 >
-                  <X style={{ width: 12, height: 12 }} /> Whole Bible
+                  <X size={12} /> Whole Bible
                 </button>
               )}
             </div>

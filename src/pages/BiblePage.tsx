@@ -52,12 +52,12 @@ export function BiblePage() {
         <div className="flex items-center gap-1">
           <Tooltip label="Previous chapter">
             <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Previous chapter">
-              <ChevronLeft style={{ width: 18, height: 18 }} />
+              <ChevronLeft size={18} />
             </Button>
           </Tooltip>
           <Tooltip label="Next chapter">
             <Button variant="ghost" size="icon" onClick={() => step(1)} aria-label="Next chapter">
-              <ChevronRight style={{ width: 18, height: 18 }} />
+              <ChevronRight size={18} />
             </Button>
           </Tooltip>
         </div>
@@ -72,7 +72,7 @@ export function BiblePage() {
                   readingLayout === "lines" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Rows3 style={{ width: 16, height: 16 }} />
+                <Rows3 size={16} />
               </button>
             </Tooltip>
             <Tooltip label="Flowing paragraphs">
@@ -84,13 +84,13 @@ export function BiblePage() {
                   readingLayout === "flowing" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <AlignLeft style={{ width: 16, height: 16 }} />
+                <AlignLeft size={16} />
               </button>
             </Tooltip>
           </div>
           <Tooltip label="Search scripture">
             <Button variant="ghost" size="icon" onClick={() => navigate("/search")} aria-label="Search">
-              <Search style={{ width: 18, height: 18 }} />
+              <Search size={18} />
             </Button>
           </Tooltip>
           <TranslationPicker />
@@ -100,9 +100,9 @@ export function BiblePage() {
           <Tooltip label={railOpen ? "Hide commentary" : "Show commentary"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle commentary">
               {railOpen ? (
-                <PanelRightClose style={{ width: 18, height: 18 }} />
+                <PanelRightClose size={18} />
               ) : (
-                <PanelRightOpen style={{ width: 18, height: 18 }} />
+                <PanelRightOpen size={18} />
               )}
             </Button>
           </Tooltip>

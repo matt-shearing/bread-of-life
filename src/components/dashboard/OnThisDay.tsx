@@ -46,7 +46,7 @@ export function OnThisDay() {
   return (
     <Card className="mb-6 p-5" data-testid="on-this-day">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-        <History style={{ width: 16, height: 16 }} className="text-primary-600" /> On this day
+        <History size={16} className="text-primary-600" /> On this day
       </div>
       <div className="space-y-1">
         {shown.map((m) => (
@@ -67,7 +67,7 @@ export function OnThisDay() {
               )}
             </div>
             <ChevronRight
-              style={{ width: 16, height: 16 }}
+              size={16}
               className="mt-1 shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100"
             />
           </button>

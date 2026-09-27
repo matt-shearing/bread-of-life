@@ -10,9 +10,9 @@ import { cn } from "@/lib/cn";
 import { devotionDoneId } from "@/lib/devotionDone";
 
 function labelIcon(label: string) {
-  if (label === "Morning") return <Sunrise style={{ width: 15, height: 15 }} />;
-  if (label === "Evening") return <Sunset style={{ width: 15, height: 15 }} />;
-  return <BookHeart style={{ width: 15, height: 15 }} />;
+  if (label === "Morning") return <Sunrise size={15} />;
+  if (label === "Evening") return <Sunset size={15} />;
+  return <BookHeart size={15} />;
 }
 
 export function DevotionView({
@@ -59,7 +59,7 @@ export function DevotionView({
                 : "bg-muted text-muted-foreground",
             )}
           >
-            <BookOpen style={{ width: 14, height: 14 }} />
+            <BookOpen size={14} />
             {reading.ref}
           </button>
         ) : (
@@ -76,7 +76,7 @@ export function DevotionView({
 
       <div className="mt-5 flex items-center gap-2">
         <Button variant={isDone ? "secondary" : "success"} onClick={() => setDevotionDone(doneId, !isDone)}>
-          <Check style={{ width: 16, height: 16 }} />
+          <Check size={16} />
           {isDone ? "Completed" : "Mark complete"}
         </Button>
         <span className="text-xs text-muted-foreground">

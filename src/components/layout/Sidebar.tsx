@@ -1,22 +1,5 @@
 import { NavLink } from "react-router-dom";
-import {
-  BookHeart,
-  BookMarked,
-  BookOpen,
-  Brain,
-  CalendarCheck,
-  HandHeart,
-  Home,
-  Moon,
-  NotebookPen,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Search,
-  Settings,
-  Sparkles,
-  Sun,
-  Wheat,
-} from "lucide-react";
+import { Moon, PanelLeftClose, PanelLeftOpen, Sun, Wheat } from "lucide-react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { ReactNode } from "react";
 import { db } from "@/db";
@@ -25,19 +8,7 @@ import { cn } from "@/lib/cn";
 import { useSidebarCollapsed } from "@/lib/layout";
 import { MOD_K } from "@/lib/shortcuts";
 import { Button, Tooltip } from "@/components/ui";
-
-const NAV = [
-  { to: "/", label: "Dashboard", icon: Home, end: true },
-  { to: "/bible", label: "Bible", icon: BookOpen, end: false },
-  { to: "/commentary", label: "Commentary", icon: BookMarked, end: false },
-  { to: "/search", label: "Search", icon: Search, end: false },
-  { to: "/plans", label: "Plans", icon: CalendarCheck, end: false },
-  { to: "/devotional", label: "Devotional", icon: BookHeart, end: false },
-  { to: "/memory", label: "Memory Lane", icon: Brain, end: false },
-  { to: "/prayers", label: "Prayers", icon: HandHeart, end: false },
-  { to: "/journal", label: "Journal", icon: NotebookPen, end: false },
-  { to: "/companion", label: "Companion", icon: Sparkles, end: false },
-];
+import { SETTINGS_NAV, SIDEBAR_NAV } from "./nav";
 
 /** Wrap a collapsed-rail control in a tooltip so labels stay discoverable. */
 function MaybeTooltip({ show, label, children }: { show: boolean; label: string; children: ReactNode }) {
@@ -76,16 +47,16 @@ export function Sidebar() {
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? (
-              <PanelLeftOpen style={{ width: 18, height: 18 }} />
+              <PanelLeftOpen size={18} />
             ) : (
-              <PanelLeftClose style={{ width: 18, height: 18 }} />
+              <PanelLeftClose size={18} />
             )}
           </Button>
         </MaybeTooltip>
       </div>
 
       <nav className={cn("flex flex-1 flex-col gap-1", collapsed ? "px-2" : "px-3")}>
-        {NAV.map(({ to, label, icon: Icon, end }) => (
+        {SIDEBAR_NAV.map(({ to, label, icon: Icon, end }) => (
           <MaybeTooltip key={to} show={collapsed} label={label}>
             <NavLink
               to={to}
@@ -103,15 +74,15 @@ export function Sidebar() {
                 collapsed ? "h-10 justify-center" : "gap-3 px-3 py-2.5",
               )}
             >
-              <Icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
+              <Icon size={18} className="shrink-0" aria-hidden />
               {!collapsed && <span className="flex-1">{label}</span>}
-              {!collapsed && label === "Search" && (
+              {!collapsed && to === "/search" && (
                 // Discoverability for the palette; hidden on touch screens (no keyboard).
                 <kbd className="hidden rounded border border-border px-1.5 text-[10px] font-normal text-muted-foreground [@media(hover:hover)]:inline">
                   {MOD_K}
                 </kbd>
               )}
-              {label === "Prayers" &&
+              {to === "/prayers" &&
                 activePrayers > 0 &&
                 (collapsed ? (
                   <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
@@ -131,9 +102,9 @@ export function Sidebar() {
           collapsed ? "flex-col items-center gap-1 px-2" : "items-center justify-between px-3",
         )}
       >
-        <MaybeTooltip show={collapsed} label="Settings">
+        <MaybeTooltip show={collapsed} label={SETTINGS_NAV.label}>
           <NavLink
-            to="/settings"
+            to={SETTINGS_NAV.to}
             // Plain-string className (see the nav NavLink above): the collapsed Tooltip
             // Slot would stringify a function className. `active` class via react-router.
             className={cn(
@@ -142,8 +113,8 @@ export function Sidebar() {
               collapsed ? "h-10 w-10 justify-center" : "gap-2 px-3 py-2",
             )}
           >
-            <Settings style={{ width: 18, height: 18 }} />
-            {!collapsed && "Settings"}
+            <SETTINGS_NAV.icon size={18} aria-hidden />
+            {!collapsed && SETTINGS_NAV.label}
           </NavLink>
         </MaybeTooltip>
         {/* A quick Light<->Dark PIN, keyed off what is on screen rather than the
@@ -151,9 +122,9 @@ export function Sidebar() {
         <Tooltip label={resolvedTheme === "light" ? "Dark mode" : "Light mode"}>
           <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {resolvedTheme === "light" ? (
-              <Moon style={{ width: 18, height: 18 }} />
+              <Moon size={18} />
             ) : (
-              <Sun style={{ width: 18, height: 18 }} />
+              <Sun size={18} />
             )}
           </Button>
         </Tooltip>

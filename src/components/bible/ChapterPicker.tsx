@@ -66,7 +66,7 @@ export function ChapterPicker() {
       <PopoverTrigger asChild>
         <Button variant="outline" className="gap-1.5 whitespace-nowrap font-serif text-base" aria-label={`Choose book and chapter, now ${refLabel(ho, chapter)}`}>
           {refLabel(ho, chapter)}
-          <ChevronDown style={{ width: 16, height: 16 }} className="opacity-60" />
+          <ChevronDown size={16} className="opacity-60" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -98,7 +98,7 @@ export function ChapterPicker() {
               className="mt-2 flex w-full items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-left text-sm font-medium text-primary-700 hover:bg-primary/15 dark:text-primary-300"
             >
               Go to {formatReference(ref)}
-              <CornerDownLeft style={{ width: 14, height: 14 }} />
+              <CornerDownLeft size={14} />
             </button>
           )}
         </form>

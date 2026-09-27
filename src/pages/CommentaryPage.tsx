@@ -59,12 +59,12 @@ export function CommentaryPage() {
         <div className="flex items-center gap-1">
           <Tooltip label="Previous chapter">
             <Button variant="ghost" size="icon" onClick={() => step(-1)} disabled={!canPrev} aria-label="Previous chapter">
-              <ChevronLeft style={{ width: 18, height: 18 }} />
+              <ChevronLeft size={18} />
             </Button>
           </Tooltip>
           <Tooltip label="Next chapter">
             <Button variant="ghost" size="icon" onClick={() => step(1)} disabled={!canNext} aria-label="Next chapter">
-              <ChevronRight style={{ width: 18, height: 18 }} />
+              <ChevronRight size={18} />
             </Button>
           </Tooltip>
         </div>
@@ -122,7 +122,7 @@ export function CommentaryPage() {
                   ))}
                   {b.xrefs && b.xrefs.length > 0 && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <Link2 style={{ width: 13, height: 13 }} className="text-muted-foreground" />
+                      <Link2 size={13} className="text-muted-foreground" />
                       {b.xrefs.map((x) => {
                         const p = parseOsis(x.split("-")[0]);
                         if (!p) return null;

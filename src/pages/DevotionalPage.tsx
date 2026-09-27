@@ -80,7 +80,7 @@ export function DevotionalPage() {
               <button className="text-left">
                 <h1 className="flex items-center gap-1.5 font-serif text-3xl font-bold">
                   {dev.name}
-                  <ChevronDown style={{ width: 20, height: 20 }} className="opacity-60" />
+                  <ChevronDown size={20} className="opacity-60" />
                 </h1>
                 <p className="text-sm text-muted-foreground">Daily readings by {dev.author}</p>
               </button>
@@ -102,7 +102,7 @@ export function DevotionalPage() {
                     <div className="font-medium">{d.name}</div>
                     <div className="text-xs text-muted-foreground">{d.author}</div>
                   </div>
-                  {d.id === devotionalId && <Check style={{ width: 15, height: 15 }} className="text-primary-600" />}
+                  {d.id === devotionalId && <Check size={15} className="text-primary-600" />}
                 </button>
               ))}
             </PopoverContent>
@@ -110,11 +110,11 @@ export function DevotionalPage() {
 
           <div className="ml-auto flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={() => step(-1)} aria-label="Previous day">
-              <ChevronLeft style={{ width: 18, height: 18 }} />
+              <ChevronLeft size={18} />
             </Button>
             <span className="min-w-28 text-center text-sm font-medium">{label(dayKey)}</span>
             <Button variant="ghost" size="icon" onClick={() => step(1)} aria-label="Next day">
-              <ChevronRight style={{ width: 18, height: 18 }} />
+              <ChevronRight size={18} />
             </Button>
           </div>
         </div>

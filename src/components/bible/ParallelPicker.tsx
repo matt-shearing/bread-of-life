@@ -20,7 +20,7 @@ export function ParallelPicker() {
             className="gap-1"
             aria-label="Compare translations"
           >
-            <Columns2 style={{ width: 16, height: 16 }} />
+            <Columns2 size={16} />
             {active && <span className="text-xs font-semibold">{translationById(parallel)?.short}</span>}
           </Button>
         </PopoverTrigger>
@@ -40,7 +40,7 @@ export function ParallelPicker() {
           )}
         >
           <span className="flex-1 text-muted-foreground">Off (single column)</span>
-          {!parallel && <Check style={{ width: 15, height: 15 }} className="text-primary-600" />}
+          {!parallel && <Check size={15} className="text-primary-600" />}
         </button>
         {AVAILABLE_TRANSLATIONS.filter((t) => t.id !== translation).map((t) => (
           <button
@@ -56,7 +56,7 @@ export function ParallelPicker() {
           >
             <span className="w-10 shrink-0 text-xs font-semibold text-primary-600">{t.short}</span>
             <span className="flex-1">{t.name}</span>
-            {t.id === parallel && <Check style={{ width: 15, height: 15 }} className="text-primary-600" />}
+            {t.id === parallel && <Check size={15} className="text-primary-600" />}
           </button>
         ))}
       </PopoverContent>

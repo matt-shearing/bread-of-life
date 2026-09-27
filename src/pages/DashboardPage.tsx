@@ -55,7 +55,7 @@ function TodaysPlan() {
   if (!activePlanId || !plan) {
     return (
       <Card className="mb-6 flex items-center gap-3 p-5">
-        <CalendarCheck style={{ width: 22, height: 22 }} className="text-primary-600" />
+        <CalendarCheck size={22} className="text-primary-600" />
         <div>
           <div className="font-semibold">Reading plan</div>
           <div className="text-sm text-muted-foreground">Start a plan to build a daily rhythm in the Word.</div>
@@ -78,7 +78,7 @@ function TodaysPlan() {
   return (
     <Card className="mb-6 p-5">
       <div className="flex items-center gap-2">
-        <CalendarCheck style={{ width: 16, height: 16 }} className="text-primary-600" />
+        <CalendarCheck size={16} className="text-primary-600" />
         <span className="text-sm font-semibold text-muted-foreground">Today’s Plan · {plan.name}</span>
         <span className="ml-auto text-xs text-muted-foreground">
           {completed.length}/{plan.days.length} · {pct}%
@@ -103,10 +103,10 @@ function TodaysPlan() {
           ))}
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" onClick={() => navigate(`/guided/${activePlanId}/${today}`)}>
-              <Play style={{ width: 15, height: 15 }} /> Start today's reading
+              <Play size={15} /> Start today's reading
             </Button>
             <Button size="sm" variant="success" onClick={() => setDayDone(activePlanId, today, true)}>
-              <Check style={{ width: 15, height: 15 }} /> Mark done
+              <Check size={15} /> Mark done
             </Button>
           </div>
         </div>
@@ -186,7 +186,7 @@ export function DashboardPage() {
         <Card className="mb-6 overflow-hidden border-none bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-card">
           <CardContent className="p-7">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-white/80">
-              <Sparkles style={{ width: 16, height: 16 }} /> Verse of the Day
+              <Sparkles size={16} /> Verse of the Day
             </div>
             {votd ? (
               <>
@@ -194,7 +194,7 @@ export function DashboardPage() {
                 <div className="mt-3 flex items-center justify-between">
                   <span className="font-medium text-white/90">{refLabel(votd.ho, votd.chapter, votd.verse)} · BSB</span>
                   <Button variant="secondary" size="sm" onClick={openVotd} className="bg-white/20 text-white hover:bg-white/30">
-                    Read in context <ArrowRight style={{ width: 15, height: 15 }} />
+                    Read in context <ArrowRight size={15} />
                   </Button>
                 </div>
               </>
@@ -213,7 +213,7 @@ export function DashboardPage() {
         {duePrayers.length > 0 && (
           <Card className="mb-6 border-primary/30 p-5">
             <div className="mb-3 flex items-center gap-2">
-              <BellRing style={{ width: 16, height: 16 }} className="text-primary-600" />
+              <BellRing size={16} className="text-primary-600" />
               <span className="text-sm font-semibold">Pray today</span>
               <span className="ml-auto text-xs text-muted-foreground">
                 {duePrayers.length} to lift up
@@ -222,7 +222,7 @@ export function DashboardPage() {
             <div className="space-y-1.5">
               {duePrayers.slice(0, 6).map((p) => (
                 <div key={p.id} className="flex items-center gap-2">
-                  <HandHeart style={{ width: 14, height: 14 }} className="shrink-0 text-primary-500" />
+                  <HandHeart size={14} className="shrink-0 text-primary-500" />
                   <span className="flex-1 truncate text-sm">{p.title}</span>
                   <Button size="sm" variant="secondary" onClick={() => prayedFor(p.id)}>
                     Prayed
@@ -237,7 +237,7 @@ export function DashboardPage() {
           {/* Continue reading */}
           <Card className="p-5">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <BookOpen style={{ width: 16, height: 16 }} /> {lastRead ? "Continue reading" : "Start reading"}
+              <BookOpen size={16} /> {lastRead ? "Continue reading" : "Start reading"}
             </div>
             <div className="font-serif text-lg font-bold">
               {lastRead ? refLabel(lastRead.ho, lastRead.chapter, lastRead.verse > 1 ? lastRead.verse : undefined) : "John 1"}
@@ -259,7 +259,7 @@ export function DashboardPage() {
           {/* Streak */}
           <Card className="p-5">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <Flame style={{ width: 16, height: 16 }} /> Reading streak
+              <Flame size={16} /> Reading streak
             </div>
             <div className="text-2xl font-bold">
               {streak} {streak === 1 ? "day" : "days"}
@@ -287,7 +287,7 @@ export function DashboardPage() {
           {/* Prayers */}
           <Card className="p-5">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <HandHeart style={{ width: 16, height: 16 }} /> Prayers
+              <HandHeart size={16} /> Prayers
             </div>
             <div className="flex gap-4">
               <div>
@@ -308,7 +308,7 @@ export function DashboardPage() {
         {/* Recent journal */}
         <div className="mt-6">
           <div className="mb-3 flex items-center gap-2">
-            <NotebookPen style={{ width: 18, height: 18 }} className="text-primary-600" />
+            <NotebookPen size={18} className="text-primary-600" />
             <h2 className="font-semibold">Recent journal</h2>
             <Button variant="ghost" size="sm" className="ml-auto" onClick={() => navigate("/journal")}>
               View all
@@ -355,7 +355,7 @@ function SyncNudge() {
 
   return (
     <div className="mt-8 flex items-center gap-3 rounded-xl border border-border/70 bg-card/60 px-4 py-3 text-sm backdrop-blur">
-      <Cloud style={{ width: 18, height: 18 }} className="shrink-0 text-primary-500" />
+      <Cloud size={18} className="shrink-0 text-primary-500" />
       <div className="min-w-0 flex-1">
         <span className="font-medium">Keep your prayers &amp; journal safe across devices.</span>{" "}
         <span className="text-muted-foreground">Set up optional sync — it's free and works offline too.</span>
@@ -368,7 +368,7 @@ function SyncNudge() {
         className="rounded-md p-1 text-muted-foreground hover:text-foreground"
         onClick={dismiss}
       >
-        <X style={{ width: 16, height: 16 }} />
+        <X size={16} />
       </button>
     </div>
   );
@@ -407,7 +407,7 @@ function DevotionTile() {
     <>
       <Card className="mb-6 p-5">
         <div className="mb-1 flex items-center gap-2">
-          <Icon style={{ width: 16, height: 16 }} className="text-primary-600" />
+          <Icon size={16} className="text-primary-600" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold">{dev.name}</div>
             <div className="text-xs text-muted-foreground">
@@ -420,7 +420,7 @@ function DevotionTile() {
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{snippet}</p>
         <div className="mt-3 flex flex-wrap items-start gap-2">
           <Button size="sm" onClick={() => setOpen(true)}>
-            <BookOpen style={{ width: 15, height: 15 }} /> Read now
+            <BookOpen size={15} /> Read now
           </Button>
           <ListenButton devotionalId={dev.id} dayKey={key} index={index} reading={reading} />
           <Button size="sm" variant="ghost" onClick={() => navigate("/devotional")}>
@@ -453,9 +453,9 @@ function DevotionTile() {
 function BgToggle() {
   const { dashboardBg, setDashboardBg } = useUI();
   const opts = [
-    { key: "plain" as const, label: "Plain", icon: <Ban style={{ width: 15, height: 15 }} /> },
-    { key: "still" as const, label: "Scene", icon: <Image style={{ width: 15, height: 15 }} /> },
-    { key: "animated" as const, label: "Living", icon: <Wind style={{ width: 15, height: 15 }} /> },
+    { key: "plain" as const, label: "Plain", icon: <Ban size={15} /> },
+    { key: "still" as const, label: "Scene", icon: <Image size={15} /> },
+    { key: "animated" as const, label: "Living", icon: <Wind size={15} /> },
   ];
   return (
     <div className="ml-auto flex items-center rounded-lg border border-border bg-card/70 p-0.5 backdrop-blur">
