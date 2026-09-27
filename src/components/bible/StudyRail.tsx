@@ -6,7 +6,7 @@ import { useUI } from "@/store/ui";
 import { db } from "@/db";
 import { bookByHo, parseOsis, refLabel } from "@/lib/osis";
 import { getChapterFor, verses } from "@/data/bible";
-import { htmlToText } from "@/components/journal/RichEditor";
+import { htmlToText } from "@/lib/htmlToText";
 import {
   COMMENTARY_SOURCES,
   MISSLER_ACKNOWLEDGMENT,
