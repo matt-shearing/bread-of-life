@@ -180,7 +180,7 @@ async function recordCompletion(c: NativeCompletion): Promise<void> {
   const plan = await getAnyPlan(c.planId);
   const total = plan?.days[c.planDay]?.length ?? 0;
   if (plan && total > 0 && c.planReadingIndex < total) {
-    await setChapterDone(c.planId, c.planDay, c.planReadingIndex, true, total);
+    await setChapterDone(c.planId, c.planDay, c.planReadingIndex, true, total, { source: "audio", at: c.completedAt });
   }
   // A plan that no longer exists has nothing to record; it is dropped all the same.
 }

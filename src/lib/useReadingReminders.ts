@@ -35,8 +35,12 @@ export function useReadingReminders(): void {
     // The first emission is the current state, already covered by the effect above.
     let first = true;
     const sub = liveQuery(async () => {
-      const [plans, reads] = await Promise.all([db.plans.toArray(), db.progress.orderBy("at").last()]);
-      return JSON.stringify([plans.map((p) => [p.planId, p.completedDays.length, p.completedAt]), reads?.at]);
+      const [plans, reads, logged] = await Promise.all([
+        db.plans.toArray(),
+        db.progress.orderBy("at").last(),
+        db.readingLog.orderBy("at").last(),
+      ]);
+      return JSON.stringify([plans.map((p) => [p.planId, p.completedDays.length, p.completedAt]), reads?.at, logged?.id]);
     }).subscribe({
       next: () => {
         if (first) first = false;

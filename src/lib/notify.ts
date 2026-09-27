@@ -4,7 +4,8 @@ import { localDayKey } from "@/lib/day";
 import { devotionDoneId } from "@/lib/devotionDone";
 import { getAnyPlan, countVerses } from "@/data/plans";
 import { useUI } from "@/store/ui";
-import { readingDayKeys, readingStreak } from "@/lib/streak";
+import { readingStreak } from "@/lib/streak";
+import { readingDaysFromDb } from "@/db/readingLog";
 import { deepLinkFor, toPluginPayload, type NativeNotification } from "@/lib/notifyPayload";
 import {
   READING_DEEP_LINK,
@@ -246,8 +247,7 @@ export async function readingReminderState(now: number = Date.now()): Promise<Re
       if (hasReading) minutes = minutesForVerses((await countVerses(plan.days[day]).catch(() => null)) ?? 0);
     }
   }
-  const progress = await db.progress.toArray();
-  const streak = readingStreak(readingDayKeys(progress.map((p) => p.at)), now);
+  const streak = readingStreak(await readingDaysFromDb(), now);
   return {
     now,
     enabled: ui.notifyPlan,

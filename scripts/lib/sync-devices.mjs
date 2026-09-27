@@ -77,7 +77,7 @@ function skewedDate(skew) {
 
 let n = 0;
 /**
- * A fresh device: { name, db, sync, crypto, repos, tracking, skew, localStorage, idb }.
+ * A fresh device: { name, db, sync, crypto, repos, tracking, readingLog, skew, localStorage, idb }.
  * Pass `restartOf: otherDevice` to get the same device after an app restart: same
  * IndexedDB and localStorage, fresh module state.
  */
@@ -95,8 +95,9 @@ export async function device(name = `d${n + 1}`, { skewMs = 0, restartOf = null 
   const crypto = await import(pathToFileURL(SRC + "db/crypto.ts").href + q);
   const repos = await import(pathToFileURL(SRC + "db/repos.ts").href + q);
   const tracking = await import(pathToFileURL(SRC + "db/syncTracking.ts").href + q);
+  const readingLog = await import(pathToFileURL(SRC + "db/readingLog.ts").href + q);
   delete globalThis.__bolIndexedDB;
   await index.db.open();
   sync.setAutoSync(false); // tests run rounds explicitly with syncNow()
-  return { name, db: index.db, sync, crypto, repos, tracking, skew, localStorage, idb };
+  return { name, db: index.db, sync, crypto, repos, tracking, readingLog, skew, localStorage, idb };
 }

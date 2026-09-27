@@ -56,7 +56,7 @@ export function AudioPlayer({
     // in step as it advances (marks fire live in-app, or batch when you reopen the app).
     const q = await buildContinuousQueue(ho, chapter, url, label, translation);
     if (q.length) {
-      playQueue(q, { startIndex: 0, onComplete: (t) => void recordProgress(t.ho, t.chapter).catch(() => {}) });
+      playQueue(q, { startIndex: 0, onComplete: (t) => void recordProgress(t.ho, t.chapter, 1, "audio").catch(() => {}) });
     }
   }
 
