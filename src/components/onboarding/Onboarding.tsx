@@ -45,7 +45,6 @@ export function Onboarding() {
   if (hasOnboarded) return null;
 
   const finish = () => setHasOnboarded(true);
-  const TITLES = ["Welcome to Bread of Life", "What's inside", "Sync across your devices"];
 
   return (
     <DialogPrimitive.Root open onOpenChange={(o) => !o && finish()}>
@@ -54,12 +53,10 @@ export function Onboarding() {
         <DialogPrimitive.Content
           data-testid="onboarding"
           aria-describedby={undefined}
+          aria-modal="true"
           onPointerDownOutside={(e) => e.preventDefault()}
           className="fixed left-1/2 top-1/2 z-[60] flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl animate-fade-in focus:outline-none"
         >
-          <DialogPrimitive.Title className="sr-only">
-            {TITLES[step]} — step {step + 1} of 3
-          </DialogPrimitive.Title>
           <div className="flex-1 overflow-y-auto">
             {step === 0 && <WelcomeStep />}
             {step === 1 && <FeaturesStep />}
@@ -113,7 +110,9 @@ function WelcomeStep() {
       <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-card">
         <BookOpen style={{ width: 30, height: 30 }} />
       </div>
-      <h1 className="font-serif text-3xl font-bold">Welcome to Bread of Life</h1>
+      <DialogPrimitive.Title asChild>
+        <h1 className="font-serif text-3xl font-bold">Welcome to Bread of Life</h1>
+      </DialogPrimitive.Title>
       <p className="mx-auto mt-3 max-w-sm text-muted-foreground">
         A warm, offline-first homebase for reading Scripture, journalling, and — the heart of it — an
         answered-prayer log you can look back on.
@@ -136,7 +135,9 @@ const FEATURES = [
 function FeaturesStep() {
   return (
     <div className="px-7 py-8">
-      <h2 className="font-serif text-2xl font-bold">What's inside</h2>
+      <DialogPrimitive.Title asChild>
+        <h2 className="font-serif text-2xl font-bold">What's inside</h2>
+      </DialogPrimitive.Title>
       <p className="mt-1 text-sm text-muted-foreground">A quick look at the main things you can do.</p>
       <ul className="mt-5 space-y-4">
         {FEATURES.map((f) => (
@@ -190,7 +191,9 @@ function SyncStep({ onDone, onSynced }: { onDone: () => void; onSynced: () => vo
         <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-success/15 text-success">
           <Check style={{ width: 30, height: 30 }} />
         </div>
-        <h2 className="font-serif text-2xl font-bold">You're all set</h2>
+        <DialogPrimitive.Title asChild>
+          <h2 className="font-serif text-2xl font-bold">You're all set</h2>
+        </DialogPrimitive.Title>
         <p className="mx-auto mt-3 max-w-sm text-muted-foreground">
           Your library is syncing to <strong>{email.trim()}</strong>. Sign in with the same account on
           another device and everything will follow you there.
@@ -209,7 +212,9 @@ function SyncStep({ onDone, onSynced }: { onDone: () => void; onSynced: () => vo
 
   return (
     <div className="px-7 py-8">
-      <h2 className="font-serif text-2xl font-bold">Sync across your devices</h2>
+      <DialogPrimitive.Title asChild>
+        <h2 className="font-serif text-2xl font-bold">Sync across your devices</h2>
+      </DialogPrimitive.Title>
       <p className="mt-1 text-sm text-muted-foreground">
         Optional. Create an account to carry your prayers, journal, and progress to your phone and back.
         You can always do this later in Settings.

@@ -5,6 +5,7 @@ import { ArrowLeft, BookOpen, Copy, NotebookPen, Printer, Share2, Sparkles } fro
 import { db, type JournalEntry, type Prayer } from "@/db";
 import { Button } from "@/components/ui";
 import { htmlToText } from "@/components/journal/RichEditor";
+import { entryTitle } from "@/components/journal/entryTitle";
 import { showUndoToast } from "@/components/confirm";
 import { parseOsis, refLabel } from "@/lib/osis";
 import { cn } from "@/lib/cn";
@@ -59,7 +60,7 @@ export function faithfulnessMarkdown(
     const entries = (p.linkedJournalIds ?? []).map((id) => journal.get(id)).filter(Boolean) as JournalEntry[];
     if (entries.length) {
       out.push("**Journal:**");
-      for (const j of entries) out.push(`- ${j.title.trim() || "Untitled entry"} (${longDate(j.createdAt)})`);
+      for (const j of entries) out.push(`- ${entryTitle(j)} (${longDate(j.createdAt)})`);
       out.push("");
     }
   }
@@ -365,7 +366,7 @@ function FaithEntry({ p, journal }: { p: Prayer; journal: Map<string, JournalEnt
               <div key={j.id} className="text-sm">
                 <div className="flex items-center gap-1.5 font-medium">
                   <NotebookPen style={{ width: 13, height: 13 }} className="shrink-0 text-primary-600" />
-                  {j.title.trim() || "Untitled entry"}
+                  {entryTitle(j)}
                   <span className="text-xs font-normal text-muted-foreground">· {longDate(j.createdAt)}</span>
                 </div>
                 {snippet && (

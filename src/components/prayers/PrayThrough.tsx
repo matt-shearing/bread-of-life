@@ -207,10 +207,15 @@ export function PrayerSession({ scope, onClose }: { scope: PrayThroughScope; onC
           data-testid="pray-through"
           aria-describedby={undefined}
           onPointerDownOutside={(e) => e.preventDefault()}
-          className="fixed inset-0 z-[55] flex flex-col bg-gradient-to-b from-primary-50 via-background to-background pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] animate-fade-in dark:from-primary-900/25"
+          className="fixed inset-0 z-[55] flex flex-col bg-background pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] animate-fade-in"
         >
+          {/* a soft dawn wash behind the top of the screen */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-primary-100/70 to-transparent dark:from-primary-900/30"
+          />
           {/* top bar */}
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="relative flex items-center gap-3 px-4 py-3">
             <DialogPrimitive.Close
               aria-label={done ? "Close" : "End session"}
               className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -227,7 +232,7 @@ export function PrayerSession({ scope, onClose }: { scope: PrayThroughScope; onC
             )}
           </div>
           {!done && total > 0 && (
-            <div className="mx-4 h-1 overflow-hidden rounded-full bg-muted">
+            <div className="relative mx-4 h-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-primary transition-all duration-500"
                 style={{ width: `${(index / total) * 100}%` }}
@@ -235,7 +240,7 @@ export function PrayerSession({ scope, onClose }: { scope: PrayThroughScope; onC
             </div>
           )}
 
-          <div className="flex flex-1 items-center justify-center overflow-y-auto px-5 py-6">
+          <div className="relative flex flex-1 items-center justify-center overflow-y-auto px-5 py-6">
             <div className="w-full max-w-xl">
               {queue === null ? null : done || total === 0 ? (
                 <Summary total={total} summary={summary} onClose={onClose} />

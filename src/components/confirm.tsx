@@ -87,7 +87,7 @@ export function useConfirm() {
             </Button>
             {pending.extraLabel && (
               <Button
-                variant={pending.extraDestructive ? "outline" : "outline"}
+                variant="outline"
                 className={cn(COARSE_H, pending.extraDestructive && "text-destructive")}
                 onClick={() => settle("extra")}
               >
@@ -212,12 +212,43 @@ function ToastHost() {
 
 /* --------------------------------- back guard --------------------------------- */
 
+/*
+ * One shared same-URL history entry ("the guard") sits on top while any guarded
+ * modal is open; a stack of handlers decides what Back does. Sharing one entry
+ * (rather than one per modal) keeps nested modals, mode switches and React
+ * StrictMode's mount-unmount-mount from racing history.back() against pushState.
+ */
+type GuardHandler = { current: () => boolean | void };
+const guardStack: GuardHandler[] = [];
+let guardOnTop = false;
+let ignoreNextPop = false;
+let guardListening = false;
+
+function pushGuard() {
+  window.history.pushState({ ...(window.history.state ?? {}), __bolGuard: true }, "");
+  guardOnTop = true;
+}
+
+function onGuardPop() {
+  if (ignoreNextPop) {
+    ignoreNextPop = false;
+    return;
+  }
+  if (window.history.state?.__bolGuard) return; // moved forward onto a guard entry
+  guardOnTop = false;
+  const top = guardStack[guardStack.length - 1];
+  if (!top) return;
+  const keep = top.current();
+  // Re-arm for this modal (it asked to stay) or for any modal still open below it.
+  setTimeout(() => {
+    if (guardStack.length && !guardOnTop && (keep || guardStack[guardStack.length - 1] !== top)) pushGuard();
+  }, 0);
+}
+
 /**
  * While `active`, the Android back gesture (and the browser's Back) calls `onBack`
  * instead of leaving the page. Return `true` from `onBack` to keep guarding — e.g.
  * when it opened an "unsaved changes?" confirm rather than closing.
- *
- * Works by pushing one same-URL history entry, so the router sees no change.
  */
 export function useBackGuard(active: boolean, onBack: () => boolean | void) {
   const cb = useRef(onBack);
@@ -225,21 +256,26 @@ export function useBackGuard(active: boolean, onBack: () => boolean | void) {
 
   useEffect(() => {
     if (!active || typeof window === "undefined") return;
-    const marker = `bol-guard-${Math.random().toString(36).slice(2)}`;
-    const push = () => window.history.pushState({ ...(window.history.state ?? {}), __bolGuard: marker }, "");
-    push();
-    let armed = true;
-    const onPop = () => {
-      if (window.history.state?.__bolGuard === marker) return;
-      const keep = cb.current();
-      if (keep) push();
-      else armed = false;
-    };
-    window.addEventListener("popstate", onPop);
+    if (!guardListening) {
+      guardListening = true;
+      window.addEventListener("popstate", onGuardPop);
+    }
+    const handler: GuardHandler = cb;
+    guardStack.push(handler);
+    if (!guardOnTop) pushGuard();
     return () => {
-      window.removeEventListener("popstate", onPop);
-      // Closed normally: drop our extra entry, but only if nothing navigated on top.
-      if (armed && window.history.state?.__bolGuard === marker) window.history.back();
+      const i = guardStack.lastIndexOf(handler);
+      if (i >= 0) guardStack.splice(i, 1);
+      // Closed normally: drop the guard entry once no modal needs it — but only if
+      // it is still on top (the app may have navigated on from here).
+      setTimeout(() => {
+        if (guardStack.length || !guardOnTop) return;
+        guardOnTop = false;
+        if (window.history.state?.__bolGuard) {
+          ignoreNextPop = true;
+          window.history.back();
+        }
+      }, 0);
     };
   }, [active]);
 }

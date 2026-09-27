@@ -52,6 +52,7 @@ import { cn } from "@/lib/cn";
 import { localDayKey } from "@/lib/day";
 import { COARSE_H, showUndoToast, useConfirm } from "@/components/confirm";
 import { PrayThroughButton } from "@/components/prayers/PrayThrough";
+import { entryTitle } from "@/components/journal/entryTitle";
 
 type Tab = "active" | "answered" | "archived";
 
@@ -501,7 +502,7 @@ function PrayerCard({
             )}
           >
             <NotebookPen style={{ width: 11, height: 11 }} className="shrink-0" />
-            <span className="truncate">{j.title.trim() || "Untitled entry"}</span>
+            <span className="truncate">{entryTitle(j)}</span>
           </button>
         ))}
         {!archived && (
@@ -662,7 +663,7 @@ function JournalLinkPicker({
                     style={{ width: 15, height: 15 }}
                     className={on ? "text-primary-600" : "text-muted-foreground"}
                   />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{j.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{entryTitle(j)}</span>
                   {on && <span className="text-xs text-primary-600">Linked</span>}
                 </button>
               );

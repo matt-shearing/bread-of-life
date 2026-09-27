@@ -27,21 +27,10 @@ import { VersePicker } from "@/components/bible/VersePicker";
 import { cn } from "@/lib/cn";
 import { COARSE_H, showUndoToast, useBackGuard, useConfirm } from "@/components/confirm";
 import { clearDraft, loadDraft, onDraftsChanged, saveDraft } from "@/components/journal/drafts";
+import { entryTitle } from "@/components/journal/entryTitle";
 
 /** Chips (tags, linked verses/prayers) grow to a 44px touch target on touch screens. */
 const CHIP_TOUCH = "[@media(pointer:coarse)]:min-h-[44px] [@media(pointer:coarse)]:px-3.5";
-
-/**
- * What to call an entry. Synced or imported entries can arrive with an empty
- * title, which would leave an empty heading and an unnamed dialog.
- */
-export function entryTitle(e: Pick<JournalEntry, "title" | "body" | "createdAt">): string {
-  const t = e.title.trim();
-  if (t) return t;
-  const first = htmlToText(e.body);
-  if (first) return first.length > 60 ? `${first.slice(0, 57).trimEnd()}…` : first;
-  return `Entry from ${new Date(e.createdAt).toLocaleDateString()}`;
-}
 
 /** The unsaved new-entry draft's title (or "" if there is none), live across the page. */
 function useNewDraftTitle(): string | null {
