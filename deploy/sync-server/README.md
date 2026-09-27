@@ -50,6 +50,11 @@ Details the app relies on:
   (`readingLog`: one row per chapter read per day). Apps send such a table only to a
   server that lists it, and upload all of it the first time they see it listed, so a
   server that is upgraded later still receives the history.
+- **API keys, ciphertext only.** `apiKeys` holds the user's own Bible API keys, shared
+  between their devices. A row must be exactly `{"__enc": "<ciphertext>"}` (or a
+  tombstone); anything readable is rejected with reason `plaintext`, so this server can
+  never hold a key in the clear. Apps send the table only when the account uses
+  end-to-end encryption and the server lists the `apiKeys` feature.
 - **Status codes.** `400` for a malformed body, email or password; `401` for a bad
   login, or a missing, expired or revoked token; `409` when signup finds the email in
   use; `413` for a body over `MAX_BODY_BYTES` (8 MB); `500` only for a server fault,

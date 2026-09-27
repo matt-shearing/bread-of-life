@@ -30,7 +30,16 @@ import {
   decryptJSON,
   switchDataKeyAccount,
 } from "./crypto";
-import { E2E_CHECK_KEY, ENCRYPTED_TABLES, KEY_PATH, SYNCED_TABLES, TABLE_FEATURES, syncsRow, type SyncedTable } from "./syncSchema";
+import {
+  ALWAYS_ENCRYPTED_TABLES,
+  E2E_CHECK_KEY,
+  ENCRYPTED_TABLES,
+  KEY_PATH,
+  SYNCED_TABLES,
+  TABLE_FEATURES,
+  syncsRow,
+  type SyncedTable,
+} from "./syncSchema";
 import { nextOutboxAt, nextStamp, onQueued, untracked } from "./syncTracking";
 import { mergePlans, samePlanProgress } from "./planMerge";
 import { normaliseDevotionId } from "@/lib/devotionDone";
@@ -161,8 +170,10 @@ async function api<T = unknown>(
 export interface ServerFeatures {
   version: string | null;
   features: ReadonlySet<string>;
+  /** False when /health could not be read (offline), as opposed to an old server. */
+  reachable: boolean;
 }
-const NO_FEATURES: ServerFeatures = { version: null, features: new Set() };
+const NO_FEATURES: ServerFeatures = { version: null, features: new Set(), reachable: false };
 const featureCache = new Map<string, { at: number; value: ServerFeatures }>();
 
 export async function serverFeatures(base: string): Promise<ServerFeatures> {
@@ -173,6 +184,7 @@ export async function serverFeatures(base: string): Promise<ServerFeatures> {
     if (!res.ok) return NO_FEATURES;
     const body = (await res.json()) as { version?: unknown; features?: unknown };
     const value: ServerFeatures = {
+      reachable: true,
       version: typeof body.version === "string" ? body.version : null,
       features: new Set(Array.isArray(body.features) ? body.features.filter((f): f is string => typeof f === "string") : []),
     };
@@ -187,7 +199,7 @@ export async function serverFeatures(base: string): Promise<ServerFeatures> {
 
 async function hasLocalData(): Promise<boolean> {
   for (const t of SYNCED_TABLES) {
-    if (t === "settings") continue; // preferences exist on every device
+    if (t === "settings" || t === "apiKeys") continue; // preferences and keys exist on every device
     if ((await db.table(t).count()) > 0) return true;
   }
   return false;
@@ -471,7 +483,21 @@ async function accountEncrypted(key: Uint8Array | null): Promise<boolean> {
   return !!(await db.settings.get(E2E_CHECK_KEY)) || (await db.syncHeld.count()) > 0;
 }
 
-async function buildOutgoing(entries: OutboxEntry[]): Promise<{ out: Outgoing[]; drop: OutboxEntry[] }> {
+/**
+ * The last line of defence for secrets: throws if any change for an always-encrypted
+ * table (the user's API keys) carries anything but ciphertext. Called on every push.
+ */
+export function assertNoPlaintextSecrets(changes: readonly RemoteChange[]): void {
+  for (const c of changes) {
+    if (!ALWAYS_ENCRYPTED_TABLES.has(c.table) || c.deleted) continue;
+    const d = c.data as Record<string, unknown> | null;
+    if (!d || typeof d.__enc !== "string" || Object.keys(d).length !== 1) {
+      throw new Error(`sync: refusing to upload ${c.table}:${c.id} unencrypted`);
+    }
+  }
+}
+
+async function buildOutgoing(entries: OutboxEntry[], keyMismatch = false): Promise<{ out: Outgoing[]; drop: OutboxEntry[] }> {
   const key = loadDataKey();
   const encrypted = await accountEncrypted(key);
   const out: Outgoing[] = [];
@@ -486,6 +512,8 @@ async function buildOutgoing(entries: OutboxEntry[]): Promise<{ out: Outgoing[];
     // The account encrypts but this device has no key: hold personal content back
     // rather than upload it readable. It goes once the recovery phrase is entered.
     if (ENCRYPTED_TABLES.has(e.table) && !key && encrypted) continue;
+    // Secrets go only encrypted, and only with the key the account's other devices hold.
+    if (ALWAYS_ENCRYPTED_TABLES.has(e.table) && e.op !== "delete" && (!key || keyMismatch)) continue;
     byTable.set(e.table, [...(byTable.get(e.table) ?? []), e]);
   }
   for (const [table, list] of byTable) {
@@ -510,6 +538,7 @@ async function buildOutgoing(entries: OutboxEntry[]): Promise<{ out: Outgoing[];
       out.push({ entry: e, change, bytes: JSON.stringify(change).length });
     }
   }
+  assertNoPlaintextSecrets(out.map((o) => o.change));
   return { out, drop };
 }
 
@@ -667,7 +696,7 @@ async function push(base: string, s: SyncState, f: ServerFeatures): Promise<Outc
   s = await gateTables(s, f);
   const entries = await db.outbox.toArray();
   if (!entries.length) return "ok";
-  const { out, drop } = await buildOutgoing(entries);
+  const { out, drop } = await buildOutgoing(entries, s.keyMismatch);
   await settle(drop.map((entry) => ({ entry, action: "delete" as const })));
   for (const items of chunk(out)) {
     const r = await pushChunk(base, s, f, items);
@@ -743,6 +772,10 @@ export async function applyRemote(changes: RemoteChange[]): Promise<void> {
         continue;
       }
     } else {
+      if (ALWAYS_ENCRYPTED_TABLES.has(table)) {
+        console.warn(`sync: refused unencrypted ${k}: ${table} only ever travels encrypted`);
+        continue;
+      }
       if (ENCRYPTED_TABLES.has(table) && encrypted) {
         console.warn(`sync: refused unencrypted ${k}: this account encrypts its ${table}`);
         continue;
@@ -1042,7 +1075,9 @@ export async function getSyncStatus(): Promise<SyncStatus> {
   const entries = await db.outbox.toArray();
   const key = loadDataKey();
   const encrypted = await accountEncrypted(key);
-  const waitingForKey = !key && encrypted ? entries.filter((e) => ENCRYPTED_TABLES.has(e.table)).length : 0;
+  const waitingForKey = entries.filter(
+    (e) => !e.stuck && ((!key && encrypted && ENCRYPTED_TABLES.has(e.table)) || (!key && ALWAYS_ENCRYPTED_TABLES.has(e.table) && e.op !== "delete")),
+  ).length;
   const stuck = entries.filter((e) => e.stuck).length;
   return {
     mode: s.mode,
@@ -1055,6 +1090,31 @@ export async function getSyncStatus(): Promise<SyncStatus> {
     signedOut: s.authError,
     needsAccountChoice: s.pendingAccountChoice,
   };
+}
+
+/* ------------------------------- key sync gate -------------------------------- */
+
+/**
+ * Whether this device can share the user's API keys (src/store/keySync.ts), and if not,
+ * why: not signed in, no encryption key here, the wrong key, or a server that cannot
+ * store them (v0.4.0). `offline` means the server could not be asked just now.
+ */
+export type KeySyncGate = "signed-out" | "no-e2e" | "key-mismatch" | "old-server" | "offline" | "ready";
+export async function keySyncGate(): Promise<KeySyncGate> {
+  const s = await getState();
+  const base = resolveUrl(s);
+  if (s.mode === "off" || !s.token || !base) return "signed-out";
+  if (!loadDataKey()) return "no-e2e";
+  if (s.keyMismatch) return "key-mismatch";
+  const f = await serverFeatures(base);
+  if (!f.reachable) return "offline";
+  return f.features.has(TABLE_FEATURES.apiKeys ?? "apiKeys") ? "ready" : "old-server";
+}
+
+/** True when this device may write key rows: signed in, holding the account's data key. */
+export async function canWriteSecrets(): Promise<boolean> {
+  const s = await getState();
+  return s.mode !== "off" && !!s.token && !!loadDataKey() && !s.keyMismatch;
 }
 
 /* ------------------------------ E2E encryption controls ---------------------- */

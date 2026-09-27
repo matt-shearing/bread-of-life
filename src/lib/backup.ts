@@ -18,7 +18,13 @@
  */
 import { db, type PlanProgress } from "@/db";
 import { getState, syncNow } from "@/db/sync";
-import { KEY_PATH as SYNCED_KEY_PATH, SYNCED_TABLES, syncsRow, type SyncedTable } from "@/db/syncSchema";
+import { ALWAYS_ENCRYPTED_TABLES, KEY_PATH as SYNCED_KEY_PATH, SYNCED_TABLES as ALL_SYNCED_TABLES, syncsRow, type SyncedTable } from "@/db/syncSchema";
+
+/**
+ * The tables a backup holds: everything that syncs except the user's API keys, which
+ * must never sit in a readable file (a backup is plain JSON, often emailed or synced).
+ */
+const SYNCED_TABLES = ALL_SYNCED_TABLES.filter((t) => !ALWAYS_ENCRYPTED_TABLES.has(t));
 import { nextOutboxAt, nextStamp, untracked } from "@/db/syncTracking";
 import { mergePlans, samePlanProgress } from "@/db/planMerge";
 import { localDayKey } from "@/lib/day";
@@ -355,6 +361,7 @@ const NOUNS: Record<SyncedTable, [string, string]> = {
   progress: ["chapter bookmark", "chapter bookmarks"],
   readingLog: ["reading-history entry", "reading-history entries"],
   settings: ["setting", "settings"],
+  apiKeys: ["API key", "API keys"], // never in a backup; listed for the type
 };
 /** The order a person cares about: the heart of the app first. */
 const ORDER: SyncedTable[] = [

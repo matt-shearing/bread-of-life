@@ -77,9 +77,12 @@ async function seed({ db }) {
   await tick();
 }
 
+/** The tables a backup holds: every synced one except the API keys, which never go in a file. */
+const backupTables = (schema) => schema.SYNCED_TABLES.filter((t) => !schema.ALWAYS_ENCRYPTED_TABLES.has(t));
+
 async function snapshot({ db, schema }) {
   const out = {};
-  for (const t of schema.SYNCED_TABLES) out[t] = await db.table(t).toArray();
+  for (const t of backupTables(schema)) out[t] = await db.table(t).toArray();
   return out;
 }
 const DEVICE_ONLY = new Set(["misslerLibraryPath", "some.futureDeviceThing"]);
@@ -95,10 +98,11 @@ test("backup → restore on an empty device gives back every table exactly, and 
   assert.equal(file.appVersion, "9.9.9");
   assert.equal(file.exportedAt, "2026-09-26T23:00:00.000Z");
   assert.equal(file.dbVersion, A.db.verno);
-  assert.deepEqual(Object.keys(file.tables).sort(), [...A.schema.SYNCED_TABLES].sort());
+  assert.deepEqual(Object.keys(file.tables).sort(), [...backupTables(A.schema)].sort());
   assert.ok(!("commentary" in file.tables) && !("outbox" in file.tables) && !("syncState" in file.tables));
+  assert.ok(!("apiKeys" in file.tables), "API keys never go in a backup");
   assert.deepEqual(file.tables.settings.map((s) => s.key).sort(), ["prayers.customCategories", "ui.activePlanId"], "device-only settings left out");
-  for (const t of A.schema.SYNCED_TABLES) assert.ok(file.tables[t].length > 0, `${t} is in the backup`);
+  for (const t of backupTables(A.schema)) assert.ok(file.tables[t].length > 0, `${t} is in the backup`);
 
   const B = await fresh("B");
   const parsed = B.backup.parseBackup(A.backup.serializeBackup(file));
@@ -112,7 +116,7 @@ test("backup → restore on an empty device gives back every table exactly, and 
   assert.equal(r.added, plan.totals.inFile);
 
   const got = await snapshot(B);
-  for (const t of A.schema.SYNCED_TABLES) {
+  for (const t of backupTables(A.schema)) {
     const key = A.schema.KEY_PATH[t];
     const sort = (rows) => [...rows].sort((x, y) => String(x[key]).localeCompare(String(y[key])));
     const want = before[t].filter((row) => !(t === "settings" && DEVICE_ONLY.has(row.key)));
@@ -120,7 +124,7 @@ test("backup → restore on an empty device gives back every table exactly, and 
   }
 
   const outbox = await B.db.outbox.toArray();
-  const expected = A.schema.SYNCED_TABLES.flatMap((t) => got[t].map((row) => `${t}:${row[A.schema.KEY_PATH[t]]}`)).sort();
+  const expected = backupTables(A.schema).flatMap((t) => got[t].map((row) => `${t}:${row[A.schema.KEY_PATH[t]]}`)).sort();
   assert.deepEqual(outbox.map((o) => o.key).sort(), expected, "every restored row is queued for upload");
   assert.ok(outbox.every((o) => o.op === "upsert"));
 });
@@ -129,7 +133,7 @@ test("restoring the same file twice adds nothing the second time", async () => {
   const A = await fresh("A");
   await seed(A);
   const text = A.backup.serializeBackup(await A.backup.createBackup("9.9.9"));
-  const counts = async (d) => Promise.all(d.schema.SYNCED_TABLES.map((t) => d.db.table(t).count()));
+  const counts = async (d) => Promise.all(backupTables(d.schema).map((t) => d.db.table(t).count()));
   const c0 = await counts(A);
 
   await A.db.outbox.clear();
@@ -150,7 +154,7 @@ test("restoring the same file twice adds nothing the second time", async () => {
   const second = await B.backup.applyRestore(B.backup.parseBackup(text));
   assert.equal(second.added + second.updated, 0);
   assert.deepEqual(await counts(B), c1);
-  assert.deepEqual(c1, c0.map((n, i) => (A.schema.SYNCED_TABLES[i] === "settings" ? n - DEVICE_ONLY.size : n)));
+  assert.deepEqual(c1, c0.map((n, i) => (backupTables(A.schema)[i] === "settings" ? n - DEVICE_ONLY.size : n)));
 });
 
 test("a newer row on this device is kept; a newer row in the backup wins", async () => {

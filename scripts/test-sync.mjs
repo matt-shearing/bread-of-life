@@ -67,6 +67,21 @@ const journal = (id, body, extra = {}) => ({ id, title: "t", body, tags: [], lin
 const note = (id, body) => ({ id, osis: id, bbcccvvv: 1, body, createdAt: 1, updatedAt: 1 });
 const rowOf = async (srv, tbl, id) => (await serverRows(srv)).find((r) => r.tbl === tbl && r.id === id);
 
+// The UI store's persistence has no localStorage in Node (each device keeps its store in
+// memory); its warning about that is noise here.
+const realWarn = console.warn;
+console.warn = (...a) => (String(a[0]).includes("zustand persist") ? undefined : realWarn(...a));
+
+/** Load the UI store and key sync as this device, and start the key mirror. */
+async function withKeys(d) {
+  d.ui = (await d.load("store/ui.ts")).useUI;
+  d.keys = await d.load("store/keySync.ts");
+  d.keys.startKeySync();
+  return d;
+}
+const ESV_KEY = "esvkey0123456789abcdef0123456789abcdef01";
+const ESV_KEY_B = "bbbbkey0123456789abcdef0123456789abcdef";
+
 for (const flavor of ["v0.4.0", "current"]) {
   describe(`against the ${flavor} server`, () => {
     test("B1: an edit made while a push is in flight is not dropped from the outbox", async () => {
@@ -453,6 +468,134 @@ for (const flavor of ["v0.4.0", "current"]) {
       await A.sync.syncNow();
       assert.ok(await A.db.devotions.get("spurgeon-morning-evening:2026-09-25:0"));
       assert.equal(await A.db.devotions.get("spurgeon-morning-evening:09-25:0"), undefined);
+    });
+
+
+    test("K1: a key saved with sync on reaches the other device only encrypted, and its removal follows", async () => {
+      resetNet();
+      const srv = await server(flavor);
+      const A = await withKeys(await signedIn(srv, "k1@x.org"));
+      const on = await A.sync.enableE2E();
+      assert.ok(on.ok);
+      await A.sync.syncNow();
+      await A.keys.setKeySyncEnabled(true);
+      A.ui.getState().setBibleKey("esv", ESV_KEY);
+      await A.keys.keySyncIdle();
+      await A.db.journal.put(journal("j1", "still syncs"));
+      await A.sync.syncNow();
+      const all = JSON.stringify(await serverRows(srv));
+      assert.ok(!all.includes(ESV_KEY), "the key is nowhere on the server in the clear");
+      assert.ok(!net.log.some((l) => String(l.req ?? "").includes(ESV_KEY)), "and never crossed the wire in the clear");
+      assert.equal(await A.db.outbox.count(), 0, "nothing wedged");
+      assert.equal((await rowOf(srv, "journal", "j1"))?.data.__enc ? "enc" : "plain", "enc");
+
+      const B = await withKeys(await signedIn(srv, "k1@x.org"));
+      await B.keys.setKeySyncEnabled(true);
+      if (flavor === "v0.4.0") {
+        assert.equal(await rowOf(srv, "apiKeys", "esv"), undefined, "the v0.4.0 server never gets the key");
+        assert.equal(await A.sync.keySyncGate(), "old-server");
+        assert.equal(B.ui.getState().bibleKeys.esv, "", "so it stays on device A");
+        assert.equal(A.ui.getState().bibleKeys.esv, ESV_KEY);
+        return;
+      }
+      const row = await rowOf(srv, "apiKeys", "esv");
+      assert.equal(typeof row.data.__enc, "string");
+      assert.deepEqual(Object.keys(row.data), ["__enc"]);
+      assert.equal(await A.sync.keySyncGate(), "ready");
+      assert.equal(B.ui.getState().bibleKeys.esv, "", "locked until B has the phrase");
+      assert.equal(await B.sync.restoreE2E(on.phrase), "ok");
+      await B.keys.reconcileKeys();
+      assert.equal(B.ui.getState().bibleKeys.esv, ESV_KEY, "B has the key after unlocking");
+      const st = B.ui.getState();
+      assert.equal(B.keys.keySyncState("esv", st, await B.db.apiKeys.get("esv")).kind, "from-other");
+
+      // Removed on A: removed on B.
+      A.ui.getState().setBibleKey("esv", "");
+      await A.keys.keySyncIdle();
+      await syncAll(A, B);
+      await B.keys.reconcileKeys();
+      assert.equal((await rowOf(srv, "apiKeys", "esv")).deleted, 1, "a tombstone on the server");
+      assert.equal(B.ui.getState().bibleKeys.esv, "", "removed on B too");
+    });
+
+    test("K2: a different key set on this device is not overwritten; turning sync off leaves keys", async () => {
+      resetNet();
+      const srv = await server(flavor);
+      const A = await withKeys(await signedIn(srv, "k2@x.org"));
+      const on = await A.sync.enableE2E();
+      await A.sync.syncNow();
+      await A.keys.setKeySyncEnabled(true);
+      A.ui.getState().setBibleKey("esv", ESV_KEY);
+      await A.keys.keySyncIdle();
+      await A.sync.syncNow();
+      const B = await withKeys(await signedIn(srv, "k2@x.org"));
+      B.ui.getState().setBibleKey("esv", ESV_KEY_B); // B's own key, before sync
+      assert.equal(await B.sync.restoreE2E(on.phrase), "ok");
+      await B.keys.setKeySyncEnabled(true);
+      assert.equal(B.ui.getState().bibleKeys.esv, ESV_KEY_B, "B keeps its own key");
+      if (flavor === "current") {
+        const kind = B.keys.keySyncState("esv", B.ui.getState(), await B.db.apiKeys.get("esv"));
+        assert.deepEqual(kind, { kind: "conflict", other: ESV_KEY });
+        await B.keys.adoptSyncedKey("esv");
+        assert.equal(B.ui.getState().bibleKeys.esv, ESV_KEY, "until B chooses the synced one");
+      }
+      await B.keys.setKeySyncEnabled(false);
+      A.ui.getState().setBibleKey("esv", "");
+      await A.keys.keySyncIdle();
+      await syncAll(A, B);
+      await B.keys.reconcileKeys();
+      assert.equal(B.ui.getState().bibleKeys.esv === "", false, "with sync off, B's key stays");
+    });
+
+    test("K3: without encryption nothing about a key is queued, and the guards throw", async () => {
+      resetNet();
+      const srv = await server(flavor);
+      const A = await withKeys(await signedIn(srv, "k3@x.org"));
+      await A.keys.setKeySyncEnabled(true);
+      A.ui.getState().setBibleKey("nlt", "nlt-key-123456");
+      await A.keys.keySyncIdle();
+      await A.sync.syncNow();
+      assert.equal(await A.sync.keySyncGate(), "no-e2e");
+      assert.equal((await A.db.outbox.toArray()).filter((e) => e.table === "apiKeys").length, 0, "nothing queued");
+      assert.equal(await A.db.apiKeys.count(), 0);
+      assert.equal(await rowOf(srv, "apiKeys", "nlt"), undefined);
+      await assert.rejects(A.db.apiKeys.put({ id: "nlt", value: "nlt-key-123456" }), /without end-to-end encryption/);
+      assert.equal(await A.db.outbox.count(), 0, "the refused write left no entry");
+      assert.throws(
+        () => A.sync.assertNoPlaintextSecrets([{ table: "apiKeys", id: "esv", updatedAt: 1, deleted: false, data: { id: "esv", value: "x" } }]),
+        /unencrypted/,
+      );
+      assert.throws(() => A.sync.assertNoPlaintextSecrets([{ table: "apiKeys", id: "esv", updatedAt: 1, deleted: false, data: { __enc: "x", value: "x" } }]));
+      A.sync.assertNoPlaintextSecrets([{ table: "apiKeys", id: "esv", updatedAt: 1, deleted: false, data: { __enc: "x" } }]);
+      A.sync.assertNoPlaintextSecrets([{ table: "apiKeys", id: "esv", updatedAt: 1, deleted: true, data: null }]);
+      // Forgetting the key here with a key row waiting: it waits, it is not sent.
+      const on = await A.sync.enableE2E();
+      assert.ok(on.ok);
+      await A.db.apiKeys.put({ id: "esv", value: ESV_KEY });
+      A.sync.disableE2E();
+      await A.sync.syncNow();
+      assert.ok(!JSON.stringify(await serverRows(srv)).includes(ESV_KEY));
+      const waiting = (await A.db.outbox.toArray()).filter((e) => e.table === "apiKeys").length;
+      // The v0.4.0 server can't store keys: the entry is dropped, and the whole table is
+      // queued once the server can (see gateTables). Otherwise it waits for the key.
+      assert.equal(waiting, flavor === "v0.4.0" ? 0 : 1);
+      if (flavor !== "v0.4.0") assert.equal((await A.sync.getSyncStatus()).waitingForKey, 1);
+    });
+
+    test("K4: a pulled readable key row is refused, and backups never hold keys", async () => {
+      resetNet();
+      const srv = await server(flavor);
+      const A = await signedIn(srv, "k4@x.org");
+      assert.ok((await A.sync.enableE2E()).ok);
+      await A.sync.syncNow();
+      const { data } = await post(srv, "/auth/login", { email: "k4@x.org", password: "password123" });
+      await post(srv, "/push", { changes: [{ table: "apiKeys", id: "esv", updatedAt: Date.now(), deleted: false, data: { id: "esv", value: "planted" } }] }, data.token);
+      await A.sync.syncNow();
+      assert.equal(await A.db.apiKeys.get("esv"), undefined);
+      await A.db.apiKeys.put({ id: "nlt", value: "nlt-secret-999" });
+      const backup = await A.load("lib/backup.ts");
+      const file = backup.serializeBackup(await backup.createBackup("test"));
+      assert.ok(!file.includes("nlt-secret-999"), "not in the backup");
     });
 
     if (flavor === "current") {

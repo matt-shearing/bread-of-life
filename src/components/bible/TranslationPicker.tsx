@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, KeyRound, Lock } from "lucide-react";
 import { FREE_TRANSLATIONS, translationById, type Translation } from "@/data/bible";
@@ -7,6 +7,10 @@ import { AMP_NOTE, NASB_NOTE } from "@/data/licensed/catalog";
 import { useUI } from "@/store/ui";
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import type { SetupProvider } from "@/data/licensed/setupGuide";
+
+// The guided key setup, loaded only when a locked row is tapped.
+const KeySetupDialog = lazy(() => import("@/components/settings/KeySetupDialog").then((m) => ({ default: m.KeySetupDialog })));
 
 /** The link that opens Settings at the Bible translations card. */
 export const TRANSLATION_SETTINGS = "/settings?section=translations";
@@ -18,6 +22,7 @@ export function TranslationPicker() {
   useUI((s) => s.apiBibleBibles);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [setup, setSetup] = useState<SetupProvider | null>(null);
   const current = translationById(translation) ?? FREE_TRANSLATIONS[0];
   const licensed = licensedTranslations();
   const hasEsv = licensed.some((t) => t.id === ESV_TRANSLATION.id);
@@ -32,6 +37,10 @@ export function TranslationPicker() {
   const toSettings = () => {
     setOpen(false);
     navigate(TRANSLATION_SETTINGS);
+  };
+  const startSetup = (p: SetupProvider) => {
+    setOpen(false);
+    setSetup(p);
   };
 
   return (
@@ -59,16 +68,16 @@ export function TranslationPicker() {
           </Row>
         ))}
         {!hasEsv && (
-          <LockedRow short="ESV" name="English Standard Version" note="Add a free ESV API key in Settings" onClick={toSettings} />
+          <LockedRow short="ESV" name="English Standard Version" note="Get a free ESV key: we’ll walk you through it" onClick={() => startSetup("esv")} />
         )}
         {!hasNlt && (
-          <LockedRow short="NLT" name="New Living Translation" note="Add a free NLT API key in Settings" onClick={toSettings} />
+          <LockedRow short="NLT" name="New Living Translation" note="Get a free NLT key: we’ll walk you through it" onClick={() => startSetup("nlt")} />
         )}
         {!hasNasb && (
-          <LockedRow short="NASB" name="New American Standard Bible" note={NASB_NOTE} onClick={toSettings} />
+          <LockedRow short="NASB" name="New American Standard Bible" note={NASB_NOTE} onClick={() => startSetup("apiBible")} />
         )}
         {!hasAmp && (
-          <LockedRow short="AMP" name="Amplified Bible" note={AMP_NOTE} onClick={toSettings} />
+          <LockedRow short="AMP" name="Amplified Bible" note={AMP_NOTE} onClick={() => startSetup("apiBible")} />
         )}
         <button
           onClick={toSettings}
@@ -77,6 +86,11 @@ export function TranslationPicker() {
           Manage keys and licensed translations…
         </button>
       </PopoverContent>
+      {setup && (
+        <Suspense fallback={null}>
+          <KeySetupDialog provider={setup} open onOpenChange={(o) => !o && setSetup(null)} />
+        </Suspense>
+      )}
     </Popover>
   );
 }

@@ -213,6 +213,15 @@ export interface HeldChange {
   updatedAt: number;
   data: Record<string, unknown>;
 }
+/**
+ * One of the user's own Bible API keys, shared with their other devices (src/store/keySync.ts).
+ * Plaintext here, like the journal; it only ever leaves the device end-to-end encrypted.
+ */
+export interface SyncedApiKey {
+  id: "esv" | "nlt" | "apiBible";
+  value: string;
+  updatedAt?: number;
+}
 export interface SyncStateRow {
   key: string; // single row "main"
   value: unknown;
@@ -238,6 +247,7 @@ export const db = new Dexie("bread-of-life", injected ? { indexedDB: injected.in
   customPlans: EntityTable<CustomPlan, "id">;
   memory: EntityTable<MemoryCard, "id">;
   readingLog: EntityTable<ReadingLogEntry, "id">;
+  apiKeys: EntityTable<SyncedApiKey, "id">;
   outbox: EntityTable<OutboxEntry, "key">;
   syncState: EntityTable<SyncStateRow, "key">;
   syncHeld: EntityTable<HeldChange, "key">;
@@ -328,6 +338,11 @@ db.version(10)
 // through sync tracking, so the backfilled rows reach the account like any other.
 db.version(11).stores({
   readingLog: "id, dayKey, at",
+});
+
+// The user's own Bible API keys, synced only end-to-end encrypted (see SyncedApiKey).
+db.version(12).stores({
+  apiKeys: "id",
 });
 
 export function uid(): string {
