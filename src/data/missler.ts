@@ -310,6 +310,7 @@ export async function importLibrary(
   } catch (e) {
     throw new Error(
       `Couldn't read missler-library.json from ${base} — check the URL and that the folder is being served. (${String(e)})`,
+      { cause: e },
     );
   }
   if (!index || typeof index.books !== "object") {

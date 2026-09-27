@@ -21,7 +21,8 @@ import {
   DialogTitle,
   Input,
 } from "@/components/ui";
-import { RichEditor, htmlToText } from "@/components/journal/RichEditor";
+import { RichEditor } from "@/components/journal/RichEditor";
+import { htmlToText } from "@/lib/htmlToText";
 import { VersePicker } from "@/components/bible/VersePicker";
 import { cn } from "@/lib/cn";
 

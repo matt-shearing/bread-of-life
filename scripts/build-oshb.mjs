@@ -8,13 +8,19 @@
  *
  * Outputs:
  *   public/data/strongs-heb/<HO>.json   — { "chap.verse": [ {w, s}, ... ] }
- *   public/data/strongs/lexicon-heb.json — { "H###": {lemma, xlit, gloss, def} }
+ *   public/data/strongs/lexicon-heb/<shard>.json — { "H###": {lemma, xlit, gloss, def} },
+ *     split by Strong's number range (see src/data/lexiconShard.ts)
  *
  * Re-runnable. Reads the app's own OSIS book mapping from src/lib/osis.ts.
+ *
+ * MACHINE-SPECIFIC: the default source paths (MORPHHB_DIR, HEB_LEXICON) are
+ * Matt's local copies. It is a one-off ingestion tool, not part of the build or
+ * CI — set those env vars to re-run it elsewhere. Needs Node 22.18+.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeLexiconShards } from "./lexicon-shards.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = join(__dirname, "..");
@@ -24,7 +30,7 @@ const SRC_LEXICON = process.env.HEB_LEXICON ||
   "/home/contra/dev/bread-of-life-25/data/strongs/strongs-hebrew.json";
 
 const OUT_WORDS_DIR = join(APP_ROOT, "public/data/strongs-heb");
-const OUT_LEXICON = join(APP_ROOT, "public/data/strongs/lexicon-heb.json");
+const OUT_LEXICON_DIR = join(APP_ROOT, "public/data/strongs/lexicon-heb");
 
 // ---- Read the OT book mapping straight from src/lib/osis.ts (do not modify src) ----
 function loadBooks() {
@@ -126,7 +132,7 @@ function main() {
   const otBooks = allBooks.slice(0, 39);
 
   mkdirSync(OUT_WORDS_DIR, { recursive: true });
-  mkdirSync(dirname(OUT_LEXICON), { recursive: true });
+  mkdirSync(OUT_LEXICON_DIR, { recursive: true });
 
   const usedStrongs = new Set();
   let totalVerses = 0;
@@ -178,7 +184,7 @@ function main() {
       lexicon[s] = { lemma: lemmaFromWords.get(s) || "", xlit: "", gloss: "", def: "" };
     }
   }
-  writeFileSync(OUT_LEXICON, JSON.stringify(lexicon));
+  writeLexiconShards(OUT_LEXICON_DIR, lexicon);
 
   // ---- Report ----
   function dirSize(dir) {

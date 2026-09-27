@@ -63,15 +63,3 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
     </div>
   );
 }
-
-/** Strip HTML to plain text for previews and search. */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
