@@ -1,4 +1,5 @@
 import { getChapterFor, loadIndex, translationById } from "@/data/bible";
+import { isLicensedId } from "@/data/licensed";
 import { getMisslerAudio } from "@/data/missler";
 import { BOOKS, refLabel } from "@/lib/osis";
 import type { Track } from "./controller";
@@ -31,12 +32,16 @@ export async function trackForChapter(
   chapter: number,
   narratorPref?: string,
 ): Promise<Track | null> {
-  const ch = await getChapterFor(translation, ho, chapter);
+  // Licensed texts have no narration (their licences forbid making audio from the
+  // text), and asking their APIs for a chapter only to find none would spend the
+  // user's request quota: narration comes from the BSB.
+  const audioFrom = isLicensedId(translation) ? "BSB" : translation;
+  const ch = await getChapterFor(audioFrom, ho, chapter);
   const audio: Record<string, string> = { ...(ch?.audio ?? {}), ...(await getMisslerAudio(ho, chapter)) };
   const labels = Object.keys(audio);
   if (!labels.length) return null;
   const label = narratorPref && labels.includes(narratorPref) ? narratorPref : labels[0];
-  return trackFromAudio(ho, chapter, audio, label, translation);
+  return trackFromAudio(ho, chapter, audio, label, audioFrom);
 }
 
 /** Build a play queue from a plan day's readings (chapters with no audio are skipped).

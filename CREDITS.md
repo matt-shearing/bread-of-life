@@ -26,7 +26,10 @@ were reformatted to JSON for the app).
 | Data | Source | Notes |
 |---|---|---|
 | Public-domain commentaries (Matthew Henry, JFB, Clarke, Gill, Keil-Delitzsch, Tyndale) | HelloAO Free Use Bible API | Public domain; cached locally after first view |
-| Additional translations (WEB, KJV, ASV, YLT) | HelloAO Free Use Bible API | Public domain; cached locally |
+| Additional translations: WEB, KJV, ASV, YLT, MSB, RV, Darby, Webster, BBE, Geneva 1599, Douay-Rheims | HelloAO Free Use Bible API (texts from eBible.org) | Public domain; cached locally |
+| NET Bible® | HelloAO Free Use Bible API (eBible.org) | © 1996, 2019 Biblical Studies Press, L.L.C. Quoted by permission for free apps; the notice is shown with the text and on copied verses, linked to netbible.org |
+| Literal Standard Version, Free Bible Version, Translation for Translators | HelloAO Free Use Bible API (eBible.org) | © Covenant Press / Dr. Jonathan Gallagher / Ellis W. Deibler, Jr.; CC BY-SA 4.0 |
+| ESV, NLT, NASB, AMP and other licensed texts | Crossway's ESV API, Tyndale's NLT API, API.Bible | Only with **your own** key; never bundled; a small capped cache; each publisher's notice is shown. See `docs/LICENSED-TRANSLATIONS.md` |
 | AI study companion | Anthropic / OpenAI / xAI / Google / DeepSeek / Ollama | Only when **you** add a key; requests go directly to your chosen provider |
 
 ## Software

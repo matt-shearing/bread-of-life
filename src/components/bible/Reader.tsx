@@ -5,7 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Brain, Check, Copy, NotebookPen, HandHeart, Sparkles, StickyNote, TextSelect, X } from "lucide-react";
 import { db, type HighlightColor } from "@/db";
 import { setHighlight, clearHighlight, saveNote, recordProgress, addMemoryVerse } from "@/db/repos";
-import { getChapterFor, translationById, type Chapter } from "@/data/bible";
+import { bookVerseCount, loadChapterFor, translationById, type Chapter, type ChapterFailure, type Translation } from "@/data/bible";
+import { reportShown } from "@/data/licensed";
 import { refLabel, refRange, bookByHo } from "@/lib/osis";
 import {
   citation,
@@ -16,6 +17,7 @@ import {
   type VerseSelection,
 } from "@/lib/quote";
 import { useUI } from "@/store/ui";
+import { TRANSLATION_SETTINGS } from "./TranslationPicker";
 import { useChapterNav } from "@/lib/useChapterNav";
 import { useCoarsePointer } from "@/lib/layout";
 import {
@@ -112,6 +114,8 @@ export function Reader({
   const misslerAudio = useMisslerAudio(ho, chapter);
   const [ch, setCh] = useState<Chapter | null>(null);
   const [ch2, setCh2] = useState<Chapter | null>(null);
+  const [failure, setFailure] = useState<ChapterFailure | undefined>();
+  const [failure2, setFailure2] = useState<ChapterFailure | undefined>();
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<{ mode: "journal" | "prayer"; verse: number; text: string } | null>(null);
   const [noteVerse, setNoteVerse] = useState<number | null>(null);
@@ -127,7 +131,13 @@ export function Reader({
   // Parallel view stacks the second translation under each verse when the column is narrow.
   const [narrow, setNarrow] = useState(false);
 
-  const translationShort = translationById(translation)?.short ?? translation;
+  // Re-read the translation when a key or the API.Bible list changes.
+  const bibleKeys = useUI((s) => s.bibleKeys);
+  const apiBibles = useUI((s) => s.apiBibleBibles);
+  const tMain = translationById(translation);
+  const tPar = translationById(parallel);
+  const translationShort = tMain?.short ?? translation;
+  const copyNotice = tMain?.copyNotice;
 
   /* ------------------------------ grabbing verses ----------------------------- */
 
@@ -233,9 +243,11 @@ export function Reader({
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    getChapterFor(translation, ho, chapter).then((c) => {
+    loadChapterFor(translation, ho, chapter).then(({ chapter: c, failure: why, fumsToken }) => {
       if (!alive) return;
       setCh(c);
+      setFailure(why);
+      void reportShown(fumsToken); // API.Bible's FUMS: every display is counted
       setLoading(false);
       const st = useUI.getState();
       const jump = st.target && st.target.ho === ho && st.target.chapter === chapter ? st.target : null;
@@ -260,7 +272,7 @@ export function Reader({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [translation, ho, chapter]);
+  }, [translation, ho, chapter, bibleKeys, apiBibles]);
 
   // Land on a requested verse once its chapter has rendered: scroll it into view,
   // flash it, and give it keyboard focus. The request is then cleared.
@@ -349,14 +361,66 @@ export function Reader({
   useEffect(() => {
     if (!parallel) {
       setCh2(null);
+      setFailure2(undefined);
       return;
     }
     let alive = true;
-    getChapterFor(parallel, ho, chapter).then((c) => alive && setCh2(c));
+    loadChapterFor(parallel, ho, chapter).then(({ chapter: c, failure: why, fumsToken }) => {
+      if (!alive) return;
+      setCh2(c);
+      setFailure2(why);
+      void reportShown(fumsToken);
+    });
     return () => {
       alive = false;
     };
-  }, [parallel, ho, chapter]);
+  }, [parallel, ho, chapter, bibleKeys, apiBibles]);
+
+  // Some licences cap how much of one book may be on screen (the ESV: half). A chapter
+  // that is more than that — only ever in a one- or two-chapter book — is shown a
+  // part at a time, with a button to the other part.
+  const pageShare = Math.min(tMain?.maxBookShareOnPage ?? 1, parallel ? (tPar?.maxBookShareOnPage ?? 1) : 1);
+  const [bookVerses, setBookVerses] = useState<number | undefined>();
+  useEffect(() => {
+    let alive = true;
+    if (pageShare >= 1) return setBookVerses(undefined);
+    bookVerseCount(ho).then((n) => alive && setBookVerses(n));
+    return () => {
+      alive = false;
+    };
+  }, [ho, pageShare]);
+  const [part, setPart] = useState(0);
+  useEffect(() => setPart(0), [ho, chapter, translation, parallel]);
+  const pages = useMemo(() => {
+    if (!ch || pageShare >= 1 || !bookVerses) return null;
+    const nums = ch.items.filter((i) => i.t === "v").map((i) => (i as { n: number }).n);
+    const limit = Math.max(1, Math.floor(bookVerses * pageShare));
+    if (nums.length <= limit) return null;
+    // As few parts as the limit allows, evenly sized (Jude: 1–9, 10–18, 19–25).
+    const size = Math.ceil(nums.length / Math.ceil(nums.length / limit));
+    const out: { start: number; end: number }[] = [];
+    for (let i = 0; i < nums.length; i += size) out.push({ start: nums[i], end: nums[Math.min(nums.length, i + size) - 1] });
+    return out;
+  }, [ch, pageShare, bookVerses]);
+  const window_ = pages ? pages[Math.min(part, pages.length - 1)] : null;
+  const shown = useMemo(() => {
+    if (!ch || !window_) return ch?.items ?? [];
+    // Keep a heading only when the verse after it is on this page.
+    const out: typeof ch.items = [];
+    let pending: (typeof ch.items)[number] | null = null;
+    for (const it of ch.items) {
+      if (it.t === "h") {
+        pending = it;
+        continue;
+      }
+      if (it.n >= window_.start && it.n <= window_.end) {
+        if (pending) out.push(pending);
+        out.push(it);
+      }
+      pending = null;
+    }
+    return out;
+  }, [ch, window_]);
 
   const secMap = useMemo(() => {
     const m = new Map<number, string>();
@@ -368,9 +432,9 @@ export function Reader({
   // takes the whole of every verse it covers, not whatever happens to be on screen).
   const textByVerse = useMemo(() => {
     const m = new Map<number, string>();
-    if (ch) for (const it of ch.items) if (it.t === "v") m.set(it.n, it.text);
+    for (const it of shown) if (it.t === "v") m.set(it.n, it.text);
     return m;
-  }, [ch]);
+  }, [shown]);
   const verseNums = useMemo(() => [...textByVerse.keys()], [textByVerse]);
 
   // Stable merged audio set (BSB narrators + Missler) — a fresh object literal each
@@ -469,7 +533,7 @@ export function Reader({
 
   function copyGrabbed() {
     if (!grabbed) return;
-    void navigator.clipboard?.writeText(citation(ho, chapter, grabbed, translationShort));
+    void navigator.clipboard?.writeText(citation(ho, chapter, grabbed, translationShort, copyNotice));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   }
@@ -496,10 +560,13 @@ export function Reader({
   if (loading) return <div className="p-10 text-muted-foreground">Loading…</div>;
   if (!ch)
     return (
-      <div className="p-10 text-muted-foreground">
-        {translation === "BSB"
-          ? "Chapter not found."
-          : `Couldn't load ${translationById(translation)?.name ?? translation} here — you may be offline. It caches after the first online view; BSB always works offline.`}
+      <div className="space-y-3 p-10 text-muted-foreground">
+        <p>{failureMessage(translation, tMain, failure)}</p>
+        {needsSettings(failure) && (
+          <Button variant="outline" size="sm" onClick={() => navigate(TRANSLATION_SETTINGS)}>
+            Open Bible translation settings
+          </Button>
+        )}
       </div>
     );
 
@@ -558,11 +625,24 @@ export function Reader({
         )}
         {parallel && !narrow && (
           <div className="mb-3 grid grid-cols-2 gap-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <div>{translationById(translation)?.short ?? translation}</div>
-            <div>{translationById(parallel)?.short ?? parallel}</div>
+            <div>{translationShort}</div>
+            <div>
+              {tPar?.short ?? parallel}
+              {!ch2 && failure2 && (
+                <span className="ml-2 font-normal normal-case tracking-normal">— {failureMessage(parallel, tPar, failure2)}</span>
+              )}
+            </div>
           </div>
         )}
-        {ch.items.map((item, i) => {
+        {parallel && narrow && !ch2 && failure2 && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            {tPar?.short ?? parallel}: {failureMessage(parallel, tPar, failure2)}
+          </p>
+        )}
+        {pages && window_ && (
+          <PagePart pages={pages} part={Math.min(part, pages.length - 1)} onPart={setPart} />
+        )}
+        {shown.map((item, i) => {
           if (item.t === "h") {
             return (
               <h3 key={i} className="mb-2 mt-6 font-serif text-lg font-bold text-primary-700 dark:text-primary-300">
@@ -603,7 +683,7 @@ export function Reader({
                 <div className="leading-relaxed">{verse}</div>
                 <div className="mt-1 border-l-2 border-border pl-3 font-serif text-[0.9em] leading-relaxed text-muted-foreground">
                   <span className="mr-1 font-sans text-[0.7em] font-semibold uppercase tracking-wide">
-                    {translationById(parallel)?.short ?? parallel}
+                    {tPar?.short ?? parallel}
                   </span>
                   {secMap.get(item.n) ?? "…"}
                 </div>
@@ -631,9 +711,13 @@ export function Reader({
             <Fragment key={i}>{verse} </Fragment>
           );
         })}
-        <p className="mt-10 text-center text-xs text-muted-foreground">
-          {translationById(translation)?.name ?? translation} · Public Domain
-        </p>
+        <div className="mt-10 space-y-1 text-center text-xs text-muted-foreground" data-testid="translation-notice">
+          <TranslationNotice t={tMain} chapter={ch} fallback={translation} />
+          {parallel && ch2 && <TranslationNotice t={tPar} chapter={ch2} fallback={parallel} />}
+          {pages && window_ && (
+            <PagePart pages={pages} part={Math.min(part, pages.length - 1)} onPart={setPart} />
+          )}
+        </div>
         {/* Room to scroll the last verses clear of a floating button bar or the action sheet. */}
         {(footerSpace || sheet) && <div aria-hidden style={{ height: sheet ? "50vh" : "7rem" }} />}
       </article>
@@ -681,6 +765,86 @@ export function Reader({
           existing={noteByVerse.get(noteVerse) ?? ""}
           onClose={() => setNoteVerse(null)}
         />
+      )}
+    </div>
+  );
+}
+
+/** What to tell the reader when a chapter could not be loaded. */
+function failureMessage(id: string, t: Translation | undefined, failure: ChapterFailure | undefined): string {
+  const name = t?.name ?? id;
+  switch (failure) {
+    case "no-key":
+      return `${name} is read with your own free API key. Add one in Settings → Bible translations.`;
+    case "bad-key":
+      return `The ${t?.source === "esv" ? "ESV" : "API.Bible"} API did not accept your key. Check it in Settings → Bible translations.`;
+    case "not-licensed":
+      return `Your API key is not licensed to read ${name}. Check which texts your key can read in Settings → Bible translations.`;
+    case "rate-limited":
+      return `The ${name} provider says too many passages were asked for just now. Try again in a minute.`;
+    case "not-found":
+      return `${name} does not include this chapter.`;
+    default:
+      return id === "BSB"
+        ? "Chapter not found."
+        : t && t.source !== "helloao"
+          ? `Couldn't load ${name} — you may be offline. Only a small number of recent chapters are kept offline, as its licence requires; BSB always works offline.`
+          : `Couldn't load ${name} here — you may be offline. It caches after the first online view; BSB always works offline.`;
+  }
+}
+
+const needsSettings = (f: ChapterFailure | undefined) => f === "no-key" || f === "bad-key" || f === "not-licensed";
+
+/** The copyright or licence line for a translation, linked where the licence asks for it. */
+function TranslationNotice({ t, chapter, fallback }: { t: Translation | undefined; chapter: Chapter | null; fallback: string }) {
+  if (!t) return <p>{fallback}</p>;
+  const notice = (t.preferChapterCopyright && chapter?.copyright) || t.notice;
+  const label = notice === "Public Domain" ? `${t.name} · Public Domain` : notice;
+  return (
+    <p className="mx-auto max-w-xl">
+      {t.noticeUrl ? (
+        <a href={t.noticeUrl} target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">
+          {label}
+        </a>
+      ) : (
+        label
+      )}
+      {t.credit && (
+        <>
+          {" "}
+          <a href={t.credit.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+            {t.credit.label}
+          </a>
+          .
+        </>
+      )}
+    </p>
+  );
+}
+
+/** "Verses 1–12 of 25 · Show verses 13–25": a chapter shown in parts, as a licence requires. */
+function PagePart({
+  pages,
+  part,
+  onPart,
+}: {
+  pages: { start: number; end: number }[];
+  part: number;
+  onPart: (i: number) => void;
+}) {
+  const cur = pages[part];
+  const last = pages[pages.length - 1].end;
+  return (
+    <div className="my-4 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="page-part">
+      <span>
+        Verses {cur.start}–{cur.end} of {last}. The licence allows only half of a book on screen at once.
+      </span>
+      {pages.map((p, i) =>
+        i === part ? null : (
+          <Button key={i} size="sm" variant="outline" onClick={() => onPart(i)}>
+            {p.start === p.end ? `Show verse ${p.start}` : `Show verses ${p.start}–${p.end}`}
+          </Button>
+        ),
       )}
     </div>
   );
@@ -984,6 +1148,7 @@ function VerseActions({
   onClose: () => void;
 }) {
   const [justAdded, setJustAdded] = useState(false);
+  const copyNotice = useUI((s) => translationById(s.translation)?.copyNotice);
   const inMemory = memorised || justAdded;
   const sheet = variant === "sheet";
 
@@ -992,7 +1157,7 @@ function VerseActions({
     else setHighlight(ho, chapter, n, c);
   };
   const copy = () =>
-    navigator.clipboard?.writeText(citation(ho, chapter, fragment ?? [{ n, text }], translationShort));
+    navigator.clipboard?.writeText(citation(ho, chapter, fragment ?? [{ n, text }], translationShort, copyNotice));
 
   const actions: { key: string; label: string; icon: ReactNode; active?: boolean; run: () => void }[] = [
     { key: "note", label: hasNote ? "Edit note" : "Note", icon: <StickyNote size={18} />, active: hasNote, run: () => { onClose(); onNote(); } },

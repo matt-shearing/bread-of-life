@@ -9,7 +9,8 @@ blocked. Read this page, then `CLAUDE.md`, before changing anything. What comes 
 
 Bread of Life is a warm, offline-first home for Bible reading, prayer and journalling. Its heart is
 an answered-prayer log you can look back on. Around that sit the Berean Standard Bible (bundled,
-plus four public-domain translations fetched on demand), commentary, cross-references and Strong's,
+plus fifteen free translations fetched on demand, and the ESV, NLT and NASB read with the user's own
+key; see [`LICENSED-TRANSLATIONS.md`](LICENSED-TRANSLATIONS.md)), commentary, cross-references and Strong's,
 reading plans, Spurgeon's devotionals, Memory Lane, an audio Bible, Android Auto and an optional AI
 study companion. Everything works without an account; sync is opt-in.
 
@@ -148,7 +149,9 @@ account) and starts syncing reading history.
 
 - The v0.5 sync server is not deployed (see above).
 - `feat/website-v2` (pull request #18), the rewritten website, targets `main` and is not merged.
-- The E2E data key and the AI key sit in plain text in localStorage.
+- The E2E data key, the AI key and the Bible API keys sit in plain text in localStorage.
+- The licensed translations (ESV, NLT, API.Bible) have only run against faked responses; check
+  them with real keys (see [`LICENSED-TRANSLATIONS.md`](LICENSED-TRANSLATIONS.md)).
 - `prayedCount` and array-valued settings merge as whole rows.
 - On Android, `window.print()` probably does nothing, so the Faithfulness review offers Share and
   Copy text instead of a PDF.

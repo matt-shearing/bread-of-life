@@ -17,8 +17,9 @@
  * "dark after sunset" means a different hour on a phone in Brisbane than on a desk
  * in London, and a coordinate is not ours to push at a server), font scale, reading
  * layout, rail open/width, sidebar state, dashboard background, onboarding flags,
- * the current Bible location, the AI config (it holds an API key, which must
- * never leave the device in the clear), and the daily-reading reminder switch and
+ * the current Bible location, the AI config and the Bible API keys with their list of
+ * API.Bible texts (`bibleKeys`, `apiBibleBibles`: keys must never leave the device in
+ * the clear, and a publisher's key is licensed to one user), and the daily-reading reminder switch and
  * times (`notifyPlan`, `readingReminderSlots`): whether and when to be nagged is a
  * choice per device. The Missler library path (`misslerLibraryPath`, a settings row of
  * its own) is a folder on one device and never syncs either: only the settings keys

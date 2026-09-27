@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Check, Columns2 } from "lucide-react";
-import { AVAILABLE_TRANSLATIONS, translationById } from "@/data/bible";
+import { allTranslations, translationById } from "@/data/bible";
 import { useUI } from "@/store/ui";
 import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 export function ParallelPicker() {
   const { translation, parallel, setParallel } = useUI();
+  // Re-render when a key or the API.Bible list changes.
+  useUI((s) => s.bibleKeys);
+  useUI((s) => s.apiBibleBibles);
   const [open, setOpen] = useState(false);
   const active = !!parallel;
 
@@ -25,7 +28,7 @@ export function ParallelPicker() {
           </Button>
         </PopoverTrigger>
       </Tooltip>
-      <PopoverContent align="end" className="w-64 p-1">
+      <PopoverContent align="end" className="max-h-[min(70vh,34rem)] w-72 overflow-y-auto p-1">
         <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Compare with
         </div>
@@ -42,7 +45,7 @@ export function ParallelPicker() {
           <span className="flex-1 text-muted-foreground">Off (single column)</span>
           {!parallel && <Check size={15} className="text-primary-700 dark:text-primary-400" />}
         </button>
-        {AVAILABLE_TRANSLATIONS.filter((t) => t.id !== translation).map((t) => (
+        {allTranslations().filter((t) => t.id !== translation).map((t) => (
           <button
             key={t.id}
             onClick={() => {
@@ -54,7 +57,7 @@ export function ParallelPicker() {
               t.id === parallel && "bg-accent",
             )}
           >
-            <span className="w-10 shrink-0 text-xs font-semibold text-primary-700 dark:text-primary-400">{t.short}</span>
+            <span className="w-11 shrink-0 truncate text-xs font-semibold text-primary-700 dark:text-primary-400">{t.short}</span>
             <span className="flex-1">{t.name}</span>
             {t.id === parallel && <Check size={15} className="text-primary-700 dark:text-primary-400" />}
           </button>

@@ -102,9 +102,13 @@ export interface CommentaryCache {
 }
 
 export interface BibleCache {
-  key: string; // `${translation}:${chapterOsis}` — non-bundled translations only
+  key: string; // `${translation}:${chapterOsis}` — non-bundled translations only; `lic:…` for licensed ones
   json: string; // serialised Chapter
   fetchedAt: number;
+  /** Licensed rows only: verses held, counted against the provider's cap (src/data/licensed/cache.ts). */
+  verses?: number;
+  /** Licensed rows only: last read, the eviction order. */
+  usedAt?: number;
 }
 
 export interface PlanProgress {
