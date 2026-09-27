@@ -43,7 +43,7 @@ and — the heart of it — an **answered-prayer log you can look back on**.
 - `src/data/` — static content loaders: scripture, commentary, Strong's/cross-refs (`study.ts`), plans.
 - `src/db/` — Dexie schema, repositories, sync + E2E crypto. `src/store/` — Zustand UI store.
 - `src/audio/` — narration queue/engine (played in Rust on desktop, a native playlist on Android,
-  Android Auto in `car.ts`).
+  Android Auto's snapshot in `carSnapshot.ts`, chapters finished natively in `nativeCompletions.ts`).
 - `src/ai/` — the optional study companion's provider client (loaded on demand).
 - `src/lib/` — small shared helpers (OSIS, dates, reminders, `htmlToText`, …).
 - `src-tauri/plugins/` — our own Tauri plugins: `native-audio` (vendored fork), `reminders`,
@@ -51,6 +51,6 @@ and — the heart of it — an **answered-prayer log you can look back on**.
 - `scripts/` — data ingestion (`fetch-bible`, `build-*`) and the `test-*.mjs` tests.
 - Only the journal may import the Tiptap editor (ESLint enforces it) — it's the biggest dependency.
 
-## Roadmap (see brief §9)
-SQLite swap → Strong's + cross-refs → Matt's own commentary corpus (from `~/dev/commentary-parser`)
-→ reading plans + devotionals → local `sqlite-vec` AI study companion. (Optional sync has shipped.)
+## Roadmap
+See `docs/ROADMAP.md` (shipped, next, decided against) and `docs/HANDOFF.md` (current state and
+open issues). Read both before starting new work.
