@@ -9,7 +9,7 @@
  */
 import { registerHooks } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import "fake-indexeddb/auto";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 
@@ -23,7 +23,8 @@ function devOf(url) {
   return m ? m[1] : null;
 }
 function withExt(path) {
-  for (const p of [path, `${path}.ts`, `${path}.tsx`, `${path}/index.ts`]) if (existsSync(p) && !p.endsWith("/")) return p;
+  // A directory (`@/db`) resolves to its index.ts, as Vite does.
+  for (const p of [path, `${path}.ts`, `${path}.tsx`, `${path}/index.ts`]) if (existsSync(p) && statSync(p).isFile()) return p;
   return path;
 }
 
@@ -77,7 +78,7 @@ function skewedDate(skew) {
 
 let n = 0;
 /**
- * A fresh device: { name, db, sync, crypto, repos, tracking, readingLog, skew, localStorage, idb }.
+ * A fresh device: { name, db, sync, crypto, repos, tracking, readingLog, skew, localStorage, idb, load }.
  * Pass `restartOf: otherDevice` to get the same device after an app restart: same
  * IndexedDB and localStorage, fresh module state.
  */
@@ -99,5 +100,7 @@ export async function device(name = `d${n + 1}`, { skewMs = 0, restartOf = null 
   delete globalThis.__bolIndexedDB;
   await index.db.open();
   sync.setAutoSync(false); // tests run rounds explicitly with syncNow()
-  return { name, db: index.db, sync, crypto, repos, tracking, readingLog, skew, localStorage, idb };
+  /** Import any other source module as this device, e.g. `await d.load("lib/backup.ts")`. */
+  const load = (rel) => import(pathToFileURL(SRC + rel).href + q);
+  return { name, db: index.db, sync, crypto, repos, tracking, readingLog, skew, localStorage, idb, load };
 }

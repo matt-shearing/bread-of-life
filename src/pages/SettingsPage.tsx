@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/db";
 import { SyncSettings } from "@/components/settings/SyncSettings";
 import { E2ESettings } from "@/components/settings/E2ESettings";
 import { MisslerSettings } from "@/components/settings/MisslerSettings";
@@ -9,7 +7,8 @@ import { CommentarySettings } from "@/components/settings/CommentarySettings";
 import { ReminderSettings } from "@/components/settings/ReminderSettings";
 import { AISettings } from "@/components/settings/AISettings";
 import { AboutSettings, FeedbackSettings } from "@/components/settings/FeedbackSettings";
-import { Card, CardContent, CardHeader, CardTitle, PageHeader } from "@/components/ui";
+import { DataSettings } from "@/components/settings/DataSettings";
+import { PageHeader } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
 /** The sections, in page order; the index beside (or above) them jumps to each. */
@@ -28,16 +27,6 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 export function SettingsPage() {
-  const counts = useLiveQuery(
-    async () => ({
-      highlights: await db.highlights.count(),
-      notes: await db.notes.count(),
-      prayers: await db.prayers.count(),
-      journal: await db.journal.count(),
-    }),
-    [],
-    { highlights: 0, notes: 0, prayers: 0, journal: 0 },
-  );
   const [active, pick] = useActiveSection();
 
   return (
@@ -73,18 +62,7 @@ export function SettingsPage() {
           </Section>
 
           <Section id="data">
-            <Card>
-              <CardHeader>
-                <CardTitle>Your data</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm text-muted-foreground">
-                <p>{counts.highlights} highlights · {counts.notes} notes · {counts.prayers} prayers · {counts.journal} journal entries</p>
-                <p className="pt-2 text-xs">
-                  Everything is stored locally on this device (offline-first). Scripture is the Berean
-                  Standard Bible, public domain (CC0).
-                </p>
-              </CardContent>
-            </Card>
+            <DataSettings />
           </Section>
 
           <Section id="feedback">

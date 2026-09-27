@@ -187,6 +187,16 @@ export interface UIState {
   readerHintDismissed: boolean;
   dismissReaderHint: () => void;
 
+  // Backups (src/lib/backup.ts). PER DEVICE on purpose: a backup made on the desktop
+  // does nothing for the phone, so each device remembers its own. The monthly nudge
+  // shows only when there is no sync account.
+  lastBackupAt: number | null;
+  setLastBackupAt: (ts: number) => void;
+  backupReminder: boolean;
+  setBackupReminder: (v: boolean) => void;
+  backupNudgeSnoozedAt: number | null;
+  snoozeBackupNudge: () => void;
+
   // AI study companion
   ai: AIConfig;
   setAI: (patch: Partial<AIConfig>) => void;
@@ -361,6 +371,13 @@ export const useUI = create<UIState>()(
       dismissSyncPrompt: () => set({ syncPromptDismissed: true }),
       readerHintDismissed: false,
       dismissReaderHint: () => set({ readerHintDismissed: true }),
+
+      lastBackupAt: null,
+      setLastBackupAt: (ts) => set({ lastBackupAt: ts }),
+      backupReminder: true,
+      setBackupReminder: (v) => set({ backupReminder: v }),
+      backupNudgeSnoozedAt: null,
+      snoozeBackupNudge: () => set({ backupNudgeSnoozedAt: Date.now() }),
 
       ai: { provider: "anthropic", model: "claude-opus-5", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),

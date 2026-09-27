@@ -6,6 +6,7 @@ import { OnThisDay } from "@/components/dashboard/OnThisDay";
 import { StatRow } from "@/components/dashboard/StatRow";
 import { RecentJournal } from "@/components/dashboard/RecentJournal";
 import { SyncNudge } from "@/components/dashboard/SyncNudge";
+import { BackupNudge } from "@/components/dashboard/BackupNudge";
 import { PageHeader } from "@/components/ui";
 
 function greeting() {
@@ -27,6 +28,7 @@ export function DashboardPage() {
         <OnThisDay />
         <StatRow />
         <RecentJournal />
+        <BackupNudge />
         <SyncNudge />
       </div>
     </div>
