@@ -61,11 +61,13 @@ export function CaptureDialog({ mode, ho, chapter, verse, verseText, label, onCl
 
         <div className="space-y-2">
           <Input
+            aria-label={mode === "journal" ? "Title" : "Prayer"}
             placeholder={mode === "journal" ? "Title" : "What are you praying for?"}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
           <Textarea
+            aria-label={mode === "journal" ? "Reflection" : "Details (optional)"}
             placeholder={mode === "journal" ? "Write your reflection…" : "Add any details (optional)"}
             value={body}
             onChange={(e) => setBody(e.target.value)}

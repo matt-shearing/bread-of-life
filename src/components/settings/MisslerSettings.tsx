@@ -56,6 +56,9 @@ export function MisslerSettings() {
   const [path, setPath] = useState("");
   const [status, setStatus] = useState<MisslerStatus | null>(null);
   const [saving, setSaving] = useState(false);
+  // B18: a "couldn't read" error means something only after you've tried a path here;
+  // before that, a fresh install just has no library yet.
+  const [attempted, setAttempted] = useState(false);
 
   const [url, setUrl] = useState("");
   const [includeAudio, setIncludeAudio] = useState(true);
@@ -116,6 +119,7 @@ export function MisslerSettings() {
         dir = typeof picked === "string" ? picked : null;
       }
       if (dir) {
+        setAttempted(true);
         setPath(dir);
         setSaving(true);
         await setMisslerLibraryPath(dir);
@@ -138,6 +142,7 @@ export function MisslerSettings() {
   };
 
   const save = async () => {
+    setAttempted(true);
     setSaving(true);
     await setMisslerLibraryPath(path);
     setStatus(await getMisslerStatus());
@@ -165,8 +170,12 @@ export function MisslerSettings() {
         <CardTitle>Missler Inspired (MI) Library</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <label htmlFor="missler-path" className="block text-sm font-medium">
+          Library folder
+        </label>
         <div className="flex items-center gap-2">
           <Input
+            id="missler-path"
             value={path}
             onChange={(e) => setPath(e.target.value)}
             placeholder={
@@ -200,7 +209,7 @@ export function MisslerSettings() {
               </span>
             ) : (
               <span className="text-muted-foreground">
-                {status.error ?? "No library set yet. Paste the path to your built library folder above."}
+                {(attempted && status.error) || "No library set yet. Paste the path to your built library folder above."}
               </span>
             )}
           </div>
@@ -230,8 +239,12 @@ export function MisslerSettings() {
             </p>
           </div>
 
+          <label htmlFor="missler-url" className="sr-only">
+            Library URL
+          </label>
           <div className="flex items-center gap-2">
             <Input
+              id="missler-url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="http://100.x.y.z:8765"

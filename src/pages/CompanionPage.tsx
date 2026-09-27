@@ -168,6 +168,7 @@ export function CompanionPage() {
       <div className="border-t border-border px-4 py-4 md:px-6">
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <Textarea
+            aria-label="Ask the study companion"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -181,7 +182,7 @@ export function CompanionPage() {
             rows={1}
             className="min-h-[44px] resize-none"
           />
-          <Button onClick={() => send(input)} disabled={!configured || loading || !input.trim()} size="icon" className="h-11 w-11">
+          <Button onClick={() => send(input)} disabled={!configured || loading || !input.trim()} size="icon" className="h-11 w-11" aria-label="Send">
             <Send size={18} />
           </Button>
         </div>

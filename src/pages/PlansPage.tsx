@@ -261,7 +261,7 @@ function CreatePlanDialog({ onClose }: { onClose: () => void }) {
       <DialogContent>
         <DialogTitle>Create a reading plan</DialogTitle>
         <DialogDescription>Choose a book range and how many days to spread it over.</DialogDescription>
-        <Input placeholder="Plan name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input aria-label="Plan name (optional)" placeholder="Plan name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
         <div className="grid grid-cols-2 gap-2">
           <label className="text-sm text-muted-foreground">
             From

@@ -228,6 +228,7 @@ export function E2ESettings() {
             will unlock and decrypt on this device.
           </DialogDescription>
           <Textarea
+            aria-label="Recovery phrase"
             value={restoreText}
             onChange={(e) => setRestoreText(e.target.value)}
             placeholder="word1 word2 word3 …"
