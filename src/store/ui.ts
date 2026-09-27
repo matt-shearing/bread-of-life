@@ -197,11 +197,35 @@ export interface UIState {
   backupNudgeSnoozedAt: number | null;
   snoozeBackupNudge: () => void;
 
+  /**
+   * Your own keys for licensed Bible APIs (ESV, API.Bible), and the API.Bible texts
+   * you chose to show. Per device and never synced, like the AI key: see
+   * src/store/syncedPrefs.ts for what does travel.
+   */
+  bibleKeys: BibleKeys;
+  setBibleKey: (provider: keyof BibleKeys, key: string) => void;
+  apiBibleBibles: ApiBibleChoice[];
+  setApiBibleBibles: (list: ApiBibleChoice[]) => void;
+
   // AI study companion
   ai: AIConfig;
   setAI: (patch: Partial<AIConfig>) => void;
   companionSeed: string | null; // a question to auto-send when the companion opens
   setCompanionSeed: (q: string | null) => void;
+}
+
+export interface BibleKeys {
+  esv: string;
+  nlt: string;
+  apiBible: string;
+}
+/** A text on API.Bible that your key can read and you added to the picker. */
+export interface ApiBibleChoice {
+  id: string; // API.Bible bible id
+  abbreviation: string;
+  name: string;
+  /** The copyright statement API.Bible returned with it. */
+  copyright?: string;
 }
 
 export type AIProvider = "anthropic" | "openai" | "xai" | "google" | "deepseek" | "ollama" | "custom";
@@ -379,6 +403,11 @@ export const useUI = create<UIState>()(
       backupNudgeSnoozedAt: null,
       snoozeBackupNudge: () => set({ backupNudgeSnoozedAt: Date.now() }),
 
+      bibleKeys: { esv: "", nlt: "", apiBible: "" },
+      setBibleKey: (provider, key) => set((s) => ({ bibleKeys: { ...s.bibleKeys, [provider]: key.trim() } })),
+      apiBibleBibles: [],
+      setApiBibleBibles: (list) => set({ apiBibleBibles: list }),
+
       ai: { provider: "anthropic", model: "claude-opus-5", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),
       companionSeed: null,
@@ -412,6 +441,7 @@ export const useUI = create<UIState>()(
        */
       merge: (persisted, current) => {
         const next = { ...current, ...(persisted as Partial<UIState> | undefined) };
+        next.bibleKeys = { ...current.bibleKeys, ...next.bibleKeys };
         next.theme = normalizeThemeMode(next.theme);
         next.resolvedTheme = resolveTheme(next.theme, next.themeLocation);
         return next;

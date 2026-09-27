@@ -155,7 +155,6 @@ Everything below is merged on `integrate/v0.5` and not yet released.
 - The SQLite swap for user data. It is deferred because IndexedDB already works offline in every
   webview, and a SQLite backend cannot run in the browser test loop. Revisit it with local AI search.
 - Matt's own commentary corpus from `~/dev/commentary-parser` as a commentary source.
-- Licensed translations (NASB, Amplified) through API.Bible behind the user's own key.
 - *The Word for Today*, built on `feat/word-for-today` and held until UCB grants written permission
   (see [`WORD-FOR-TODAY.md`](WORD-FOR-TODAY.md)).
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SyncSettings } from "@/components/settings/SyncSettings";
 import { E2ESettings } from "@/components/settings/E2ESettings";
 import { MisslerSettings } from "@/components/settings/MisslerSettings";
@@ -6,6 +7,7 @@ import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { CommentarySettings } from "@/components/settings/CommentarySettings";
 import { ReminderSettings } from "@/components/settings/ReminderSettings";
 import { AISettings } from "@/components/settings/AISettings";
+import { BibleKeysSettings } from "@/components/settings/BibleKeysSettings";
 import { AboutSettings, FeedbackSettings } from "@/components/settings/FeedbackSettings";
 import { DataSettings } from "@/components/settings/DataSettings";
 import { PageHeader } from "@/components/ui";
@@ -14,6 +16,7 @@ import { cn } from "@/lib/cn";
 /** The sections, in page order; the index beside (or above) them jumps to each. */
 const SECTIONS = [
   { id: "appearance", label: "Appearance" },
+  { id: "translations", label: "Bible translations" },
   { id: "commentary", label: "Commentary" },
   { id: "reminders", label: "Reminders" },
   { id: "companion", label: "AI companion" },
@@ -28,6 +31,16 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 
 export function SettingsPage() {
   const [active, pick] = useActiveSection();
+  // `?section=translations` (from the translation picker) opens at that card.
+  const [params] = useSearchParams();
+  const wanted = params.get("section");
+  useEffect(() => {
+    const s = SECTIONS.find((x) => x.id === wanted);
+    if (!s) return;
+    pick(s.id);
+    const raf = window.requestAnimationFrame(() => jumpTo(s.id));
+    return () => window.cancelAnimationFrame(raf);
+  }, [wanted, pick]);
 
   return (
     <div id="settings-scroll" className="h-full overflow-y-auto">
@@ -41,6 +54,9 @@ export function SettingsPage() {
         <div className="space-y-4">
           <Section id="appearance">
             <AppearanceSettings />
+          </Section>
+          <Section id="translations">
+            <BibleKeysSettings />
           </Section>
           <Section id="commentary">
             <CommentarySettings />
