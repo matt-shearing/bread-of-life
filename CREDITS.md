@@ -10,7 +10,7 @@ redistributed here.
 | Data | Source | License |
 |---|---|---|
 | Berean Standard Bible (BSB) | berean.bible via the HelloAO Free Use Bible API | Public domain (CC0) |
-| OT Hebrew interlinear + morphology (`public/data/strongs-heb`, `lexicon-heb.json`) | Open Scriptures Hebrew Bible (Westminster Leningrad Codex), openscriptures/morphhb | **CC BY 4.0** |
+| OT Hebrew interlinear + morphology (`public/data/strongs-heb`, `lexicon-heb/`) | Open Scriptures Hebrew Bible (Westminster Leningrad Codex), openscriptures/morphhb | **CC BY 4.0** |
 | Cross-references (`public/data/xref`) | OpenBible.info — derived from the Treasury of Scripture Knowledge | **CC BY 4.0** |
 | NT Greek Strong's word tags + lexicon (`public/data/strongs`) | Strong's Concordance / BSB word tags | Public domain |
 | Spurgeon, *Morning & Evening* (`spurgeon.json`) | Christian Classics Ethereal Library (CCEL) | Public domain |

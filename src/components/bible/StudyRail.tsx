@@ -463,9 +463,10 @@ function StrongsPanel() {
     let alive = true;
     setLoading(true);
     setActive(null);
-    const loader = isOT
-      ? Promise.all([getHebrewVerse(ho, chapter, verse), loadHebLexicon()])
-      : Promise.all([getStrongsVerse(ho, chapter, verse), loadLexicon()]);
+    // The verse's words first, then just the lexicon entries they use.
+    const loader = (isOT ? getHebrewVerse(ho, chapter, verse) : getStrongsVerse(ho, chapter, verse)).then(
+      async (t) => [t, await (isOT ? loadHebLexicon : loadLexicon)(t.map((w) => w.s))] as const,
+    );
     loader.then(([t, l]) => {
       if (!alive) return;
       setTokens(t);
