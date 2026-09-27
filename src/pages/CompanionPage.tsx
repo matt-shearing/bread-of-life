@@ -95,7 +95,7 @@ export function CompanionPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-border px-4 py-4 md:px-6">
-        <Sparkles size={20} className="text-primary-600" />
+        <Sparkles size={20} className="text-primary-700 dark:text-primary-400" />
         <div>
           <h1 className="font-serif text-xl font-bold">Study Companion</h1>
           <p className="text-xs text-muted-foreground">
@@ -182,7 +182,7 @@ export function CompanionPage() {
             rows={1}
             className="min-h-[44px] resize-none"
           />
-          <Button onClick={() => send(input)} disabled={!configured || loading || !input.trim()} size="icon" className="h-11 w-11" aria-label="Send">
+          <Button onClick={() => send(input)} disabled={!configured || loading || !input.trim()} size="icon" className="h-11 w-11 shrink-0" aria-label="Send">
             <Send size={18} />
           </Button>
         </div>

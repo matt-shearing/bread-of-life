@@ -29,7 +29,7 @@ export function StudyRailCoach({
           </div>
           <div className="rounded-xl border border-primary/40 bg-card p-3 shadow-card">
             <div className="flex items-start gap-2">
-              <BookMarked size={18} className="mt-0.5 shrink-0 text-primary-600" />
+              <BookMarked size={18} className="mt-0.5 shrink-0 text-primary-700 dark:text-primary-400" />
               <div className="min-w-0">
                 <div className="text-sm font-semibold">Commentary &amp; more, right here</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
@@ -60,7 +60,7 @@ export function StudyRailCoach({
       >
         <div className="rounded-xl border border-primary/40 bg-card p-3 shadow-card">
           <div className="flex items-start gap-2">
-            <MoveHorizontal size={18} className="mt-0.5 shrink-0 text-primary-600" />
+            <MoveHorizontal size={18} className="mt-0.5 shrink-0 text-primary-700 dark:text-primary-400" />
             <div className="min-w-0">
               <div className="text-sm font-semibold">Drag to resize</div>
               <div className="mt-0.5 text-xs text-muted-foreground">

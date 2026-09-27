@@ -318,7 +318,7 @@ function SessionDone({ streak, reviewed, onBack }: { streak: number; reviewed: n
   return (
     <Card className="p-10 text-center">
       <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-        <Check size={32} className="text-primary-600" />
+        <Check size={32} className="text-primary-700 dark:text-primary-400" />
       </div>
       <h2 className="font-serif text-2xl font-bold">Well done!</h2>
       <p className="mt-2 text-muted-foreground">
@@ -358,7 +358,7 @@ function PoolRow({ card, onOpen }: { card: MemoryCard; onOpen: () => void }) {
       <button
         onClick={() => removeMemoryVerse(card.id)}
         aria-label="Remove from Memory Lane"
-        className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
+        className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
       >
         <Trash2 size={16} />
       </button>

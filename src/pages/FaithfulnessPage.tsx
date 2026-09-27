@@ -268,7 +268,7 @@ export function FaithfulnessPage() {
         <article className="mx-auto max-w-2xl px-6 py-10 print:py-0">
           {/* Cover */}
           <header className="mb-10 text-center">
-            <div className="mb-3 flex items-center justify-center gap-1.5 text-primary-600">
+            <div className="mb-3 flex items-center justify-center gap-1.5 text-primary-700 dark:text-primary-400">
               <Sparkles size={16} />
               <span className="text-xs font-semibold uppercase tracking-wider">Bread of Life</span>
             </div>
@@ -356,7 +356,7 @@ function FaithEntry({ p, journal }: { p: Prayer; journal: Map<string, JournalEnt
       )}
       {p.linkedOsis.length > 0 && (
         <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-          <BookOpen size={13} className="shrink-0 text-primary-600" />
+          <BookOpen size={13} className="shrink-0 text-primary-700 dark:text-primary-400" />
           {p.linkedOsis.map(osisLabel).join(" · ")}
         </p>
       )}
@@ -367,7 +367,7 @@ function FaithEntry({ p, journal }: { p: Prayer; journal: Map<string, JournalEnt
             return (
               <div key={j.id} className="text-sm">
                 <div className="flex items-center gap-1.5 font-medium">
-                  <NotebookPen size={13} className="shrink-0 text-primary-600" />
+                  <NotebookPen size={13} className="shrink-0 text-primary-700 dark:text-primary-400" />
                   {entryTitle(j)}
                   <span className="text-xs font-normal text-muted-foreground">· {longDate(j.createdAt)}</span>
                 </div>

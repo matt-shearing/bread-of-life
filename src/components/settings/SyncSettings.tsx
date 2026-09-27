@@ -132,7 +132,7 @@ export function SyncSettings() {
           {busy ? "…" : isSignup ? "Create account" : "Log in"}
         </Button>
         {!reauth && (
-          <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setIsSignup((v) => !v)}>
+          <button type="button" className="text-xs text-muted-foreground underline [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2" onClick={() => setIsSignup((v) => !v)}>
             {isSignup ? "I already have an account" : "Create an account"}
           </button>
         )}

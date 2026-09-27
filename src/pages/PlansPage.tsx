@@ -80,7 +80,7 @@ export function PlansPage() {
                 onClick={() => setSelectedId(p.id)}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-serif text-lg font-bold">{p.name}</h3>
+                  <h3 className="text-lg font-semibold">{p.name}</h3>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {customIds.has(p.id) && <Badge className="text-muted-foreground">Custom</Badge>}
                     {byId.has(p.id) && (
@@ -227,7 +227,7 @@ function PlanDetail({
                   ))}
                 </div>
                 {isToday && !isDone && (
-                  <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-primary-600 sm:flex">
+                  <span className="hidden shrink-0 items-center gap-1 text-xs font-medium text-primary-700 dark:text-primary-400 sm:flex">
                     <BookOpen size={13} /> Today
                   </span>
                 )}

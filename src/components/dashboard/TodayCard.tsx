@@ -338,7 +338,7 @@ function DevotionRow() {
         <p className="text-sm text-muted-foreground">
           {reading.ref ? `${reading.ref} · ` : ""}
           {dev.author} ·{" "}
-          <Link to="/devotional" className="font-medium text-primary-700 underline-offset-2 hover:underline dark:text-primary-400">
+          <Link to="/devotional" className="font-medium text-primary-700 underline-offset-2 hover:underline dark:text-primary-400 [@media(pointer:coarse)]:-my-3 [@media(pointer:coarse)]:inline-block [@media(pointer:coarse)]:py-3">
             Browse all
           </Link>
         </p>

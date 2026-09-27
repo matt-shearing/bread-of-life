@@ -257,7 +257,7 @@ export function MisslerSettings() {
             </Button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm [@media(pointer:coarse)]:min-h-11">
             <input
               type="checkbox"
               className="h-4 w-4 accent-primary"

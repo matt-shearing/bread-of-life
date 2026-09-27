@@ -75,7 +75,7 @@ export function AudioPlayer({
       {narrators.length > 1 && (
         <Popover>
           <PopoverTrigger asChild>
-            <button className="rounded px-1.5 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent">
+            <button className="rounded px-1.5 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2.5">
               {narrator}
             </button>
           </PopoverTrigger>
@@ -92,7 +92,7 @@ export function AudioPlayer({
                   n === narrator && "bg-accent",
                 )}
               >
-                {n === narrator && <Play size={12} className="text-primary-600" />}
+                {n === narrator && <Play size={12} className="text-primary-700 dark:text-primary-400" />}
                 {n}
               </button>
             ))}

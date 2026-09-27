@@ -308,7 +308,7 @@ export function GuidedReaderPage() {
                   onClick={() => setCursor(i)}
                   aria-label={`Go to ${refRange(r.ho, r.chapter, r.vStart, r.vEnd)}`}
                   className={cn(
-                    "flex h-6 min-w-6 items-center justify-center rounded-full border px-1.5 text-[11px] font-semibold transition-colors",
+                    "relative flex h-6 min-w-6 items-center justify-center rounded-full border px-1.5 text-[11px] font-semibold transition-colors [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-2.5 [@media(pointer:coarse)]:after:content-['']",
                     done
                       ? "border-success bg-success text-success-foreground"
                       : i === cursor

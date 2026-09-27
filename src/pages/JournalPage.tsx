@@ -116,7 +116,7 @@ export function JournalPage() {
             onClick={() => setDialog({ id: null, mode: "edit" })}
             className="mb-4 flex min-h-[44px] w-full items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-left text-sm hover:bg-primary/10"
           >
-            <History size={16} className="shrink-0 text-primary-600" />
+            <History size={16} className="shrink-0 text-primary-700 dark:text-primary-400" />
             <span className="min-w-0 flex-1 truncate">
               You have an unsaved entry{newDraft ? <>: <strong>{newDraft}</strong></> : null}
             </span>
@@ -645,7 +645,7 @@ function EntryEditor({
             data-testid="draft-restored"
             className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
           >
-            <History size={15} className="shrink-0 text-primary-600" />
+            <History size={15} className="shrink-0 text-primary-700 dark:text-primary-400" />
             <span className="min-w-0 flex-1">
               Restored your unsaved changes from{" "}
               {new Date(restored.savedAt).toLocaleString(undefined, {
@@ -793,10 +793,10 @@ function PrayerLinkPicker({
                 >
                   <HandHeart
                     size={15}
-                    className={on ? "text-primary-600" : "text-muted-foreground"}
+                    className={on ? "text-primary-700 dark:text-primary-400" : "text-muted-foreground"}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.title}</span>
-                  {on && <span className="text-xs text-primary-600">Linked</span>}
+                  {on && <span className="text-xs text-primary-700 dark:text-primary-400">Linked</span>}
                 </button>
               );
             })}

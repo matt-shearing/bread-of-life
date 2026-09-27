@@ -291,7 +291,7 @@ function XrefRow({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
       onClick={() => onOpen(p.ho, p.chapter, p.verse)}
       className="block w-full rounded-md border border-border p-2.5 text-left hover:border-primary/40 hover:bg-accent/40"
     >
-      <div className="text-xs font-semibold text-primary-600">{osisLabel(osis)}</div>
+      <div className="text-xs font-semibold text-primary-700 dark:text-primary-400">{osisLabel(osis)}</div>
       {text && <div className="mt-0.5 line-clamp-2 font-serif text-[13px] text-foreground/90">{text}</div>}
     </button>
   );
@@ -376,7 +376,7 @@ function ReferencesPanel() {
             >
               <div className="flex items-center gap-1.5">
                 {r.kind === "journal" ? (
-                  <NotebookPen size={13} className="shrink-0 text-primary-600" />
+                  <NotebookPen size={13} className="shrink-0 text-primary-700 dark:text-primary-400" />
                 ) : (
                   <HandHeart size={13} className="shrink-0 text-rose-500" />
                 )}

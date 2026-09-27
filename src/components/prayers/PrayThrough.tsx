@@ -91,7 +91,7 @@ export function PrayThroughButton({
             className,
           )}
         >
-          <HandHeart size={20} className="shrink-0 text-primary-600" />
+          <HandHeart size={20} className="shrink-0 text-primary-700 dark:text-primary-400" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">{label}</span>
             <span className="block text-xs text-muted-foreground">

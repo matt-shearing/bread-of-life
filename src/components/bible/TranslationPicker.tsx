@@ -31,12 +31,12 @@ export function TranslationPicker() {
               t.id === translation && "bg-accent",
             )}
           >
-            <span className="w-10 shrink-0 text-xs font-semibold text-primary-600">{t.short}</span>
+            <span className="w-10 shrink-0 text-xs font-semibold text-primary-700 dark:text-primary-400">{t.short}</span>
             <span className="flex-1">{t.name}</span>
             {t.bundled && (
               <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">offline</span>
             )}
-            {t.id === translation && <Check size={15} className="text-primary-600" />}
+            {t.id === translation && <Check size={15} className="text-primary-700 dark:text-primary-400" />}
           </button>
         ))}
 

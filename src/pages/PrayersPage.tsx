@@ -448,7 +448,7 @@ function PrayerCard({
             className="-my-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
           >
             {p.remind ? (
-              <BellRing size={16} className="text-primary-600" />
+              <BellRing size={16} className="text-primary-700 dark:text-primary-400" />
             ) : (
               <Bell size={16} className="text-muted-foreground" />
             )}
@@ -653,10 +653,10 @@ function JournalLinkPicker({
                 >
                   <NotebookPen
                     size={15}
-                    className={on ? "text-primary-600" : "text-muted-foreground"}
+                    className={on ? "text-primary-700 dark:text-primary-400" : "text-muted-foreground"}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{entryTitle(j)}</span>
-                  {on && <span className="text-xs text-primary-600">Linked</span>}
+                  {on && <span className="text-xs text-primary-700 dark:text-primary-400">Linked</span>}
                 </button>
               );
             })}
@@ -874,7 +874,7 @@ function PrayerDialog({ prayer, onClose }: { prayer?: Prayer; onClose: () => voi
           className="flex min-h-[36px] items-center gap-2 text-left text-sm text-muted-foreground [@media(pointer:coarse)]:min-h-[44px]"
         >
           {remind ? (
-            <BellRing size={16} className="text-primary-600" />
+            <BellRing size={16} className="text-primary-700 dark:text-primary-400" />
           ) : (
             <Bell size={16} />
           )}

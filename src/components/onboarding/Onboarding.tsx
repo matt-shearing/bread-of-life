@@ -142,7 +142,7 @@ function FeaturesStep() {
       <ul className="mt-5 space-y-4">
         {FEATURES.map((f) => (
           <li key={f.title} className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-600">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-700 dark:text-primary-400">
               <f.icon size={20} />
             </div>
             <div>

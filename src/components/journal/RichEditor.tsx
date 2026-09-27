@@ -39,7 +39,7 @@ export function RichEditor({
       title={label}
       className={cn(
         "flex h-8 w-8 items-center justify-center rounded hover:bg-accent [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
-        active ? "bg-accent text-primary-600" : "text-muted-foreground",
+        active ? "bg-accent text-primary-700 dark:text-primary-400" : "text-muted-foreground",
       )}
     >
       {children}

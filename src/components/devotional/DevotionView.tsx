@@ -42,7 +42,7 @@ export function DevotionView({
             onClick={() => onOpenVerse(reading)}
             disabled={!reading.ho}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium",
+              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium [@media(pointer:coarse)]:min-h-11",
               reading.ho
                 ? "bg-primary/10 text-primary-700 hover:bg-primary/20 dark:text-primary-300"
                 : "bg-muted text-muted-foreground",

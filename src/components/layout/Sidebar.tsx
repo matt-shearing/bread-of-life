@@ -71,7 +71,7 @@ export function Sidebar() {
                 "relative flex items-center rounded-md text-sm font-medium transition-colors",
                 "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 "[&.active]:bg-primary/15 [&.active]:text-primary-700 dark:[&.active]:text-primary-300",
-                collapsed ? "h-10 justify-center" : "gap-3 px-3 py-2.5",
+                collapsed ? "h-10 justify-center [@media(pointer:coarse)]:h-11" : "gap-3 px-3 py-2.5",
               )}
             >
               <Icon size={18} className="shrink-0" aria-hidden />
@@ -110,7 +110,7 @@ export function Sidebar() {
             className={cn(
               "flex items-center rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               "[&.active]:text-foreground",
-              collapsed ? "h-10 w-10 justify-center" : "gap-2 px-3 py-2",
+              collapsed ? "h-10 w-10 justify-center [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11" : "gap-2 px-3 py-2",
             )}
           >
             <SETTINGS_NAV.icon size={18} aria-hidden />

@@ -615,7 +615,7 @@ export function Reader({
               <div key={i} className="mb-3 grid grid-cols-2 gap-6">
                 <div>{verse}</div>
                 <div className="font-serif leading-relaxed text-foreground/90">
-                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-600">
+                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-700 dark:text-primary-400">
                     {item.n}
                   </sup>
                   {secMap.get(item.n) ?? "…"}
@@ -904,7 +904,7 @@ function Verse({
             flash && "verse-flash",
           )}
         >
-          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-600">
+          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-700 dark:text-primary-400">
             {n}
           </sup>
           {/* The words, and only the words — see src/lib/quote.ts. `select-text`
@@ -1072,7 +1072,7 @@ function VerseActions({
                 aria-label={a.label === "Ask" ? "Ask companion" : a.label}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  a.active && "text-primary-600",
+                  a.active && "text-primary-700 dark:text-primary-400",
                 )}
               >
                 {a.icon}

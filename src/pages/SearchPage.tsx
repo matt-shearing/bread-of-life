@@ -295,7 +295,7 @@ export function SearchPage() {
                   <button
                     key={r}
                     onClick={() => setQuery(r)}
-                    className="flex min-h-10 items-center rounded-full border border-dashed border-border px-3 text-sm text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-10 items-center rounded-full border border-dashed [@media(pointer:coarse)]:min-h-11 border-border px-3 text-sm text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {r}
                   </button>
@@ -322,11 +322,11 @@ export function SearchPage() {
                 >
                   <div className="flex items-center gap-1.5 text-sm font-medium">
                     {m.kind === "journal" ? (
-                      <NotebookPen size={14} className="shrink-0 text-primary-600" />
+                      <NotebookPen size={14} className="shrink-0 text-primary-700 dark:text-primary-400" />
                     ) : m.kind === "prayer" ? (
                       <HandHeart size={14} className="shrink-0 text-rose-500" />
                     ) : (
-                      <StickyNote size={14} className="shrink-0 text-primary-600" />
+                      <StickyNote size={14} className="shrink-0 text-primary-700 dark:text-primary-400" />
                     )}
                     <span className="truncate">
                       <Snippet text={m.title} terms={terms} />
