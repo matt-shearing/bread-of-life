@@ -57,10 +57,25 @@ export async function loadIndex(): Promise<BookIndexEntry[]> {
   return indexCache;
 }
 
+/**
+ * Tidy verse text for display. The BSB source puts a space before closing quote
+ * marks ("…with him. ”"), which lets a lone ” wrap onto a line of its own; we
+ * close that gap. Applied once per chapter as it is loaded, for every translation.
+ */
+export function normalizeVerseText(text: string): string {
+  return text.replace(/\s+([”’])/g, "$1");
+}
+
+function normalizeChapter(ch: Chapter): Chapter {
+  for (const it of ch.items) if (it.t === "v") it.text = normalizeVerseText(it.text);
+  return ch;
+}
+
 export async function loadBook(ho: string): Promise<Book> {
   const cached = bookCache.get(ho);
   if (cached) return cached;
   const book = await getJSON<Book>(`${BASE}/${ho}.json`);
+  book.chapters.forEach(normalizeChapter);
   bookCache.set(ho, book);
   return book;
 }
@@ -117,7 +132,7 @@ export async function getChapterFor(
 
   const key = `${translation}:${toOsis(ho, chapter)}`;
   const cached = await db.bibleCache.get(key);
-  if (cached) return JSON.parse(cached.json) as Chapter;
+  if (cached) return normalizeChapter(JSON.parse(cached.json) as Chapter);
 
   try {
     const res = await fetch(`https://bible.helloao.org/api/${translation}/${ho}/${chapter}.json`);
@@ -134,7 +149,7 @@ export async function getChapterFor(
         items.push({ t: "v", n: node.number, text: flattenHelloAO(node.content ?? []) });
       }
     }
-    const result: Chapter = { number: chapter, items };
+    const result: Chapter = normalizeChapter({ number: chapter, items });
     await db.bibleCache.put({ key, json: JSON.stringify(result), fetchedAt: Date.now() });
     return result;
   } catch {
@@ -186,14 +201,20 @@ async function loadAllVerses(): Promise<SearchHit[]> {
 }
 
 /** Full-text search across the bundled BSB. All query words must appear;
- *  exact-phrase matches rank first, then canonical order. */
-export async function searchBible(query: string, limit = 200): Promise<SearchHit[]> {
+ *  exact-phrase matches rank first, then canonical order. `books` limits it to
+ *  those book ids (a testament or a single book). */
+export async function searchBible(
+  query: string,
+  limit = 200,
+  opts: { books?: ReadonlySet<string> } = {},
+): Promise<SearchHit[]> {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
   const terms = q.split(/\s+/).filter(Boolean);
   const verses = await loadAllVerses();
   const scored: { hit: SearchHit; score: number }[] = [];
   for (const v of verses) {
+    if (opts.books && !opts.books.has(v.ho)) continue;
     const t = v.text.toLowerCase();
     if (terms.every((term) => t.includes(term))) {
       const score = (t.includes(q) ? 1000 : 0) + terms.length;

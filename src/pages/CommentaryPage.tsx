@@ -129,7 +129,7 @@ export function CommentaryPage() {
                         return (
                           <button
                             key={x}
-                            onClick={() => goTo(p.ho, p.chapter)}
+                            onClick={() => goTo(p.ho, p.chapter, p.verse)}
                             className="rounded-full border border-border px-2 py-0.5 text-[11px] text-primary-600 transition-colors hover:border-primary/40 hover:bg-accent"
                           >
                             {refLabel(p.ho, p.chapter, p.verse)}

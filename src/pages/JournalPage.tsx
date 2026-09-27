@@ -12,6 +12,7 @@ import {
 } from "@/db/repos";
 import { parseOsis, refLabel } from "@/lib/osis";
 import { useUI } from "@/store/ui";
+import { useOpenRef } from "@/lib/useOpenRef";
 import {
   Badge,
   Button,
@@ -259,7 +260,8 @@ function EntryReadView({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const { goTo, selectVerse } = useUI();
+  const { selectVerse } = useUI();
+  const openRef = useOpenRef();
   const [linking, setLinking] = useState(false);
 
   const linkedPrayers = useLiveQuery(
@@ -274,10 +276,9 @@ function EntryReadView({
   function openPassage(osis: string) {
     const p = parseOsis(osis);
     if (!p) return;
-    goTo(p.ho, p.chapter);
     if (p.verse) selectVerse(p.verse);
     onClose();
-    navigate("/bible");
+    openRef(p.ho, p.chapter, p.verse, { path: "/journal", label: "your journal" });
   }
 
   return (

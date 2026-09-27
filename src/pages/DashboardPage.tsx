@@ -21,6 +21,7 @@ import { refLabel, refRange } from "@/lib/osis";
 import { localDayKey } from "@/lib/day";
 import { readingDayKeys, readingStreak } from "@/lib/streak";
 import { useUI } from "@/store/ui";
+import { useOpenRef } from "@/lib/useOpenRef";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
 import { ListenButton } from "@/components/devotional/ListenButton";
@@ -115,7 +116,8 @@ function TodaysPlan() {
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { goTo } = useUI();
+  const { goTo, readingPos, setReturnTo } = useUI();
+  const openRef = useOpenRef();
   const [votd, setVotd] = useState<{ ho: string; chapter: number; verse: number; text: string } | null>(null);
 
   useEffect(() => {
@@ -129,7 +131,15 @@ export function DashboardPage() {
   const activePrayers = (prayers ?? []).filter((p) => p.status === "active");
   const answeredPrayers = (prayers ?? []).filter((p) => p.status === "answered");
   const duePrayers = (prayers ?? []).filter(isDueToday);
-  const lastRead = progress?.[0];
+  // "Continue reading" is YOUR place: the Bible tab's saved position, or (from another
+  // device, via sync) the newest progress row read on a Bible page. Plan chapters are
+  // written with lastVerse 0 and skipped, so a plan never moves this card.
+  const lastRead = useMemo(() => {
+    const row = (progress ?? []).find((p) => p.lastVerse >= 1);
+    const fromRow = row ? { ho: row.ho, chapter: row.chapter, verse: row.lastVerse, at: row.at } : null;
+    if (readingPos && (!fromRow || readingPos.at >= fromRow.at)) return readingPos;
+    return fromRow;
+  }, [progress, readingPos]);
 
   // Local days, shared with the reading reminders (src/lib/streak.ts).
   const readDays = useMemo(() => readingDayKeys((progress ?? []).map((p) => p.at)), [progress]);
@@ -153,10 +163,7 @@ export function DashboardPage() {
   }, [readDays]);
 
   function openVotd() {
-    if (votd) {
-      goTo(votd.ho, votd.chapter);
-      navigate("/bible");
-    }
+    if (votd) openRef(votd.ho, votd.chapter, votd.verse, { path: "/", label: "Home" });
   }
 
   return (
@@ -224,17 +231,18 @@ export function DashboardPage() {
           {/* Continue reading */}
           <Card className="p-5">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <BookOpen style={{ width: 16, height: 16 }} /> Continue reading
+              <BookOpen style={{ width: 16, height: 16 }} /> {lastRead ? "Continue reading" : "Start reading"}
             </div>
             <div className="font-serif text-lg font-bold">
-              {lastRead ? refLabel(lastRead.ho, lastRead.chapter) : "John 1"}
+              {lastRead ? refLabel(lastRead.ho, lastRead.chapter, lastRead.verse > 1 ? lastRead.verse : undefined) : "John 1"}
             </div>
             <Button
               variant="outline"
               size="sm"
               className="mt-3 w-full"
               onClick={() => {
-                if (lastRead) goTo(lastRead.ho, lastRead.chapter);
+                setReturnTo(null);
+                if (lastRead) goTo(lastRead.ho, lastRead.chapter, lastRead.verse, { flash: false });
                 navigate("/bible");
               }}
             >
@@ -362,7 +370,8 @@ function SyncNudge() {
 
 function DevotionTile() {
   const navigate = useNavigate();
-  const { goTo, devotionalId } = useUI();
+  const { devotionalId } = useUI();
+  const openRef = useOpenRef();
   const dev = devotionalById(devotionalId);
   const key = mmdd();
   const [day, setDay] = useState<DevotionDay | null>(null);
@@ -384,10 +393,7 @@ function DevotionTile() {
   const isDone = index === 0 ? !!done0 : !!done1;
   const snippet = reading.text.replace(/\s+/g, " ").slice(0, 160).trim() + "…";
   const openVerse = (e: DevotionReading) => {
-    if (e.ho && e.chapter) {
-      goTo(e.ho, e.chapter);
-      navigate("/bible");
-    }
+    if (e.ho && e.chapter) openRef(e.ho, e.chapter, e.verse, { path: "/", label: "Home" });
   };
   const Icon = reading.label === "Evening" ? Sunset : reading.label === "Morning" ? Sunrise : Sparkles;
 

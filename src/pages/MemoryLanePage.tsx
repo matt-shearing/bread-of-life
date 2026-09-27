@@ -7,6 +7,7 @@ import { addMemoryVerse, gradeReview, isMemorised, removeMemoryVerse, type Grade
 import { getChapterFor } from "@/data/bible";
 import { MEMORY_STARTERS } from "@/data/memoryStarters";
 import { useUI } from "@/store/ui";
+import { useOpenRef } from "@/lib/useOpenRef";
 import { Button, Card, CardContent } from "@/components/ui";
 import { cn } from "@/lib/cn";
 
@@ -39,6 +40,7 @@ function blankVerse(text: string): { display: string; blanks: number } {
 
 export function MemoryLanePage() {
   const navigate = useNavigate();
+  const openRef = useOpenRef();
   const { memoryStreak, recordMemoryReview } = useUI();
   const cards = useLiveQuery(() => db.memory.orderBy("dueAt").toArray(), [], undefined);
 
@@ -218,7 +220,7 @@ export function MemoryLanePage() {
 
             <div className="space-y-2">
               {cards.map((c) => (
-                <PoolRow key={c.id} card={c} onOpen={() => { useUI.getState().goTo(c.ho, c.chapter); navigate("/bible"); }} />
+                <PoolRow key={c.id} card={c} onOpen={() => openRef(c.ho, c.chapter, c.verse, { path: "/memory", label: "Memory Lane" })} />
               ))}
             </div>
 

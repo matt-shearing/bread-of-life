@@ -20,6 +20,7 @@ import { getAnyPlan, type Plan } from "@/data/plans";
 import { refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
+import { useRailLayout } from "@/lib/layout";
 import { useAudio, playQueue, pause } from "@/audio/controller";
 import { buildReadingQueue } from "@/audio/queue";
 import { Reader } from "@/components/bible/Reader";
@@ -45,6 +46,7 @@ export function GuidedReaderPage() {
   const navigate = useNavigate();
   const { goTo, goToPortion, translation, railOpen, toggleRail, setRailOpen } = useUI();
   const { queue, index: audioIndex, playing } = useAudio();
+  const rail = useRailLayout();
 
   const [plan, setPlan] = useState<Plan | null | undefined>(undefined); // undefined = loading
   const [cursor, setCursor] = useState(0);
@@ -123,10 +125,33 @@ export function GuidedReaderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, progress, total, day, initialised, requestedReading]);
 
+  /**
+   * Plan reading is kept apart from your own reading (B11). The plan borrows the
+   * shared reader location while you are here; on the way out we put back YOUR place
+   * (the Bible tab's saved position), so a plan never moves the Bible tab, "Continue
+   * reading" or the Companion's context. Declared before the effect that points the
+   * reader at the plan, so StrictMode's mount/unmount/mount replays in the right order.
+   */
+  const planLoc = useRef<{ ho: string; chapter: number } | null>(null);
+  useEffect(() => {
+    const s = useUI.getState();
+    const entry = { ho: s.ho, chapter: s.chapter, verse: null as number | null };
+    return () => {
+      const st = useUI.getState();
+      const mine = planLoc.current;
+      // Something else moved the reader on the way out (a cross-reference followed
+      // from the study panel) — that navigation wins.
+      if (mine && (st.ho !== mine.ho || st.chapter !== mine.chapter)) return;
+      const own = st.readingPos ?? entry;
+      st.goTo(own.ho, own.chapter, own.verse, { flash: false });
+    };
+  }, []);
+
   // Drive the reused Reader by pointing the shared Bible location at the cursor.
   // Verse-portion readings (Soul Food Classic) scope the reader to their range.
   useEffect(() => {
     if (current) {
+      planLoc.current = { ho: current.ho, chapter: current.chapter };
       if (current.vStart != null) {
         goToPortion(current.ho, current.chapter, current.vStart, current.vEnd ?? current.vStart);
       } else {
@@ -343,11 +368,14 @@ export function GuidedReaderPage() {
         </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        <div className="h-full min-w-0" style={{ paddingRight: rail.reserve }}>
           <Reader
             swipeToChapter={false}
             scopeToPortion
+            // Plan chapters are not "your place" — see the restore effect above.
+            trackPosition={false}
+            footerSpace={!dayComplete}
             // The reader's own headphones button plays TODAY'S readings, not the
             // continuous whole-Bible queue — that one dropped the plan's mark-read.
             onListen={(label) => void listenToDay(label)}
@@ -357,7 +385,11 @@ export function GuidedReaderPage() {
 
         {/* Footer action bar — advance through the day's readings. */}
         {!dayComplete && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-4 md:pr-[376px]">
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-4"
+            // Centre the bar over the reading column: leave the rail's width only while it's open.
+            style={{ paddingRight: rail.reserve ? rail.reserve + 16 : undefined }}
+          >
             {atEnd && !currentDone && (
               <div className="pointer-events-auto rounded-full border border-primary/30 bg-card/95 px-4 py-1.5 text-xs font-medium text-primary-700 shadow-card backdrop-blur dark:text-primary-300">
                 You've reached the end of {current ? refRange(current.ho, current.chapter, current.vStart, current.vEnd) : "this reading"} — mark it read?
@@ -366,7 +398,7 @@ export function GuidedReaderPage() {
             <Button
               size="lg"
               variant={currentDone ? "secondary" : "primary"}
-              className={cn("pointer-events-auto shadow-card", atEnd && !currentDone && "animate-pulse")}
+              className={cn("pointer-events-auto whitespace-nowrap shadow-card", atEnd && !currentDone && "motion-safe:animate-pulse")}
               onClick={markReadAndNext}
             >
               {currentDone ? (

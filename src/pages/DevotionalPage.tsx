@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DEVOTIONALS,
@@ -12,6 +12,7 @@ import {
   type DevotionReading,
 } from "@/data/devotional";
 import { useUI } from "@/store/ui";
+import { useOpenRef } from "@/lib/useOpenRef";
 import { Button, Card, Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { DevotionView } from "@/components/devotional/DevotionView";
 import { cn } from "@/lib/cn";
@@ -26,8 +27,8 @@ function label(key: string): string {
 }
 
 export function DevotionalPage() {
-  const navigate = useNavigate();
-  const { goTo, devotionalId, setDevotionalId } = useUI();
+  const { devotionalId, setDevotionalId } = useUI();
+  const openRef = useOpenRef();
   const dev = devotionalById(devotionalId);
   const [keys, setKeys] = useState<string[]>([]);
   // `?day=MM-DD&r=<index>` opens a given reading (Now Playing links here).
@@ -70,10 +71,7 @@ export function DevotionalPage() {
   }
 
   function openVerse(e: DevotionReading) {
-    if (e.ho && e.chapter) {
-      goTo(e.ho, e.chapter);
-      navigate("/bible");
-    }
+    if (e.ho && e.chapter) openRef(e.ho, e.chapter, e.verse, { path: "/devotional", label: "the devotional" });
   }
 
   return (
