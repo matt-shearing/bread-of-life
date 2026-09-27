@@ -123,7 +123,6 @@ export function GuidedReaderPage() {
     }
     setCursor(start);
     setInitialised(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, progress, total, day, initialised, requestedReading]);
 
   /**

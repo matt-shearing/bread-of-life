@@ -106,6 +106,7 @@ test("backup → restore on an empty device gives back every table exactly, and 
   assert.equal(plan.totals.add, plan.totals.inFile);
   assert.equal(plan.totals.update + plan.totals.keep + plan.totals.same, 0);
   assert.match(B.backup.describeContents(plan), /^2 prayers, 1 journal entry, 1 note, 2 highlights, 1 memory verse/);
+  assert.match(B.backup.describeContents(plan), /1 chapter bookmark, 1 reading-history entry, 2 settings$/, "reading history is listed");
 
   const r = await B.backup.applyRestore(parsed);
   assert.equal(r.added, plan.totals.inFile);
@@ -246,6 +247,39 @@ for (const flavor of ["v0.4.0", "current"]) {
     assert.ok(rows.some((x) => x.tbl === "prayers" && x.id === "px"), "the backup-only prayer uploaded");
     assert.equal((await A.db.prayers.get("px"))?.title, "Only in the backup", "and reached the other device");
     assert.match((await B.db.journal.get("j1")).body, /v2/);
+  });
+
+  test(`[${flavor} server] restoring a backup brings back an item deleted on the account, and it stays back`, async () => {
+    const srv = await startServer(flavor);
+    servers.push(srv);
+    const email = `d-${flavor}@x.org`;
+    const A = await fresh("A");
+    A.sync.setAutoSync(false);
+    assert.ok((await A.sync.signup("selfhost", srv.url, email, "password123")).ok);
+    await A.db.journal.put({ id: "j1", title: "Waiting room", body: "<p>keep me</p>", tags: [], linkedOsis: [], source: "manual", createdAt: T0, updatedAt: T0 });
+    await A.sync.syncNow();
+    const text = A.backup.serializeBackup(await A.backup.createBackup("9.9.9"));
+    await tick(5);
+    await A.db.journal.delete("j1");
+    await A.sync.syncNow();
+    assert.ok((await serverRows(srv)).find((x) => x.tbl === "journal" && x.id === "j1")?.deleted, "deleted on the server");
+
+    const parsed = A.backup.parseBackup(text);
+    const plan = await A.backup.previewRestore(parsed);
+    assert.equal(plan.tables.journal.add, 1);
+    const r = await A.backup.applyRestore(parsed);
+    assert.equal(r.added, 1);
+    await A.sync.syncNow();
+    await A.sync.syncNow();
+
+    assert.match((await A.db.journal.get("j1"))?.body ?? "gone", /keep me/, "still here after syncing");
+    const row = (await serverRows(srv)).filter((x) => x.tbl === "journal" && x.id === "j1").at(-1);
+    assert.ok(row && !row.deleted, "the server holds it again");
+    const C = await fresh("C");
+    C.sync.setAutoSync(false);
+    assert.ok((await C.sync.login("selfhost", srv.url, email, "password123")).ok);
+    await C.sync.syncNow();
+    assert.match((await C.db.journal.get("j1"))?.body ?? "gone", /keep me/, "a fresh signed-in device gets it");
   });
 
   test(`[${flavor} server] restoring an old backup on a device that missed newer edits leaves the server's copy winning`, async () => {

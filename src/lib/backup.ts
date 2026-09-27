@@ -17,7 +17,7 @@
  * restoring the same file twice changes nothing the second time.
  */
 import { db, type PlanProgress } from "@/db";
-import { syncNow } from "@/db/sync";
+import { getState, syncNow } from "@/db/sync";
 import { KEY_PATH as SYNCED_KEY_PATH, SYNCED_TABLES, syncsRow, type SyncedTable } from "@/db/syncSchema";
 import { nextOutboxAt, nextStamp, untracked } from "@/db/syncTracking";
 import { mergePlans, samePlanProgress } from "@/db/planMerge";
@@ -196,7 +196,8 @@ export type Decision = "add" | "update" | "keep" | "same";
 
 /**
  * What restoring `incoming` over `local` should do, and the row to write if anything:
- *  - add:    nothing local with this key; write the backup's row as it is.
+ *  - add:    nothing local with this key; write the backup's row (restamped by
+ *            `applyRestore` when this device is synced, see `stampAdds`).
  *  - same:   identical already; nothing to write.
  *  - update: the backup's copy is strictly newer; write it, keeping its own stamp.
  *  - keep:   the local copy is newer (or as new) and differs; it stays.
@@ -277,15 +278,36 @@ export interface RestoreResult {
  * middleware neither restamps nor queues these writes. Restamping is the danger: every
  * restored row would then count as edited now, and a month-old backup would beat edits
  * made since on other devices the moment it uploaded. Instead each row keeps its own
- * `updatedAt`, and exactly the rows written are queued by hand in the same transaction,
- * so they upload and the server's last-write-wins sorts them out.
+ * `updatedAt` (except rows added on a synced device, see `stampAdds`), and exactly the
+ * rows written are queued by hand in the same transaction, so they upload and the
+ * server's last-write-wins sorts them out.
  *
  * The decisions are made again here rather than reused from the preview, so an edit
  * made while the preview was open is still respected.
  */
+/**
+ * Whether rows the restore ADDS get a fresh stamp. On a device that is signed in and
+ * has pulled from its account, a row missing here is missing from the account too:
+ * either it never reached it, or it was deleted there. If it was deleted, the server
+ * holds a tombstone newer than the backup's stamp, so a row restored with its old stamp
+ * would lose and be deleted again on the next sync, after the preview promised to add
+ * it. A fresh stamp makes the restore win, which is what pressing Restore asked for.
+ *
+ * A device that has not pulled yet can't tell "deleted on the account" from "not
+ * downloaded yet", and a fresh stamp there would let a months-old copy overwrite newer
+ * edits on the account. Those rows keep their own stamp and the account's copy decides.
+ * Rows the restore UPDATES always keep their own stamp: there is a real local copy to
+ * compare against.
+ */
+async function stampAdds(): Promise<boolean> {
+  const s = await getState();
+  return s.mode !== "off" && !!s.token && s.cursor > 0 && !s.pendingAccountChoice;
+}
+
 export async function applyRestore(parsed: ParsedBackup): Promise<RestoreResult> {
   const result: RestoreResult = { added: 0, updated: 0, kept: 0, unchanged: 0 };
   let queued = 0;
+  const restamp = await stampAdds();
   await db.transaction("rw", [...SYNCED_TABLES.map((t) => db.table(t)), db.outbox], async (tx) => {
     untracked(tx);
     for (const t of SYNCED_TABLES) {
@@ -300,7 +322,7 @@ export async function applyRestore(parsed: ParsedBackup): Promise<RestoreResult>
       rows.forEach((r, i) => {
         const { d, row } = decide(t, locals[i], r);
         if (row) {
-          toPut.push(row);
+          toPut.push(d === "add" && restamp ? { ...row, updatedAt: nextStamp(rowStamp(t, row)) } : row);
           entries.push({ key: `${t}:${ids[i]}`, table: t, id: ids[i], op: "upsert", at: nextOutboxAt() });
         }
         if (d === "add") result.added++;
@@ -335,7 +357,9 @@ const NOUNS: Record<SyncedTable, [string, string]> = {
   settings: ["setting", "settings"],
 };
 /** The order a person cares about: the heart of the app first. */
-const ORDER: SyncedTable[] = ["prayers", "journal", "notes", "highlights", "memory", "plans", "customPlans", "devotions", "progress", "settings"];
+const ORDER: SyncedTable[] = [
+  "prayers", "journal", "notes", "highlights", "memory", "plans", "customPlans", "devotions", "progress", "readingLog", "settings",
+];
 
 export const countOf = (t: SyncedTable, n: number) => `${n.toLocaleString()} ${NOUNS[t][n === 1 ? 0 : 1]}`;
 

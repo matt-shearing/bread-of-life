@@ -269,8 +269,8 @@ function XrefPanel() {
 
 function XrefRow({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
   const [text, setText] = useState<string>("");
-  const start = osis.split("-")[0];
-  const p = parseOsis(start);
+  // Memoised so the effect below re-runs when the reference changes, not every render.
+  const p = useMemo(() => parseOsis(osis.split("-")[0]), [osis]);
 
   useEffect(() => {
     if (!p) return;
@@ -283,7 +283,7 @@ function XrefRow({ osis, onOpen }: { osis: string; onOpen: XrefOpener }) {
     return () => {
       alive = false;
     };
-  }, [osis]);
+  }, [p]);
 
   if (!p) return null;
   return (

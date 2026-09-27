@@ -15,9 +15,11 @@ and — the heart of it — an **answered-prayer log you can look back on**.
 - **Sync (optional, shipped):** an account on the hosted or a self-hosted server
   (`deploy/sync-server/`) syncs the Dexie tables by delta sync (`src/db/sync.ts`). A Dexie
   middleware (`src/db/syncTracking.ts`) stamps and queues every write; what syncs is listed in
-  `src/db/syncSchema.ts`. Journal, prayers and notes can be end-to-end encrypted. Test with
-  `pnpm test:sync` and `pnpm test:sync-server`; client changes must keep working with the
-  server version in production (the tests run against v0.4.0's server too).
+  `src/db/syncSchema.ts`; UI preferences that follow the account go through
+  `src/store/syncedPrefs.ts`. Journal, prayers and notes can be end-to-end encrypted
+  (`src/db/crypto.ts`). Test with `pnpm test:sync` and `pnpm test:sync-server`; client changes
+  must keep working with the server version in production (the tests run against v0.4.0's
+  server too).
 - **Verse identity:** OSIS + BBCCCVVV everywhere (`src/lib/osis.ts`).
 
 ## Ground rules

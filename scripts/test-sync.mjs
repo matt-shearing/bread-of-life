@@ -115,6 +115,37 @@ for (const flavor of ["v0.4.0", "current"]) {
       assert.equal(await A.db.outbox.count(), 0);
     });
 
+    for (const pushedFirst of [false, true]) {
+      test(`B19: undoing a delete sticks when the item was last edited on a fast-clock device${pushedFirst ? " (tombstone already pushed)" : ""}`, async () => {
+        resetNet();
+        const srv = await server(flavor);
+        const email = `b19${pushedFirst ? "p" : ""}@x.org`;
+        const A = await signedIn(srv, email);
+        const B = await signedIn(srv, email, { skewMs: 20_000 }); // phone 20 seconds fast
+        const prayer = { id: "p1", title: "Mum", body: "", category: "family", status: "active", prayedCount: 0, lastPrayedAt: null, createdAt: 1, answeredAt: null, answerNote: null, linkedOsis: [], linkedJournalIds: [] };
+        await B.db.journal.put(journal("j1", "written on the phone"));
+        await B.db.prayers.put(prayer);
+        await syncAll(B, A);
+        const j = await A.db.journal.get("j1");
+        const p = await A.db.prayers.get("p1");
+        assert.ok(j && p);
+        await A.repos.deleteJournalEntry("j1");
+        await A.repos.deletePrayer("p1");
+        if (pushedFirst) await A.sync.syncNow();
+        await A.repos.restoreJournalEntry(j); // Undo
+        await A.repos.restorePrayer(p);
+        await syncAll(A, B);
+        assert.equal((await rowOf(srv, "journal", "j1"))?.deleted ? "deleted" : "present", "present", "server keeps the undone journal entry");
+        assert.equal((await rowOf(srv, "prayers", "p1"))?.deleted ? "deleted" : "present", "present", "server keeps the undone prayer");
+        assert.equal((await A.db.journal.get("j1"))?.body, "written on the phone", "still here after syncing");
+        assert.equal((await A.db.prayers.get("p1"))?.title, "Mum");
+        assert.equal((await B.db.journal.get("j1"))?.body, "written on the phone", "and on the other device");
+        const C = await signedIn(srv, email, { name: "C" });
+        assert.ok(await C.db.journal.get("j1"), "a fresh device gets it");
+        assert.ok(await C.db.prayers.get("p1"));
+      });
+    }
+
     test("B2: a push the server ignores is not cleared until the server's copy is here", async () => {
       resetNet();
       const srv = await server(flavor);

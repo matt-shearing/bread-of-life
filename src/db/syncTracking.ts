@@ -69,6 +69,37 @@ async function queue(
   for (const cb of queuedListeners) cb();
 }
 
+/**
+ * For a put that finds no row (a re-create, such as undoing a delete), the stamp to beat.
+ * The delete's tombstone was stamped after the row it removed, which can be in the
+ * future if that row was last edited on a device whose clock runs fast; a re-create
+ * stamped with plain `now` would lose to it and the server would keep the item deleted.
+ * So the floor is the later of the tombstone still waiting in the outbox and the stamp
+ * the written row already carries (an undo passes the row as it was, and its tombstone
+ * was that stamp + 1, which covers a tombstone already pushed).
+ */
+async function recreateFloors(
+  outbox: DBCoreTable,
+  trans: DBCoreTransaction,
+  table: SyncedTable,
+  keys: unknown[],
+  prev: unknown[],
+  values: readonly unknown[],
+): Promise<(number | undefined)[]> {
+  const missing = keys.flatMap((_, i) => (prev[i] ? [] : [i]));
+  const floors: (number | undefined)[] = keys.map(() => undefined);
+  if (!missing.length) return floors;
+  const pending = (await outbox.getMany({ trans, keys: missing.map((i) => `${table}:${String(keys[i])}`) })) as
+    | ({ op?: string; stamp?: number } | undefined)[];
+  missing.forEach((i, j) => {
+    const tomb = pending[j]?.op === "delete" ? Number(pending[j]?.stamp) : NaN;
+    const own = Number((values[i] as Record<string, unknown> | undefined)?.updatedAt);
+    const best = Math.max(Number.isFinite(tomb) ? tomb : -Infinity, Number.isFinite(own) ? own + 1 : -Infinity);
+    if (Number.isFinite(best)) floors[i] = best;
+  });
+  return floors;
+}
+
 function trackTable(table: DBCoreTable, outbox: DBCoreTable, name: SyncedTable): DBCoreTable {
   const keyPath = KEY_PATH[name];
   return {
@@ -80,7 +111,8 @@ function trackTable(table: DBCoreTable, outbox: DBCoreTable, name: SyncedTable):
       if (req.type === "add" || req.type === "put") {
         const keys = req.values.map((v) => (v as Record<string, unknown>)?.[keyPath]);
         const prev = await table.getMany({ trans, keys });
-        const values = req.values.map((v, i) => ({ ...v, updatedAt: nextStamp(prev[i]?.updatedAt) }));
+        const floors = await recreateFloors(outbox, trans, name, keys, prev, req.values);
+        const values = req.values.map((v, i) => ({ ...v, updatedAt: nextStamp(prev[i] ? prev[i].updatedAt : floors[i]) }));
         const res = await table.mutate({ ...req, values });
         await queue(
           outbox,
