@@ -1,4 +1,5 @@
 import type { AIConfig, AIProvider } from "@/store/ui";
+import { isTauri } from "@/lib/platform";
 
 /** Provider metadata for the settings UI. */
 export const PROVIDERS: Record<
@@ -88,14 +89,10 @@ export interface ChatMessage {
   content: string;
 }
 
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 /** In the desktop app, route through the Tauri HTTP plugin (no CORS); in a
  *  plain browser, use window.fetch. */
 async function getFetch(): Promise<typeof fetch> {
-  if (isTauri()) {
+  if (isTauri) {
     const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
     return tauriFetch as unknown as typeof fetch;
   }

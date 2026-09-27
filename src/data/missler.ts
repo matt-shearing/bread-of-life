@@ -20,7 +20,7 @@ import { getSetting, setSetting } from "@/db/repos";
 import { toOsis } from "@/lib/osis";
 import type { CommentaryBlock, CommentaryChapter } from "./commentary";
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+import { isAndroid, isTauri } from "@/lib/platform";
 
 /* ------------------------------ library shapes ------------------------------ */
 
@@ -75,7 +75,6 @@ const ANDROID_AUTO_PATHS = [
   "/storage/emulated/0/Android/media/com.breadoflife.app/files/missler-library",
   "/storage/emulated/0/Android/data/com.breadoflife.app/files/missler-library",
 ];
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 let autoPath: string | undefined; // probe result cache
 
 /** The permission-free Android/media drop folder — writable by file managers,

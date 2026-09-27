@@ -20,3 +20,21 @@ export function localDayKey(ts: number = Date.now()): string {
 export function yesterdayKey(ts: number = Date.now()): string {
   return localDayKey(ts - 86_400_000);
 }
+
+/** English month names, January first. (src/lib/devotionalSpeech.ts keeps its own copy so
+ *  that it stays import-free for scripts/test-devotional-speech.mjs.) */
+export const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
+
+/** A playback position: "4:05", or "1:02:09" past an hour. */
+export function formatClock(seconds: number): string {
+  let s = seconds;
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = Math.floor(s % 60);
+  const mm = h ? String(m).padStart(2, "0") : String(m);
+  return `${h ? `${h}:` : ""}${mm}:${String(ss).padStart(2, "0")}`;
+}

@@ -1,4 +1,5 @@
 import type { SpeechSegment } from "./devotionalSpeech";
+import { isTauriAndroid } from "./platform";
 
 /**
  * The phone's own voice, rendered to a WAV in the app cache by the Android `device-tts`
@@ -15,10 +16,7 @@ export interface DeviceSpeech {
   cached: boolean;
 }
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
-
-export const deviceTtsSupported = isTauri && isAndroid;
+export const deviceTtsSupported = isTauriAndroid;
 
 /** Render (or reuse) `segments` as one WAV. `onProgress` gets 0…1 while it renders. */
 export async function renderDeviceSpeech(
