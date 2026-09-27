@@ -5,13 +5,27 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /** A small Tiptap rich-text editor for journal entries. Stores/returns HTML. */
-export function RichEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+export function RichEditor({
+  value,
+  onChange,
+  label = "Entry text",
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  /** Accessible name for the writing area. */
+  label?: string;
+}) {
   const editor = useEditor({
     extensions: [StarterKit],
     content: value,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     editorProps: {
-      attributes: { class: "prose-journal min-h-[180px] max-h-[45vh] overflow-y-auto focus:outline-none" },
+      attributes: {
+        class: "prose-journal min-h-[180px] max-h-[45vh] overflow-y-auto focus:outline-none",
+        role: "textbox",
+        "aria-multiline": "true",
+        "aria-label": label,
+      },
     },
   });
   if (!editor) return null;
@@ -21,9 +35,10 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
       type="button"
       onClick={on}
       aria-label={label}
+      aria-pressed={active}
       title={label}
       className={cn(
-        "flex h-8 w-8 items-center justify-center rounded hover:bg-accent",
+        "flex h-8 w-8 items-center justify-center rounded hover:bg-accent [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
         active ? "bg-accent text-primary-600" : "text-muted-foreground",
       )}
     >
