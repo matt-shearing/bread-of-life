@@ -31,7 +31,8 @@ import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 
 const VERSION = "0.5.0";
-const FEATURES = ["rejected", "no-echo", "more", "refresh", "logout-all", "password", "delete-account", "clamp"];
+// "readingLog": stores the reading-log table (clients hold it back from servers without it).
+const FEATURES = ["rejected", "no-echo", "more", "refresh", "logout-all", "password", "delete-account", "clamp", "readingLog"];
 
 const PORT = Number(process.env.PORT || 4000);
 const DB_PATH = process.env.DB_PATH || "/app/data/sync.db";
@@ -60,7 +61,7 @@ if (!TOKEN_SECRET) {
 /** The tables the app syncs. Anything else is refused. */
 const TABLES = new Set([
   "highlights", "notes", "prayers", "journal", "progress",
-  "settings", "plans", "devotions", "customPlans", "memory",
+  "settings", "plans", "devotions", "customPlans", "memory", "readingLog",
 ]);
 /** Settings that describe one device and must never be stored (older apps sent them). */
 const DEVICE_LOCAL_SETTINGS = ["misslerLibraryPath"];

@@ -70,6 +70,26 @@ export interface ReadingProgress {
   at: number;
 }
 
+/** How a chapter came to be read: opened in the reader, ticked in a plan, or heard to the end. */
+export type ReadingSource = "reader" | "plan" | "audio";
+
+/**
+ * The reading log: one row per chapter read per LOCAL day, never overwritten. `progress`
+ * keeps only the latest time per chapter, so re-reading a chapter erased the earlier day;
+ * this keeps every day. The id is derived from the day and the chapter, so the same
+ * reading recorded twice (or on two devices) is the same row and sync merges it for free.
+ * See src/db/readingLog.ts.
+ */
+export interface ReadingLogEntry {
+  id: string; // `${dayKey}:${osisChapter}`, e.g. "2026-09-27:John.3"
+  dayKey: string; // localDayKey(at): the reader's local calendar day
+  osis: string; // "John.3"
+  ho: string;
+  chapter: number;
+  source: ReadingSource;
+  at: number; // first time it was read that day
+}
+
 export interface Setting {
   key: string;
   value: unknown;
@@ -213,6 +233,7 @@ export const db = new Dexie("bread-of-life", injected ? { indexedDB: injected.in
   devotions: EntityTable<DevotionDone, "id">;
   customPlans: EntityTable<CustomPlan, "id">;
   memory: EntityTable<MemoryCard, "id">;
+  readingLog: EntityTable<ReadingLogEntry, "id">;
   outbox: EntityTable<OutboxEntry, "key">;
   syncState: EntityTable<SyncStateRow, "key">;
   syncHeld: EntityTable<HeldChange, "key">;
@@ -296,6 +317,14 @@ db.version(10)
       await tx.table("settings").delete("misslerLibraryPath");
     }
   });
+
+// The reading log (see ReadingLogEntry). Filled from `progress` and plan completions by a
+// one-off backfill after open (src/db/readingLog.ts), not here: that needs plan data, which
+// is fetched, and fetching inside an upgrade transaction would end it early. Its writes go
+// through sync tracking, so the backfilled rows reach the account like any other.
+db.version(11).stores({
+  readingLog: "id, dayKey, at",
+});
 
 export function uid(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;

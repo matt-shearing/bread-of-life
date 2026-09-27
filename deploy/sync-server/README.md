@@ -46,6 +46,10 @@ Details the app relies on:
   clamped to now + 5 minutes; otherwise one device with a wrong clock would win every
   later edit. Rows already stored with a future stamp are repaired at start-up.
 - **No echo.** A pull with a `deviceId` leaves out rows that device pushed itself.
+- **New tables.** A table added after v0.5.0 is announced as a feature of the same name
+  (`readingLog`: one row per chapter read per day). Apps send such a table only to a
+  server that lists it, and upload all of it the first time they see it listed, so a
+  server that is upgraded later still receives the history.
 - **Status codes.** `400` for a malformed body, email or password; `401` for a bad
   login, or a missing, expired or revoked token; `409` when signup finds the email in
   use; `413` for a body over `MAX_BODY_BYTES` (8 MB); `500` only for a server fault,

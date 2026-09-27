@@ -6,7 +6,9 @@ import {
   type MemoryCard,
   type Prayer,
   type PrayerCategory,
+  type ReadingSource,
 } from "./index";
+import { logChapterRead, logPlanReadings } from "./readingLog";
 import { refLabel, toBbcccvvv, toOsis } from "@/lib/osis";
 import { localDayKey } from "@/lib/day";
 
@@ -272,14 +274,27 @@ export async function unlinkJournalPrayer(journalId: string, prayerId: string) {
 
 /* ---------------------------------- progress ----------------------------------- */
 
-export async function recordProgress(ho: string, chapter: number, lastVerse = 1) {
+/**
+ * A chapter was read: `progress` keeps where you are (the latest time per chapter), and
+ * the reading log keeps the day (src/db/readingLog.ts).
+ */
+export async function recordProgress(ho: string, chapter: number, lastVerse = 1, source: ReadingSource = "reader") {
+  const at = Date.now();
   await db.progress.put({
     chapterOsis: toOsis(ho, chapter),
     ho,
     chapter,
     lastVerse,
-    at: Date.now(),
+    at,
   });
+  await logChapterRead(ho, chapter, source, at);
+}
+
+/** How a plan reading was completed, for the reading log: ticked by hand, or heard (and when). */
+export interface ReadOptions {
+  source?: ReadingSource;
+  /** When it was read, if not now (a completion Android collected while the app was away). */
+  at?: number;
 }
 
 /* ------------------------------- reading plans -------------------------------- */
@@ -311,7 +326,7 @@ function stampDay(prev: Record<number, number> | undefined, day: number): Record
   return { ...(prev ?? {}), [day]: Math.max(Date.now(), (prev?.[day] ?? 0) + 1) };
 }
 
-export async function setDayDone(planId: string, day: number, done: boolean) {
+export async function setDayDone(planId: string, day: number, done: boolean, read: ReadOptions = {}) {
   // Transactional for the same reason as setChapterDone below: this races the
   // narration's own mark-read writes.
   await db.transaction("rw", db.plans, async () => {
@@ -336,6 +351,8 @@ export async function setDayDone(planId: string, day: number, done: boolean) {
       dayAt: stampDay(p.dayAt, day),
     });
   });
+  // Marking a day done says its chapters were read today.
+  if (done) await logPlanReadings(planId, day, undefined, read.source ?? "plan", read.at);
 }
 
 /**
@@ -350,6 +367,7 @@ export async function setChapterDone(
   chapterIndex: number,
   done: boolean,
   totalChapters: number,
+  read: ReadOptions = {},
 ) {
   // Read-modify-write INSIDE a transaction. Narration marks readings done as the
   // queue advances while the reader may be ticking one by hand at the same moment;
@@ -385,6 +403,8 @@ export async function setChapterDone(
     if (existing) await db.plans.update(planId, next);
     else await db.plans.add(next);
   });
+  // After the transaction: resolving a built-in plan fetches, which would end it early.
+  if (done) await logPlanReadings(planId, day, [chapterIndex], read.source ?? "plan", read.at);
 }
 
 export async function resetPlan(planId: string) {
