@@ -9,6 +9,7 @@ import { entryTitle } from "@/components/journal/entryTitle";
 import { showUndoToast } from "@/components/confirm";
 import { parseOsis, refLabel } from "@/lib/osis";
 import { cn } from "@/lib/cn";
+import { AnsweredByMonth } from "@/components/prayers/AnsweredByMonth";
 
 const CAT_LABEL: Record<string, string> = {
   personal: "Personal",
@@ -292,6 +293,7 @@ export function FaithfulnessPage() {
                 )
               )}
             </p>
+            <AnsweredByMonth prayers={all} year={year === "all" ? new Date().getFullYear() : year} />
           </header>
 
           {/* Entries */}

@@ -7,6 +7,7 @@ import { RouteFallback } from "@/components/layout/RouteFallback";
 import { startSync } from "@/db/sync";
 import { startPrefSync } from "@/store/syncedPrefs";
 import { ensureAndroidDropFolder } from "@/data/missler";
+import { ensureReadingLogBackfill } from "@/db/readingLog";
 
 // Safety net: if something throws before React mounts, show it instead of a
 // blank window (much easier to diagnose than a white screen).
@@ -43,6 +44,7 @@ const MemoryLanePage = lazyPage(() => import("@/pages/MemoryLanePage"), "MemoryL
 const SettingsPage = lazyPage(() => import("@/pages/SettingsPage"), "SettingsPage");
 const CommentaryPage = lazyPage(() => import("@/pages/CommentaryPage"), "CommentaryPage");
 const ReadTodayPage = lazyPage(() => import("@/pages/ReadTodayPage"), "ReadTodayPage");
+const HistoryPage = lazyPage(() => import("@/pages/HistoryPage"), "HistoryPage");
 const FaithfulnessPage = lazyPage(() => import("@/pages/FaithfulnessPage"), "FaithfulnessPage");
 
 // HashRouter: works identically under Vite dev and Tauri's file:// asset loading.
@@ -64,6 +66,7 @@ const router = createHashRouter([
       { path: "prayers", element: <PrayersPage /> },
       { path: "journal", element: <JournalPage /> },
       { path: "settings", element: <SettingsPage /> },
+      { path: "history", element: <HistoryPage /> },
     ],
   },
   // Standalone (outside the app shell) so it prints cleanly to PDF.
@@ -90,4 +93,6 @@ setTimeout(() => {
   // so users have a file-manager-writable place to drop the library (no adb, no
   // all-files-access). Never blocks render.
   void ensureAndroidDropFolder();
+  // Once per device: seed the reading log from reading done before it existed.
+  void ensureReadingLogBackfill();
 }, 0);

@@ -19,7 +19,9 @@ import {
 import { isDueToday, prayedFor, setDayDone } from "@/db/repos";
 import { refLabel, refRange } from "@/lib/osis";
 import { localDayKey } from "@/lib/day";
-import { readingDayKeys, readingStreak } from "@/lib/streak";
+import { readingStreak } from "@/lib/streak";
+import { useReadingDays } from "@/lib/useReadingDays";
+import { OnThisDay } from "@/components/dashboard/OnThisDay";
 import { devotionDoneId } from "@/lib/devotionDone";
 import { useUI } from "@/store/ui";
 import { Badge, Button, Card, CardContent, Dialog, DialogContent, DialogTitle } from "@/components/ui";
@@ -134,7 +136,7 @@ export function DashboardPage() {
   const lastRead = progress?.[0];
 
   // Local days, shared with the reading reminders (src/lib/streak.ts).
-  const readDays = useMemo(() => readingDayKeys((progress ?? []).map((p) => p.at)), [progress]);
+  const readDays = useReadingDays();
   const streak = useMemo(() => readingStreak(readDays).days, [readDays]);
 
   const weekDots = useMemo(() => {
@@ -196,6 +198,8 @@ export function DashboardPage() {
         </Card>
 
         <DevotionTile />
+
+        <OnThisDay />
 
         <TodaysPlan />
 
