@@ -50,7 +50,10 @@ test("bad input gets a 400 or 413, not a 500", async () => {
   const token = await account(srv);
   assert.equal((await post(srv, "/push", "[1,2]", token)).status, 400);
   const big = JSON.stringify({ changes: [change("big", { data: { body: "x".repeat(9 * 1024 * 1024) } })] });
-  assert.equal((await post(srv, "/push", big, token)).status, 413);
+  // Refused either with a 413 or by closing the connection mid-upload (Node 22's fetch
+  // reports the latter as "fetch failed"). Either way it is not a 500 and nothing is stored.
+  const bigStatus = await post(srv, "/push", big, token).then((r) => r.status, () => "closed");
+  assert.ok(bigStatus === 413 || bigStatus === "closed", `oversized push refused (got ${bigStatus})`);
   assert.equal((await post(srv, "/auth/signup", { email: "a@x.org", password: "password123" })).status, 409);
 });
 
