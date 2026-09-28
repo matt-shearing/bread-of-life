@@ -5,9 +5,6 @@ import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.test.utils.FakeMediaSourceFactory
-import androidx.media3.test.utils.TestExoPlayerBuilder
-import androidx.media3.test.utils.robolectric.RobolectricUtil.runMainLooperUntil
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
@@ -28,6 +25,9 @@ import java.time.Duration
  * The sleep timer (`set_sleep_timer`): a timed one fades the volume over the last 10 s and
  * pauses; "end of chapter" pauses at the item's end, where the chapter counts as heard; "end
  * of reading" waits for the reading's last chapter; a new queue or stop clears it.
+ *
+ * The player runs on the looper's clock ([fakePlayerOnLooperTime]): the timer counts down on
+ * SystemClock, which Media3's default test clock would push forward from the playback thread.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [34])
@@ -38,7 +38,7 @@ class SleepTimerTest {
     @Before
     fun setUp() {
         NativeAudioRuntime.playerFactory = { ctx ->
-            TestExoPlayerBuilder(ctx).setMediaSourceFactory(FakeMediaSourceFactory()).build()
+            fakePlayerOnLooperTime(ctx)
         }
         PlaybackStore(context).clearForTest()
     }
@@ -77,14 +77,14 @@ class SleepTimerTest {
 
         // Play carries on from where it paused.
         NativeAudioRuntime.play(context)
-        runMainLooperUntil { player.isPlaying }
+        runUntil { player.isPlaying }
     }
 
     @Test
     fun endOfChapter_pausesAtTheBoundary_countsTheChapterOnce_andPlayMovesOn() {
         loadAndPlay(items(groups = listOf(0, 1)))
         val player = sessionPlayer()
-        runMainLooperUntil { player.duration > 0 }
+        runUntil { player.duration > 0 }
 
         // Paused 3 s before the end, so the check sees the fade without racing the player.
         NativeAudioRuntime.pause(context)
@@ -96,7 +96,7 @@ class SleepTimerTest {
         assertTrue("fading near the end: ${player.volume}", player.volume < 0.5f)
 
         NativeAudioRuntime.play(context)
-        runMainLooperUntil { !player.playWhenReady }
+        runUntil { !player.playWhenReady }
         assertEquals("paused at the end of the chapter, not in the next one", 0, player.currentMediaItemIndex)
         assertEquals(1f, player.volume, 0.001f)
         val state = NativeAudioRuntime.getState(context)
@@ -106,7 +106,7 @@ class SleepTimerTest {
 
         // Play goes on into the next chapter, without recording the first one again.
         NativeAudioRuntime.play(context)
-        runMainLooperUntil { player.isPlaying && player.currentMediaItemIndex == 1 }
+        runUntil { player.isPlaying && player.currentMediaItemIndex == 1 }
         assertEquals(1, NativeAudioRuntime.completions(context).length())
         assertEquals(listOf(0), NativeAudioRuntime.getState(context).finished)
     }
@@ -116,7 +116,7 @@ class SleepTimerTest {
         // Genesis 1–2 is one reading, Matthew 1 the next.
         loadAndPlay(items(groups = listOf(0, 0, 1)))
         val player = sessionPlayer()
-        runMainLooperUntil { player.duration > 0 }
+        runUntil { player.duration > 0 }
         NativeAudioRuntime.setSleepTimer(context, null, endOfItem = false, endOfGroup = true)
         ShadowLooper.idleMainLooper()
         assertEquals("group", NativeAudioRuntime.getState(context).sleepTimer?.mode)
@@ -124,16 +124,16 @@ class SleepTimerTest {
 
         // The end of Genesis 1: carries on into Genesis 2.
         player.seekTo(player.duration - 300L)
-        runMainLooperUntil { player.currentMediaItemIndex == 1 }
+        runUntil { player.currentMediaItemIndex == 1 }
         ShadowLooper.idleMainLooper()
         assertTrue(player.playWhenReady)
         assertEquals("group", NativeAudioRuntime.getState(context).sleepTimer?.mode)
-        runMainLooperUntil { player.duration > 0 }
+        runUntil { player.duration > 0 }
         assertNotNull("the last chapter of the reading: its time left is known", NativeAudioRuntime.getState(context).sleepTimer?.remainingMs)
 
         // The end of Genesis 2 ends the reading: paused there.
         player.seekTo(player.duration - 300L)
-        runMainLooperUntil { !player.playWhenReady }
+        runUntil { !player.playWhenReady }
         assertEquals(1, player.currentMediaItemIndex)
         assertNull(NativeAudioRuntime.getState(context).sleepTimer)
         assertEquals(listOf(0, 1), NativeAudioRuntime.getState(context).finished)
@@ -153,7 +153,7 @@ class SleepTimerTest {
         assertEquals(1f, player.volume, 0.001f)
         // Nothing fires later either.
         NativeAudioRuntime.play(context)
-        runMainLooperUntil { player.isPlaying }
+        runUntil { player.isPlaying }
         idleFor(10_000L)
         assertTrue(player.playWhenReady)
 
@@ -182,7 +182,7 @@ class SleepTimerTest {
     private fun loadAndPlay(items: List<QueueItemArg>) {
         NativeAudioRuntime.setQueue(context, items, 0)
         NativeAudioRuntime.play(context)
-        runMainLooperUntil { sessionPlayer().isPlaying }
+        runUntil { sessionPlayer().isPlaying }
     }
 
     /** A plan day's chapters, one per entry of [groups] (its reading group). */
