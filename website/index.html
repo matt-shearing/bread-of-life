@@ -1,468 +1,326 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bread of Life — Draw near to God, one unhurried day at a time</title>
-    <meta
-      name="description"
-      content="A warm, offline-first home for your walk with Christ. Read the Word, keep a journal, and tend a prayer life you can look back on — built for busy people who long to know God more."
-    />
-    <meta name="theme-color" content="#e8933a" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%BE%3C/text%3E%3C/svg%3E"
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Bread of Life — draw near to God, one unhurried day at a time" />
-    <meta
-      property="og:description"
-      content="A warm, offline-first home for your walk with Christ. Read the Word, journal, and keep a prayer life you can look back on."
-    />
-    <meta property="og:image" content="https://breadoflife.dev/countryside-dusk.webp" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;0,900;1,400&family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --cream: #fbf6ec;
-        --cream-2: #f4ead6;
-        --ink: #3a2c1d;
-        --ink-soft: #6b5842;
-        --amber: #e8933a;
-        --amber-deep: #c2701c;
-        --ember: #b4531f;
-        --sage: #7f8a56;
-        --line: #e7dbc5;
-        --card: #fffdf8;
-        --shadow: 28px 28px 60px -30px rgba(120, 78, 26, 0.4);
-        --radius: 20px;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --cream: #171310;
-          --cream-2: #1f1813;
-          --ink: #f2e7d5;
-          --ink-soft: #c3b199;
-          --amber: #f2a748;
-          --amber-deep: #e8933a;
-          --ember: #e59a5a;
-          --sage: #9aa571;
-          --line: #33291f;
-          --card: #211a13;
-          --shadow: 28px 28px 70px -30px rgba(0, 0, 0, 0.7);
-        }
-      }
-      :root[data-theme="dark"] {
-        --cream: #171310; --cream-2: #1f1813; --ink: #f2e7d5; --ink-soft: #c3b199;
-        --amber: #f2a748; --amber-deep: #e8933a; --ember: #e59a5a; --sage: #9aa571;
-        --line: #33291f; --card: #211a13; --shadow: 28px 28px 70px -30px rgba(0,0,0,.7);
-      }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      html { scroll-behavior: smooth; }
-      body {
-        font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-        color: var(--ink);
-        background: var(--cream);
-        line-height: 1.65;
-        -webkit-font-smoothing: antialiased;
-        overflow-x: hidden;
-      }
-      h1, h2, h3, .serif { font-family: "Merriweather", Georgia, serif; }
-      a { color: inherit; }
-      .wrap { width: min(1120px, 92vw); margin: 0 auto; }
-      .scripture { font-family: "Merriweather", serif; font-style: italic; color: var(--ink-soft); }
-      .kicker {
-        font-size: 0.8rem; letter-spacing: 0.22em; text-transform: uppercase;
-        font-weight: 600; color: var(--amber-deep);
-      }
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bread of Life · A free, offline Bible app</title>
+  <meta name="description" content="A free, open-source Bible app for Android, Linux, Windows and macOS. Reading plans, commentary, audio, a journal and an answered-prayer log, all on your own device. No account, no ads, no tracking.">
+  <link rel="canonical" href="https://breadoflife.dev/">
+  <meta name="theme-color" content="#fbf8f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Bread of Life">
+  <meta property="og:url" content="https://breadoflife.dev/">
+  <meta property="og:title" content="Bread of Life · A free, offline Bible app">
+  <meta property="og:description" content="Read the Bible, keep your prayers and remember the answers. Free and open source, works offline, no account.">
+  <meta property="og:image" content="https://breadoflife.dev/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Bread of Life app showing John 15 beside Matthew Henry's commentary, with the Now Playing screen on a phone.">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preload" href="fonts/bol-serif-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script src="site.js" defer></script>
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"SoftwareApplication","name":"Bread of Life","applicationCategory":"LifestyleApplication","operatingSystem":"Android, Linux, Windows, macOS","offers":{"@type":"Offer","price":"0","priceCurrency":"AUD"},"license":"https://opensource.org/license/mit","url":"https://breadoflife.dev/","downloadUrl":"https://github.com/matt-shearing/bread-of-life/releases/latest","softwareVersion":"0.4.0"}
+  </script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
 
-      /* nav */
-      nav {
-        position: absolute; inset: 0 0 auto 0; z-index: 10;
-        display: flex; align-items: center; justify-content: space-between;
-        width: min(1120px, 92vw); margin: 0 auto; padding: 22px 0;
-      }
-      .brand { display: flex; align-items: center; gap: 0.5rem; font-family: "Merriweather", serif; font-weight: 700; font-size: 1.15rem; color: #fff; text-shadow: 0 2px 12px rgba(60,30,0,.5); }
-      .brand .mark { font-size: 1.5rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
-      .nav-links { display: flex; align-items: center; gap: 1.6rem; }
-      .nav-links a { color: #fdf3e2; text-decoration: none; font-weight: 500; font-size: 0.95rem; text-shadow: 0 1px 8px rgba(60,30,0,.55); opacity: 0.92; }
-      .nav-links a:hover { opacity: 1; }
-      @media (max-width: 680px) { .nav-links a:not(.badge) { display: none; } }
-      .badge {
-        font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700;
-        padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.9); color: var(--ember);
-      }
-
-      /* hero */
-      .hero { position: relative; min-height: 92vh; display: flex; align-items: flex-end; background: #2a2440; color: #fff; }
-      .hero-bg { position: absolute; inset: 0; background-image: url("countryside-dusk.webp"); background-size: cover; background-position: center 42%; }
-      .hero-bg::after {
-        content: ""; position: absolute; inset: 0;
-        background:
-          linear-gradient(to top, rgba(28,18,10,.86) 0%, rgba(40,26,14,.45) 42%, rgba(40,30,60,.12) 78%, rgba(40,30,60,.28) 100%),
-          radial-gradient(120% 80% at 78% 30%, rgba(255,190,120,.28), transparent 60%);
-      }
-      .hero-inner { position: relative; z-index: 2; width: min(1120px, 92vw); margin: 0 auto; padding: 0 0 8vh; }
-      .hero .kicker { color: #ffd9a8; }
-      .hero h1 {
-        font-weight: 900; font-size: clamp(2.4rem, 6.4vw, 4.6rem); line-height: 1.04;
-        letter-spacing: -0.01em; margin: 0.7rem 0 0; max-width: 16ch; text-shadow: 0 3px 30px rgba(30,12,0,.5);
-      }
-      .hero h1 .glow { color: #ffcf94; }
-      .hero .lede { margin-top: 1.3rem; font-size: clamp(1.05rem, 1.7vw, 1.28rem); max-width: 44ch; color: #f7ecdc; text-shadow: 0 2px 16px rgba(30,12,0,.6); }
-      .hero .verse { margin-top: 1.5rem; font-size: 1.05rem; color: #ffe6c4; }
-      .cta { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 2.1rem; }
-      .btn { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.9rem 1.5rem; border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: transform .15s ease, box-shadow .2s ease; }
-      .btn-primary { background: linear-gradient(180deg, #f6ad4e, #e0851f); color: #2a1a08; box-shadow: 0 14px 34px -12px rgba(230,140,40,.75); }
-      .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -12px rgba(230,140,40,.85); }
-      .btn-ghost { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.4); backdrop-filter: blur(4px); }
-      .btn-ghost:hover { background: rgba(255,255,255,.2); transform: translateY(-2px); }
-
-      /* sections */
-      section { padding: clamp(4rem, 9vw, 7.5rem) 0; }
-      .center { text-align: center; }
-      .eyebrow-h2 { font-size: clamp(1.8rem, 4vw, 2.9rem); font-weight: 900; letter-spacing: -0.02em; margin: 0.6rem 0 0; line-height: 1.1; }
-      .section-lede { margin: 1.1rem auto 0; max-width: 60ch; color: var(--ink-soft); font-size: 1.1rem; }
-
-      .invitation { background: var(--cream); }
-      .invite-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: center; }
-      @media (max-width: 820px) { .invite-grid { grid-template-columns: 1fr; } }
-      .invite-grid h2 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900; letter-spacing: -0.02em; line-height: 1.12; }
-      .invite-grid p { margin-top: 1.1rem; color: var(--ink-soft); font-size: 1.08rem; }
-      .invite-grid p strong { color: var(--ink); font-weight: 600; }
-      .pull { position: relative; padding: 2rem 2rem 2rem 2.4rem; border-radius: var(--radius); background: linear-gradient(160deg, var(--cream-2), var(--card)); border: 1px solid var(--line); box-shadow: var(--shadow); }
-      .pull .verse-lg { font-family: "Merriweather", serif; font-style: italic; font-size: clamp(1.3rem, 2.6vw, 1.7rem); line-height: 1.45; color: var(--ink); }
-      .pull .ref { display: block; margin-top: 1rem; font-style: normal; font-weight: 600; color: var(--amber-deep); letter-spacing: 0.02em; }
-      .pull::before { content: "\201C"; position: absolute; top: -0.4rem; left: 0.9rem; font-family: "Merriweather", serif; font-size: 4rem; color: var(--amber); opacity: 0.5; }
-
-      .heart { background: linear-gradient(180deg, var(--cream-2), var(--cream)); }
-      .heart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: center; }
-      @media (max-width: 820px) { .heart-grid { grid-template-columns: 1fr; } }
-      .heart-grid h2 { font-size: clamp(1.8rem, 4vw, 2.7rem); font-weight: 900; letter-spacing: -0.02em; line-height: 1.12; }
-      .heart-grid > div > p { margin-top: 1.1rem; color: var(--ink-soft); font-size: 1.08rem; }
-      .prayer-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 1.15rem 1.3rem; box-shadow: 0 10px 26px -20px rgba(120,78,26,.6); margin-bottom: 0.9rem; }
-      .prayer-card .top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-      .prayer-card .title { font-weight: 700; font-family: "Merriweather", serif; }
-      .tag { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
-      .tag.answered { background: #e4f0d8; color: #4f6a2b; }
-      .tag.praying { background: #fdeccd; color: var(--ember); }
-      @media (prefers-color-scheme: dark) { .tag.answered { background: #2c3a1c; color: #b6cf8c; } .tag.praying { background: #3a2a14; color: #eaa863; } }
-      .prayer-card .note { font-style: italic; font-family: "Merriweather", serif; color: var(--ink-soft); margin-top: 0.5rem; font-size: 0.96rem; }
-      .prayer-card .meta { margin-top: 0.6rem; font-size: 0.8rem; color: var(--ink-soft); opacity: 0.8; }
-
-      .features { background: var(--cream); }
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; margin-top: 3rem; }
-      @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-      @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
-      .feat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem 1.5rem 1.6rem; transition: transform .18s ease, box-shadow .2s ease; }
-      .feat:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
-      .feat .ic { font-size: 1.7rem; display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 14px; background: linear-gradient(160deg, #fbe3bd, #f6cf94); margin-bottom: 1rem; }
-      @media (prefers-color-scheme: dark) { .feat .ic { background: linear-gradient(160deg, #3a2c17, #2c2113); } }
-      .feat h3 { font-size: 1.12rem; font-weight: 700; }
-      .feat p { margin-top: 0.45rem; color: var(--ink-soft); font-size: 0.97rem; }
-      .feat .soon { display: inline-block; margin-top: 0.7rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber-deep); border: 1px solid var(--amber); border-radius: 999px; padding: 2px 8px; }
-
-      /* showcase (screenshot feature breakdowns) */
-      .showcase { background: linear-gradient(180deg, var(--cream), var(--cream-2)); }
-      .show-row { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 5vw, 4.5rem); align-items: center; margin-top: clamp(3rem, 6vw, 5.5rem); }
-      .show-row:first-of-type { margin-top: 3.2rem; }
-      @media (max-width: 820px) { .show-row { grid-template-columns: 1fr; gap: 1.6rem; } .show-row .shot-wrap { order: -1; } }
-      .show-row.flip .show-text { order: 2; }
-      @media (max-width: 820px) { .show-row.flip .show-text { order: 0; } }
-      .shot-wrap { border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: var(--card); }
-      .shot-wrap img { width: 100%; display: block; }
-      .show-text h3 { font-size: clamp(1.4rem, 3vw, 2.05rem); font-weight: 900; letter-spacing: -0.02em; line-height: 1.14; }
-      .show-text p { margin-top: 0.9rem; color: var(--ink-soft); font-size: 1.06rem; }
-      .show-text .kicker { margin-bottom: 0.5rem; display: block; }
-      .badge-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.25rem; }
-      .badge-list span { font-size: 0.8rem; font-weight: 600; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0.32rem 0.85rem; color: var(--ink-soft); }
-
-      .rhythm { position: relative; color: #fff; text-align: center; }
-      .rhythm-bg { position: absolute; inset: 0; background: url("countryside-day.webp") center/cover; }
-      .rhythm-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(30,20,10,.62), rgba(30,20,10,.72)); }
-      .rhythm .wrap { position: relative; z-index: 2; }
-      .rhythm h2 { font-size: clamp(1.8rem, 4vw, 2.7rem); font-weight: 900; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
-      .rhythm p { margin: 1.1rem auto 0; max-width: 56ch; color: #f6ecdc; text-shadow: 0 1px 12px rgba(0,0,0,.5); }
-      .rhythm .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem; margin-top: 2rem; }
-      .chip { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 0.5rem 1.1rem; font-weight: 500; font-size: 0.95rem; backdrop-filter: blur(3px); }
-
-      .download { background: linear-gradient(180deg, var(--cream), var(--cream-2)); }
-      .dl-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.1rem; margin-top: 3rem; }
-      @media (max-width: 720px) { .dl-grid { grid-template-columns: 1fr; } }
-      .dl { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; display: flex; gap: 1.1rem; align-items: flex-start; }
-      .dl .os { font-size: 2rem; line-height: 1; }
-      .dl h3 { font-size: 1.15rem; }
-      .dl p { color: var(--ink-soft); font-size: 0.95rem; margin: 0.35rem 0 0.9rem; }
-      .dl .links { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-      .pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border-radius: 999px; font-weight: 600; font-size: 0.9rem; text-decoration: none; background: linear-gradient(180deg, #f6ad4e, #e0851f); color: #2a1a08; }
-      .pill.outline { background: transparent; border: 1px solid var(--line); color: var(--ink); }
-      .pill:hover { filter: brightness(1.03); }
-      code { font-family: ui-monospace, "SF Mono", Menlo, monospace; background: var(--cream-2); border: 1px solid var(--line); padding: 0.15rem 0.5rem; border-radius: 7px; font-size: 0.85rem; }
-
-      footer { background: var(--cream); border-top: 1px solid var(--line); padding: 4rem 0 3rem; text-align: center; }
-      footer .benediction { font-family: "Merriweather", serif; font-style: italic; font-size: 1.25rem; color: var(--ink); max-width: 40ch; margin: 0 auto; }
-      footer .ref { color: var(--amber-deep); font-weight: 600; font-style: normal; }
-      footer .links { margin-top: 1.8rem; display: flex; flex-wrap: wrap; gap: 1.4rem; justify-content: center; font-size: 0.95rem; }
-      footer .links a { color: var(--ink-soft); text-decoration: none; }
-      footer .links a:hover { color: var(--amber-deep); }
-      footer .fine { margin-top: 1.6rem; font-size: 0.85rem; color: var(--ink-soft); opacity: 0.8; }
-      .heart-emoji { color: var(--ember); }
-    </style>
-  </head>
-  <body>
-    <nav>
-      <div class="brand"><span class="mark">🌾</span> Bread of Life</div>
-      <div class="nav-links">
-        <a href="#invitation">The invitation</a>
-        <a href="#features">What's inside</a>
-        <a href="#download">Download</a>
-        <a class="badge" href="https://github.com/matt-shearing/bread-of-life">Beta</a>
-      </div>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Bread of Life, back to top">
+      <img src="img/logo-96.webp" alt="" width="30" height="30">
+      Bread of Life
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a class="nav-hide" href="#reading">Features</a>
+      <a class="nav-hide" href="#privacy">Privacy</a>
+      <a class="nav-hide" href="https://github.com/matt-shearing/bread-of-life">Source</a>
+      <a class="nav-cta" href="#download">Download</a>
     </nav>
+  </div>
+</header>
 
-    <header class="hero">
-      <div class="hero-bg"></div>
-      <div class="hero-inner">
-        <p class="kicker">A quiet home for your walk with God</p>
-        <h1>Draw near to God, <span class="glow">one unhurried day at a time.</span></h1>
-        <p class="lede">
-          Read the Word, tend your prayers, and keep a record of God's faithfulness — a warm, unhurried
-          place to meet with Christ, made for busy lives that still long to know Him more.
-        </p>
-        <p class="scripture verse">"Draw near to God, and He will draw near to you." — James 4:8</p>
-        <div class="cta">
-          <a class="btn btn-primary" href="#download">🌾 Start free</a>
-          <a class="btn btn-ghost" href="https://github.com/matt-shearing/bread-of-life">View on GitHub</a>
-        </div>
-      </div>
-    </header>
+<main id="main">
 
-    <section class="invitation" id="invitation">
-      <div class="wrap invite-grid">
-        <div>
-          <p class="kicker">For busy people who long to know Him</p>
-          <h2>Life is loud. Your walk with God doesn't have to get lost in it.</h2>
-          <p>
-            Between work, family, and a hundred small urgencies, the quiet hours with God are the first
-            to slip. Bread of Life is built to protect them — <strong>a gentle daily rhythm</strong> that
-            helps you open the Word, steady your prayers, and keep walking with Christ even in a full life.
-          </p>
-          <p>
-            No feeds, no noise, no accounts required. Just you, the Scriptures, and an honest record of a
-            life being shaped by God — day after faithful day, <strong>toward the day you hear "well done."</strong>
-          </p>
-        </div>
-        <aside class="pull">
-          <p class="verse-lg">
-            "Well done, good and faithful servant. You have been faithful over a little; I will set you
-            over much. Enter into the joy of your master."
-            <span class="ref">— Matthew 25:23</span>
-          </p>
-        </aside>
-      </div>
-    </section>
+<section class="hero" id="top" aria-labelledby="hero-title">
+  <div class="wrap">
+    <h1 id="hero-title"><span>Read the Bible.</span> <span>Keep your prayers.</span> <span>Remember the answers.</span></h1>
+    <p class="lede">Bread of Life is a free Bible app that works offline. Your reading plan, prayers and journal stay on your own phone or computer. There is no account, no advertising and nothing tracking you.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#download">Download</a>
+      <a class="btn btn-quiet" href="https://github.com/matt-shearing/bread-of-life">
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Source on GitHub
+      </a>
+    </div>
+    <p class="hero-meta"><span>Android, Linux, Windows and macOS</span><span>Version <span data-version>0.4.0</span></span><span>MIT licence</span></p>
 
-    <section class="heart">
-      <div class="wrap heart-grid">
-        <div>
-          <p class="kicker">The heart of it</p>
-          <h2>A record of answered prayer you can look back on.</h2>
-          <p>
-            Write down what you're carrying to God. When the answer comes, mark it — and add a note on
-            <em>how</em> He moved. Nothing gets lost, nothing forgotten.
-          </p>
-          <p>
-            Then look back. Scroll through months and years of God's faithfulness in your own words —
-            a living testimony that He hears, and He answers.
-          </p>
-          <p class="scripture" style="margin-top:1.2rem">
-            "I will remember the deeds of the LORD; yes, I will remember your wonders of old." — Psalm 77:11
-          </p>
-        </div>
-        <div>
-          <div class="prayer-card">
-            <div class="top"><span class="title">Grace's job interview</span><span class="tag answered">✓ Answered</span></div>
-            <p class="note">"She got the offer — and it's closer to home than we'd hoped. Far more than I asked for."</p>
-            <p class="meta">Prayed Mar 3 · Answered Mar 19</p>
-          </div>
-          <div class="prayer-card">
-            <div class="top"><span class="title">Peace about the move</span><span class="tag answered">✓ Answered</span></div>
-            <p class="note">"The anxiety lifted after Psalm 91. Sleeping through the night again."</p>
-            <p class="meta">Prayed Feb 11 · Answered Feb 24</p>
-          </div>
-          <div class="prayer-card">
-            <div class="top"><span class="title">Dad's heart, softening toward faith</span><span class="tag praying">Still praying</span></div>
-            <p class="meta">Prayed 34 times since Jan 2</p>
-          </div>
-        </div>
-      </div>
-    </section>
+    <div class="hero-visual">
+      <div class="frame"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/reader-dark-960.avif 960w, img/reader-dark-1600.avif 1600w" sizes="(min-width: 1260px) 1040px, 88vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/reader-dark-960.webp 960w, img/reader-dark-1600.webp 1600w" sizes="(min-width: 1260px) 1040px, 88vw"><source type="image/avif" srcset="img/reader-light-960.avif 960w, img/reader-light-1600.avif 1600w" sizes="(min-width: 1260px) 1040px, 88vw"><source type="image/webp" srcset="img/reader-light-960.webp 960w, img/reader-light-1600.webp 1600w" sizes="(min-width: 1260px) 1040px, 88vw"><img src="img/reader-light-1600.webp" srcset="img/reader-light-960.webp 960w, img/reader-light-1600.webp 1600w" sizes="(min-width: 1260px) 1040px, 88vw" width="1600" height="1000" alt="The Bible reader on a desktop computer, showing John 15 with verses 4 and 5 highlighted and Matthew Henry’s commentary open in the study panel beside it." loading="eager" fetchpriority="high" decoding="async"></picture></div>
+      <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-nowplaying-dark-360.avif 360w, img/phone-nowplaying-dark-640.avif 640w" sizes="(min-width: 1260px) 284px, 24vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-nowplaying-dark-360.webp 360w, img/phone-nowplaying-dark-640.webp 640w" sizes="(min-width: 1260px) 284px, 24vw"><source type="image/avif" srcset="img/phone-nowplaying-light-360.avif 360w, img/phone-nowplaying-light-640.avif 640w" sizes="(min-width: 1260px) 284px, 24vw"><source type="image/webp" srcset="img/phone-nowplaying-light-360.webp 360w, img/phone-nowplaying-light-640.webp 640w" sizes="(min-width: 1260px) 284px, 24vw"><img src="img/phone-nowplaying-light-640.webp" srcset="img/phone-nowplaying-light-360.webp 360w, img/phone-nowplaying-light-640.webp 640w" sizes="(min-width: 1260px) 284px, 24vw" width="640" height="1421" alt="The Now Playing screen on a phone, playing Leviticus 10 from the day’s Bible-in-a-year reading, with the day’s four readings listed below." loading="lazy" decoding="async"></picture></div>
+    </div>
+    <div class="hero-phones">
+      <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-guided-dark-360.avif 360w, img/phone-guided-dark-640.avif 640w" sizes="46vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-guided-dark-360.webp 360w, img/phone-guided-dark-640.webp 640w" sizes="46vw"><source type="image/avif" srcset="img/phone-guided-light-360.avif 360w, img/phone-guided-light-640.avif 640w" sizes="46vw"><source type="image/webp" srcset="img/phone-guided-light-360.webp 360w, img/phone-guided-light-640.webp 640w" sizes="46vw"><img src="img/phone-guided-light-640.webp" srcset="img/phone-guided-light-360.webp 360w, img/phone-guided-light-640.webp 640w" sizes="46vw" width="640" height="1421" alt="The guided reader on a phone, showing Leviticus 10 as the second of the day’s five readings." loading="lazy" decoding="async"></picture></div>
+      <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-nowplaying-dark-360.avif 360w, img/phone-nowplaying-dark-640.avif 640w" sizes="46vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-nowplaying-dark-360.webp 360w, img/phone-nowplaying-dark-640.webp 640w" sizes="46vw"><source type="image/avif" srcset="img/phone-nowplaying-light-360.avif 360w, img/phone-nowplaying-light-640.avif 640w" sizes="46vw"><source type="image/webp" srcset="img/phone-nowplaying-light-360.webp 360w, img/phone-nowplaying-light-640.webp 640w" sizes="46vw"><img src="img/phone-nowplaying-light-640.webp" srcset="img/phone-nowplaying-light-360.webp 360w, img/phone-nowplaying-light-640.webp 640w" sizes="46vw" width="640" height="1421" alt="The Now Playing screen on a phone, playing Leviticus 10 with the day’s readings listed below." loading="lazy" decoding="async"></picture></div>
+    </div>
+  </div>
 
-    <section class="showcase" id="tour">
-      <div class="wrap center">
-        <p class="kicker">A closer look</p>
-        <h2 class="eyebrow-h2">Everything you need to meet with God</h2>
-        <p class="section-lede">Warm and unhurried on the surface; surprisingly deep the moment you want to go further.</p>
-      </div>
-      <div class="wrap">
-        <div class="show-row">
-          <div class="show-text">
-            <span class="kicker">Your daily homebase</span>
-            <h3>Open the app, and the day is already gathered for you.</h3>
-            <p>
-              A Verse of the Day, today's devotional, your reading streak, the prayers on your heart, and
-              where you left off in the Word — all waiting on a cozy countryside scene that shifts from
-              day to dusk.
-            </p>
-          </div>
-          <div class="shot-wrap"><img src="shots/dashboard.webp" alt="Bread of Life dashboard" loading="lazy" /></div>
-        </div>
+  <div class="wrap facts">
+    <h2 class="visually-hidden">In short</h2>
+    <ul role="list">
+      <li><h3>Works offline</h3><p>The Berean Standard Bible, cross-references and Hebrew and Greek word study are built in. Read on a plane or in the bush.</p></li>
+      <li><h3>No account</h3><p>Install it and start reading. There is nothing to sign up for and no email to hand over.</p></li>
+      <li><h3>No ads, no tracking</h3><p>No analytics, no advertising, no crash reporting. The app doesn’t report on you to anyone.</p></li>
+      <li><h3>Open source</h3><p>Every line is on GitHub under the MIT licence. Read it, build it yourself, or change it.</p></li>
+    </ul>
+  </div>
+</section>
 
-        <div class="show-row flip">
-          <div class="show-text">
-            <span class="kicker">The Word, richly studied</span>
-            <h3>Trusted commentary, cross-references, and the original languages — right beside the text.</h3>
-            <p>
-              Reading in John? Open the study panel and Matthew Henry, JFB, Clarke, Gill, Keil &amp;
-              Delitzsch and Tyndale are right there, tracking your chapter — alongside cross-references and
-              Greek &amp; Hebrew word study. Generations of faithful teaching, built in and offline.
-            </p>
-            <div class="badge-list">
-              <span>Matthew Henry</span><span>JFB</span><span>Clarke</span><span>Gill</span>
-              <span>Keil &amp; Delitzsch</span><span>Tyndale</span><span>Cross-references</span><span>Strong's</span>
-            </div>
-          </div>
-          <div class="shot-wrap"><img src="shots/commentary.webp" alt="Bible reader with the commentary and study sidebar open" loading="lazy" /></div>
-        </div>
+<section class="section" id="reading" aria-labelledby="reading-title">
+  <div class="wrap split">
+    <div class="copy prose">
+      <span class="label">Reading and study</span>
+      <h2 id="reading-title">The commentaries sit beside the text</h2>
+      <p>Open the study panel and Matthew Henry, Jamieson-Fausset-Brown, Adam Clarke, John Gill, Keil and Delitzsch and Tyndale follow the chapter you are reading. Tap a verse for its cross-references, or look up the Hebrew or Greek word underneath the English.</p>
+      <p>Highlight a verse, write a note on it, or send it to your journal or prayer list without leaving the page.</p>
+      <ul class="specs" role="list">
+        <li><b>Translations</b><span>Berean Standard Bible built in; World English, King James, American Standard and Young’s Literal downloaded when you first open them</span></li>
+        <li><b>Study</b><span>Six public-domain commentaries, 340,000 cross-references, Strong’s Greek and the Hebrew of the Westminster Leningrad Codex</span></li>
+        <li><b>Memorising</b><span>Memory Lane schedules verses for review with spaced repetition</span></li>
+        <li><b>Search</b><span>Full-text search across the whole Bible, and across your journal</span></li>
+      </ul>
+    </div>
+    <figure class="reading-fig">
+      <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-reader-dark-360.avif 360w, img/phone-reader-dark-640.avif 640w" sizes="300px"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-reader-dark-360.webp 360w, img/phone-reader-dark-640.webp 640w" sizes="300px"><source type="image/avif" srcset="img/phone-reader-light-360.avif 360w, img/phone-reader-light-640.avif 640w" sizes="300px"><source type="image/webp" srcset="img/phone-reader-light-360.webp 360w, img/phone-reader-light-640.webp 640w" sizes="300px"><img src="img/phone-reader-light-640.webp" srcset="img/phone-reader-light-360.webp 360w, img/phone-reader-light-640.webp 640w" sizes="300px" width="640" height="1421" alt="John 15 in the reader on a phone, with verses 4 and 5 highlighted." loading="lazy" decoding="async"></picture></div>
+      <div class="frame"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/study-dark-960.avif 960w, img/study-dark-1600.avif 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/study-dark-960.webp 960w, img/study-dark-1600.webp 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><source type="image/avif" srcset="img/study-light-960.avif 960w, img/study-light-1600.avif 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><source type="image/webp" srcset="img/study-light-960.webp 960w, img/study-light-1600.webp 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><img src="img/study-light-1600.webp" srcset="img/study-light-960.webp 960w, img/study-light-1600.webp 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw" width="1600" height="1216" alt="John 15 in the reader. Verse 5 is selected, with a toolbar offering five highlight colours, a note, copy, journal and prayer; the study panel beside it lists cross-references for John 15:5." loading="lazy" decoding="async"></picture></div>
+      <figcaption>On a computer: John 15:5 selected, with its cross-references in the study panel.</figcaption>
+    </figure>
+  </div>
+</section>
 
-        <div class="show-row">
-          <div class="show-text">
-            <span class="kicker">A plan for every season</span>
-            <h3>Walk through Scripture with a rhythm that fits your life.</h3>
-            <p>
-              Read a Gospel in a fortnight, the Psalms in ten days, the New Testament in ninety, or the
-              whole Bible in a year — including a daily Old Testament · New Testament · Psalm · Proverbs
-              track. Enroll, and a gentle reminder keeps you going.
-            </p>
-          </div>
-          <div class="shot-wrap"><img src="shots/plans.webp" alt="Reading plans in Bread of Life" loading="lazy" /></div>
-        </div>
+<section class="section tint" id="listening" aria-labelledby="listening-title">
+  <div class="wrap split flip">
+    <div class="copy prose">
+      <span class="label">Listening</span>
+      <h2 id="listening-title">Listen while you drive, walk or wash up</h2>
+      <p>Press play on any chapter and the narration carries on through the book and into the next, in the background with the screen off. Play a reading plan and it reads the day’s passages in order, ticking each one off as it finishes.</p>
+      <p>Spurgeon’s <em>Morning and Evening</em> has a Listen button too. All 732 readings are recorded in a British voice; without a connection, the app reads them with your phone’s own voice.</p>
+      <div class="aside-note">
+        <h3>Android Auto</h3>
+        <p>Bread of Life has its own icon in the car, with tabs for today’s reading, the Bible, the devotional and what you played recently. Say “play John 3” and it does. Chapters you finish in the car count towards your plan.</p>
       </div>
-    </section>
+    </div>
+    <figure>
+      <div class="listen-visual">
+        <div class="phone fold"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/fold-nowplaying-dark-600.avif 600w, img/fold-nowplaying-dark-1000.avif 1000w" sizes="(max-width: 900px) 55vw, (min-width: 1260px) 420px, 34vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/fold-nowplaying-dark-600.webp 600w, img/fold-nowplaying-dark-1000.webp 1000w" sizes="(max-width: 900px) 55vw, (min-width: 1260px) 420px, 34vw"><source type="image/avif" srcset="img/fold-nowplaying-light-600.avif 600w, img/fold-nowplaying-light-1000.avif 1000w" sizes="(max-width: 900px) 55vw, (min-width: 1260px) 420px, 34vw"><source type="image/webp" srcset="img/fold-nowplaying-light-600.webp 600w, img/fold-nowplaying-light-1000.webp 1000w" sizes="(max-width: 900px) 55vw, (min-width: 1260px) 420px, 34vw"><img src="img/fold-nowplaying-light-1000.webp" srcset="img/fold-nowplaying-light-600.webp 600w, img/fold-nowplaying-light-1000.webp 1000w" sizes="(max-width: 900px) 55vw, (min-width: 1260px) 420px, 34vw" width="1000" height="1058" alt="Now Playing on an unfolded Pixel Fold: the player on the left, the day’s four readings on the right with the first one playing." loading="lazy" decoding="async"></picture></div>
+        <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-devotional-dark-360.avif 360w, img/phone-devotional-dark-640.avif 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 36vw, (min-width: 1260px) 270px, 22vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-devotional-dark-360.webp 360w, img/phone-devotional-dark-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 36vw, (min-width: 1260px) 270px, 22vw"><source type="image/avif" srcset="img/phone-devotional-light-360.avif 360w, img/phone-devotional-light-640.avif 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 36vw, (min-width: 1260px) 270px, 22vw"><source type="image/webp" srcset="img/phone-devotional-light-360.webp 360w, img/phone-devotional-light-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 36vw, (min-width: 1260px) 270px, 22vw"><img src="img/phone-devotional-light-640.webp" srcset="img/phone-devotional-light-360.webp 360w, img/phone-devotional-light-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 36vw, (min-width: 1260px) 270px, 22vw" width="640" height="1421" alt="Spurgeon’s Morning reading for 27 September on a phone, with the recording playing in the mini-player at the bottom." loading="lazy" decoding="async"></picture></div>
+      </div>
+      <figcaption>Now Playing on an unfolded Pixel Fold, and the morning devotional read aloud on a phone.</figcaption>
+    </figure>
+  </div>
+</section>
 
-    <section class="features" id="features">
-      <div class="wrap center">
-        <p class="kicker">Everything in one quiet place</p>
-        <h2 class="eyebrow-h2">A companion for your whole walk</h2>
-        <p class="section-lede">A complete devotional life that lives on your device and asks nothing of you in return.</p>
+<section class="section" id="prayer" aria-labelledby="prayer-title">
+  <div class="wrap split">
+    <div class="copy prose">
+      <span class="label">Prayer</span>
+      <h2 id="prayer-title">Write down what you asked for, and what happened</h2>
+      <p>Keep a list of the things you are praying about and tap <strong>Prayed</strong> each time you pray for one. When a prayer is answered, mark it and write down how.</p>
+      <p>Over months the answered list becomes something you can scroll back through: dates, how long you prayed, and what came of it in your own words. The Faithfulness review lays it out as a single page to print or save as a PDF.</p>
+      <ul class="specs" role="list">
+        <li><b>Reminders</b><span>Flag a prayer and it shows on the dashboard each day until you have prayed for it</span></li>
+        <li><b>Journal links</b><span>Link a prayer to journal entries and verses, in both directions</span></li>
+      </ul>
+    </div>
+    <figure>
+      <div class="pair">
+        <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-answered-dark-360.avif 360w, img/phone-answered-dark-640.avif 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-answered-dark-360.webp 360w, img/phone-answered-dark-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><source type="image/avif" srcset="img/phone-answered-light-360.avif 360w, img/phone-answered-light-640.avif 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><source type="image/webp" srcset="img/phone-answered-light-360.webp 360w, img/phone-answered-light-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><img src="img/phone-answered-light-640.webp" srcset="img/phone-answered-light-360.webp 360w, img/phone-answered-light-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw" width="640" height="1421" alt="The Answered tab of the prayer list on a phone. Each answered prayer shows the date and a note on how it was answered." loading="lazy" decoding="async"></picture></div>
+        <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-faithfulness-dark-360.avif 360w, img/phone-faithfulness-dark-640.avif 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-faithfulness-dark-360.webp 360w, img/phone-faithfulness-dark-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><source type="image/avif" srcset="img/phone-faithfulness-light-360.avif 360w, img/phone-faithfulness-light-640.avif 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><source type="image/webp" srcset="img/phone-faithfulness-light-360.webp 360w, img/phone-faithfulness-light-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw"><img src="img/phone-faithfulness-light-640.webp" srcset="img/phone-faithfulness-light-360.webp 360w, img/phone-faithfulness-light-640.webp 640w" sizes="(max-width: 560px) 300px, (max-width: 900px) 44vw, (min-width: 1260px) 330px, 27vw" width="640" height="1421" alt="The Faithfulness review on a phone: a page headed “A Record of His Faithfulness” listing answered prayers by date, with a Save as PDF button." loading="lazy" decoding="async"></picture></div>
       </div>
-      <div class="wrap grid">
-        <div class="feat"><div class="ic">📖</div><h3>The whole Word, offline</h3><p>The Berean Standard Bible — all 66 books, every verse, ready even with no signal.</p></div>
-        <div class="feat"><div class="ic">🙏</div><h3>Answered-prayer log</h3><p>Track prayers, mark them answered, and keep a record of God's faithfulness.</p></div>
-        <div class="feat"><div class="ic">🗓️</div><h3>Reading plans</h3><p>Walk through Scripture with structured plans — including a daily OT · NT · Psalm · Proverbs rhythm.</p></div>
-        <div class="feat"><div class="ic">🌅</div><h3>Daily devotionals</h3><p>Spurgeon's Morning &amp; Evening and more, to begin and end the day with God.</p></div>
-        <div class="feat"><div class="ic">✍️</div><h3>Journal</h3><p>Capture what God is teaching you, linked straight to the passages that stirred it.</p></div>
-        <div class="feat"><div class="ic">🔔</div><h3>Gentle daily reminders</h3><p>A quiet nudge for your reading plan, devotional, or prayers — never nagging, always optional.</p></div>
-        <div class="feat"><div class="ic">🔗</div><h3>Cross-references &amp; Strong's</h3><p>Follow the threads and dig into the original languages, right beside the text.</p></div>
-        <div class="feat"><div class="ic">💬</div><h3>AI study companion</h3><p>An optional helper you enable with your own key — private and entirely your choice.</p></div>
-        <div class="feat"><div class="ic">☁️</div><h3>Sync across devices</h3><p>Carry your prayers and journal between phone and desktop, end-to-end encrypted.<span class="soon">Coming soon</span></p></div>
-      </div>
-    </section>
+      <figcaption>The Answered list, and the same prayers as a Faithfulness review ready to print.</figcaption>
+    </figure>
+  </div>
+</section>
 
-    <section class="rhythm">
-      <div class="rhythm-bg"></div>
-      <div class="wrap">
-        <p class="kicker" style="color:#ffd9a8">A rhythm for your days</p>
-        <h2>Faithful in the little, morning by morning.</h2>
-        <p>
-          Great faith is built from small, repeated turnings toward God. Bread of Life gives your days a
-          gentle shape — the Word in the morning, prayers through the day, a devotional in the evening —
-          and keeps quiet track of the faithfulness you might otherwise forget.
-        </p>
-        <div class="row">
-          <span class="chip">Offline-first</span>
-          <span class="chip">No accounts</span>
-          <span class="chip">No tracking, ever</span>
-          <span class="chip">Free &amp; open source</span>
-          <span class="chip">Yours alone</span>
-        </div>
-      </div>
-    </section>
+<section class="section tint" id="plans" aria-labelledby="plans-title">
+  <div class="wrap split flip">
+    <div class="copy prose">
+      <span class="label">Plans, devotionals and a journal</span>
+      <h2 id="plans-title">A reading plan you can’t fall behind on</h2>
+      <p>Choose from seven plans, from John in three weeks to the whole Bible in a year, or build your own from any range of books. Progress counts the chapters you have read, not the days on a calendar, so a missed week leaves no backlog.</p>
+      <p>The dashboard gathers the day in one place: the verse of the day, Spurgeon’s morning or evening reading, today’s passages, your streak and your prayers.</p>
+      <ul class="specs" role="list">
+        <li><b>Reminders</b><span>At 2 pm and 8 pm by default. They stop once you have read, even if you read on another device</span></li>
+        <li><b>Devotionals</b><span>Spurgeon’s <em>Morning and Evening</em> and <em>Faith’s Checkbook</em></span></li>
+        <li><b>Journal</b><span>Formatted entries with tags, linked to the verses and prayers they are about</span></li>
+      </ul>
+    </div>
+    <div class="duo">
+      <div class="frame"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/dashboard-dark-960.avif 960w, img/dashboard-dark-1600.avif 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/dashboard-dark-960.webp 960w, img/dashboard-dark-1600.webp 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><source type="image/avif" srcset="img/dashboard-light-960.avif 960w, img/dashboard-light-1600.avif 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><source type="image/webp" srcset="img/dashboard-light-960.webp 960w, img/dashboard-light-1600.webp 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw"><img src="img/dashboard-light-1600.webp" srcset="img/dashboard-light-960.webp 960w, img/dashboard-light-1600.webp 1600w" sizes="(min-width: 1260px) 690px, (min-width: 900px) 56vw, 92vw" width="1600" height="1000" alt="The dashboard on a desktop: verse of the day, Spurgeon’s morning reading with a Listen button, day 41 of a Bible-in-a-year plan, a 23-day reading streak and prayer counts." loading="lazy" decoding="async"></picture></div>
+      <div class="phone"><picture class="x"><source media="(prefers-color-scheme: dark)" type="image/avif" srcset="img/phone-guided-dark-360.avif 360w, img/phone-guided-dark-640.avif 640w" sizes="(max-width: 560px) 300px, (min-width: 1260px) 210px, 20vw"><source media="(prefers-color-scheme: dark)" type="image/webp" srcset="img/phone-guided-dark-360.webp 360w, img/phone-guided-dark-640.webp 640w" sizes="(max-width: 560px) 300px, (min-width: 1260px) 210px, 20vw"><source type="image/avif" srcset="img/phone-guided-light-360.avif 360w, img/phone-guided-light-640.avif 640w" sizes="(max-width: 560px) 300px, (min-width: 1260px) 210px, 20vw"><source type="image/webp" srcset="img/phone-guided-light-360.webp 360w, img/phone-guided-light-640.webp 640w" sizes="(max-width: 560px) 300px, (min-width: 1260px) 210px, 20vw"><img src="img/phone-guided-light-640.webp" srcset="img/phone-guided-light-360.webp 360w, img/phone-guided-light-640.webp 640w" sizes="(max-width: 560px) 300px, (min-width: 1260px) 210px, 20vw" width="640" height="1421" alt="The guided reader on a phone, showing Leviticus 10 as the second of the day’s five readings." loading="lazy" decoding="async"></picture></div>
+    </div>
+  </div>
+</section>
 
-    <section class="download" id="download">
-      <div class="wrap center">
-        <p class="kicker">Ready when you are</p>
-        <h2 class="eyebrow-h2">Bring it home</h2>
-        <p class="section-lede">Free and open source on every platform. Pick yours and start reading in minutes.</p>
+<section class="section" id="privacy" aria-labelledby="privacy-title">
+  <div class="wrap">
+    <div class="privacy-head">
+      <span class="label">Your data</span>
+      <h2 id="privacy-title">What you write stays on your device</h2>
+    </div>
+    <div class="privacy-grid">
+      <div>
+        <h3>Stored locally</h3>
+        <p>Prayers, journal entries, notes, highlights and reading progress live in a database on your phone or computer. The app works completely without a network.</p>
       </div>
-      <div class="wrap dl-grid">
-        <div class="dl">
-          <div class="os">🐧</div>
-          <div>
-            <h3>Linux</h3>
-            <p>A portable AppImage or native Debian package.</p>
-            <div class="links">
-              <a class="pill" href="https://github.com/matt-shearing/bread-of-life/releases/latest">AppImage</a>
-              <a class="pill outline" href="https://github.com/matt-shearing/bread-of-life/releases/latest">.deb</a>
-              <small>or&nbsp; <code>yay -S bread-of-life-bin</code></small>
-            </div>
-          </div>
-        </div>
-        <div class="dl">
-          <div class="os">🪟</div>
-          <div>
-            <h3>Windows</h3>
-            <p>A standard installer for Windows 10 and 11.</p>
-            <div class="links"><a class="pill" href="https://github.com/matt-shearing/bread-of-life/releases/latest">.exe installer</a></div>
-          </div>
-        </div>
-        <div class="dl">
-          <div class="os">🍎</div>
-          <div>
-            <h3>macOS</h3>
-            <p>A universal build for Apple Silicon and Intel.</p>
-            <div class="links"><a class="pill" href="https://github.com/matt-shearing/bread-of-life/releases/latest">Universal .dmg</a></div>
-          </div>
-        </div>
-        <div class="dl">
-          <div class="os">🤖</div>
-          <div>
-            <h3>Android</h3>
-            <p>Auto-updating via Obtainium, or sideload the APK.</p>
-            <div class="links">
-              <a class="pill" href="https://github.com/ImranR98/Obtainium">Via Obtainium</a>
-              <a class="pill outline" href="https://github.com/matt-shearing/bread-of-life/releases/latest">.apk</a>
-            </div>
-          </div>
-        </div>
+      <div>
+        <h3>Sync, if you want it</h3>
+        <p>Sync between devices is optional and off until you turn it on. Use the hosted sync server, or run your own: the server is a small open-source program in the same repository, set up with Docker.</p>
       </div>
-      <div class="wrap center" style="margin-top:1.6rem">
-        <small style="color:var(--ink-soft)">Beta builds are unsigned — a quick "open anyway" on Windows/macOS and you're in.</small>
+      <div>
+        <h3>Encrypted before it leaves</h3>
+        <p>Turn on end-to-end encryption and your journal, prayers and notes are encrypted on the device before they sync, so the sync server, hosted or your own, cannot read them. A 24-word recovery phrase unlocks them on your other devices.</p>
       </div>
-    </section>
+      <div>
+        <h3>What goes online</h3>
+        <p>Only what you ask for: a commentary or translation the first time you open it (then it is cached), audio narration, and the optional AI study helper, which talks to the provider you choose using your own key.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-    <footer>
-      <div class="wrap">
-        <p class="benediction">
-          "May the Lord bless you and keep you; may the Lord make His face shine upon you."
-          <br /><span class="ref">— Numbers 6:24–25</span>
-        </p>
-        <div class="links">
-          <a href="https://github.com/matt-shearing/bread-of-life">GitHub</a>
-          <a href="https://github.com/matt-shearing/bread-of-life/releases/latest">Releases</a>
-          <a href="https://github.com/matt-shearing/bread-of-life/blob/main/CREDITS.md">Credits</a>
-          <a href="https://github.com/matt-shearing/bread-of-life#readme">About</a>
-        </div>
-        <p class="fine">
-          Scripture is the public-domain Berean Standard Bible; study data is public-domain / CC-BY.
-          No accounts, no cloud, no tracking. Made with <span class="heart-emoji">♥</span>, offline-first,
-          for the glory of God. · Beta
-        </p>
+<section class="section tint" id="download" aria-labelledby="download-title">
+  <div class="wrap">
+    <div class="download-head">
+      <div>
+        <span class="label">Download</span>
+        <h2 id="download-title">Free on every platform</h2>
       </div>
-    </footer>
-  </body>
+      <p>Version <span data-version>0.4.0</span>. Every build comes from GitHub Actions and is attached to the <a href="https://github.com/matt-shearing/bread-of-life/releases/latest">GitHub release</a>.</p>
+    </div>
+
+    <div class="platforms">
+      <article class="platform" data-os="android" aria-labelledby="dl-android">
+        <span class="tag">For this device</span>
+        <h3 id="dl-android">Android</h3>
+        <p>Install through Obtainium and it updates itself from each GitHub release. No store and no Google account needed. Or download the APK and install it yourself.</p>
+        <div class="actions">
+          <a class="btn btn-primary btn-sm" href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://app/%7B%22id%22%3A%20%22com.breadoflife.app%22%2C%20%22url%22%3A%20%22https%3A%2F%2Fgithub.com%2Fmatt-shearing%2Fbread-of-life%22%2C%20%22author%22%3A%20%22matt-shearing%22%2C%20%22name%22%3A%20%22Bread%20of%20Life%22%2C%20%22additionalSettings%22%3A%20%22%7B%5C%22apkFilterRegEx%5C%22%3A%20%5C%22bread-of-life%5C%22%2C%20%5C%22invertAPKFilter%5C%22%3A%20false%7D%22%2C%20%22overrideSource%22%3A%20%22GitHub%22%7D">Add to Obtainium</a>
+          <a class="btn btn-quiet btn-sm" data-asset="apk" href="https://github.com/matt-shearing/bread-of-life/releases/latest">APK <span class="size" data-size="apk"></span></a>
+        </div>
+        <details>
+          <summary>How to install</summary>
+          <ol>
+            <li>Install <a href="https://github.com/ImranR98/Obtainium">Obtainium</a> from F-Droid or its GitHub releases.</li>
+            <li>On your phone, tap <strong>Add to Obtainium</strong> above. Or in Obtainium choose <strong>Add App</strong> and paste <code>https://github.com/matt-shearing/bread-of-life</code>.</li>
+            <li>Obtainium installs the latest APK and checks for new releases.</li>
+          </ol>
+          <p>Android Auto on GrapheneOS needs a one-time setup, described in <a href="https://github.com/matt-shearing/bread-of-life/blob/main/docs/MOBILE.md#android-auto">the mobile notes</a>.</p>
+        </details>
+      </article>
+
+      <article class="platform" data-os="linux" aria-labelledby="dl-linux">
+        <span class="tag">For this device</span>
+        <h3 id="dl-linux">Linux</h3>
+        <p>An AppImage that runs on most distributions, a .deb for Debian and Ubuntu, and a package in the Arch User Repository.</p>
+        <div class="actions">
+          <a class="btn btn-primary btn-sm" data-asset="appimage" href="https://github.com/matt-shearing/bread-of-life/releases/latest">AppImage <span class="size" data-size="appimage"></span></a>
+          <a class="btn btn-quiet btn-sm" data-asset="deb" href="https://github.com/matt-shearing/bread-of-life/releases/latest">.deb <span class="size" data-size="deb"></span></a>
+        </div>
+        <div class="cmd"><code id="aur-cmd">yay -S bread-of-life-bin</code><button class="copy-btn" type="button" data-copy="aur-cmd" aria-live="polite" hidden>Copy</button></div>
+        <details>
+          <summary>Requirements</summary>
+          <p>The app uses the system WebView. Most desktops already have it; on a minimal install add WebKitGTK 4.1 and GTK 3:</p>
+          <ul>
+            <li>Debian, Ubuntu: <code>sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0</code></li>
+            <li>Fedora: <code>sudo dnf install webkit2gtk4.1 gtk3</code></li>
+            <li>AppImage: <code>chmod +x Bread*.AppImage</code>, then run it.</li>
+          </ul>
+          <p>The <a href="https://aur.archlinux.org/packages/bread-of-life-bin">AUR package</a> pulls in its own dependencies.</p>
+        </details>
+      </article>
+
+      <article class="platform" data-os="windows" aria-labelledby="dl-windows">
+        <span class="tag">For this device</span>
+        <h3 id="dl-windows">Windows</h3>
+        <p>An installer for Windows 10 and 11, 64-bit.</p>
+        <div class="actions">
+          <a class="btn btn-primary btn-sm" data-asset="exe" href="https://github.com/matt-shearing/bread-of-life/releases/latest">Installer (.exe) <span class="size" data-size="exe"></span></a>
+        </div>
+        <details>
+          <summary>If Windows warns you</summary>
+          <p>The installer isn’t code-signed yet, so SmartScreen may say it is from an unknown publisher. Choose <strong>More info</strong>, then <strong>Run anyway</strong>.</p>
+        </details>
+      </article>
+
+      <article class="platform" data-os="mac" aria-labelledby="dl-mac">
+        <span class="tag">For this device</span>
+        <h3 id="dl-mac">macOS</h3>
+        <p>One universal disk image for Apple silicon and Intel Macs.</p>
+        <div class="actions">
+          <a class="btn btn-primary btn-sm" data-asset="dmg" href="https://github.com/matt-shearing/bread-of-life/releases/latest">Disk image (.dmg) <span class="size" data-size="dmg"></span></a>
+        </div>
+        <details>
+          <summary>How to open an unsigned app</summary>
+          <p>The app isn’t signed with an Apple Developer ID yet, so macOS blocks it the first time.</p>
+          <ol>
+            <li>Open the .dmg and drag Bread of Life to Applications.</li>
+            <li>In Applications, Control-click the app, choose <strong>Open</strong>, then <strong>Open</strong> again.</li>
+            <li>On macOS 15 or later, if there is no Open button: try to open the app once, then go to System Settings › Privacy &amp; Security and choose <strong>Open Anyway</strong>.</li>
+          </ol>
+          <p>If macOS says the app is damaged, run this in Terminal: <code>xattr -dr com.apple.quarantine "/Applications/Bread of Life.app"</code></p>
+        </details>
+      </article>
+    </div>
+    <p class="all-releases">Older versions and release notes are on the <a href="https://github.com/matt-shearing/bread-of-life/releases">releases page</a>. To build from source, see the <a href="https://github.com/matt-shearing/bread-of-life#run-it-from-source">README</a>.</p>
+  </div>
+</section>
+
+<section class="section" id="credits" aria-labelledby="credits-title">
+  <div class="wrap credits">
+    <div class="credits-intro">
+      <span class="label">Credits and licences</span>
+      <h2 id="credits-title">Where the words come from</h2>
+      <p>The app’s code is MIT-licensed. The scripture and study material it carries are public domain or Creative Commons, and belong to the people who made them.</p>
+      <p><a href="https://github.com/matt-shearing/bread-of-life/blob/main/CREDITS.md">Full credits on GitHub</a></p>
+    </div>
+    <dl class="credit-list">
+      <div><dt><a href="https://bereanbible.com/">Berean Standard Bible</a></dt><dd>Via the <a href="https://bible.helloao.org/docs/">HelloAO Free Use Bible API</a>. <span class="lic">Public domain (CC0)</span></dd></div>
+      <div><dt>Hebrew text and morphology</dt><dd><a href="https://hb.openscriptures.org/">Open Scriptures Hebrew Bible</a> (Westminster Leningrad Codex), by Open Scriptures. Reformatted to JSON. <span class="lic"><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></span></dd></div>
+      <div><dt>Cross-references</dt><dd><a href="https://www.openbible.info/labs/cross-references/">OpenBible.info</a>, derived from the Treasury of Scripture Knowledge. Reformatted to JSON. <span class="lic"><a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></span></dd></div>
+      <div><dt>Greek word tags and lexicon</dt><dd>Strong’s Concordance and the BSB word tags. <span class="lic">Public domain</span></dd></div>
+      <div><dt>Commentaries and other translations</dt><dd>Matthew Henry, Jamieson-Fausset-Brown, Clarke, Gill, Keil and Delitzsch, Tyndale; WEB, KJV, ASV and YLT, via HelloAO. <span class="lic">Public domain</span></dd></div>
+      <div><dt>Spurgeon’s devotionals</dt><dd><em>Morning and Evening</em> and <em>Faith’s Checkbook</em>, from the <a href="https://www.ccel.org/">Christian Classics Ethereal Library</a>. Recordings made with the Kokoro-82M voice model (Apache 2.0). <span class="lic">Public domain</span></dd></div>
+      <div><dt>Software and fonts</dt><dd>Tauri, React, Vite, Tailwind CSS, Radix UI, Dexie, Tiptap, Lucide (MIT, ISC, Apache 2.0). Inter, and Merriweather (subset here as “BoL Serif”). <span class="lic">SIL Open Font Licence</span></dd></div>
+    </dl>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <p class="name">Bread of Life</p>
+      <p>The name is from John 6:35: <em>“I am the bread of life.”</em></p>
+      <p>This website sets no cookies and runs no analytics. To show the current version it asks GitHub’s public API for the latest release.</p>
+    </div>
+    <nav aria-label="Footer">
+      <ul role="list">
+        <li><a href="https://github.com/matt-shearing/bread-of-life">Source code</a></li>
+        <li><a href="https://github.com/matt-shearing/bread-of-life/releases">Releases</a></li>
+        <li><a href="https://github.com/matt-shearing/bread-of-life/issues/new/choose">Report a problem</a></li>
+        <li><a href="https://github.com/matt-shearing/bread-of-life/blob/main/LICENSE">MIT licence</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+</body>
 </html>
