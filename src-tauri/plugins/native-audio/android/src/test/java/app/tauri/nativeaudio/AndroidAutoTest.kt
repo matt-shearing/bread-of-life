@@ -272,11 +272,15 @@ class AndroidAutoTest {
         assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
         assertEquals(0, NativeAudioRuntime.completions(context).length())
 
-        // Back 30 seconds.
+        // Back 30 seconds. Paused for this, so the position holds still while the command goes
+        // through: Media3's test clock runs the playback thread ahead on its own schedule.
+        player.pause()
         player.seekTo(100_000L)
         ShadowLooper.idleMainLooper()
         await(b.sendCustomCommand(SessionCommand(SessionCommands.BACK_30, Bundle.EMPTY), Bundle.EMPTY))
-        assertTrue("position ${player.currentPosition}", player.currentPosition in 69_000L..72_000L)
+        assertEquals(70_000L, player.currentPosition)
+        player.play()
+        runMainLooperUntil { player.isPlaying }
 
         // Speed steps to 1.2×, and the button now says so.
         await(b.sendCustomCommand(SessionCommand(SessionCommands.SPEED, Bundle.EMPTY), Bundle.EMPTY))
