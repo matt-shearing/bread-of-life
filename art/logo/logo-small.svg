@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<!-- Small-size variant (16-32 px): bigger window, heavier frame, no fine detail. -->
+<defs>
+ <linearGradient id="w" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5e4834"/><stop offset="1" stop-color="#463526"/></linearGradient>
+ <linearGradient id="r" x1="0" y1="120" x2="0" y2="800" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a67a50"/><stop offset="1" stop-color="#6b4a31"/></linearGradient>
+ <linearGradient id="s" x1="0" y1="200" x2="0" y2="790" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff5de"/><stop offset=".55" stop-color="#fcd98f"/><stop offset="1" stop-color="#f29b17"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" fill="url(#w)"/>
+<path d="M212 800 V430 A300 300 0 0 1 812 430 V800Z" fill="url(#r)"/>
+<path d="M290 790 V430 A222 222 0 0 1 734 430 V790Z" fill="url(#s)"/>
+<path d="M390 792 C352 792 344 752 356 726 C378 680 438 652 512 652 C586 652 646 680 668 726 C680 752 672 792 634 792Z" fill="#3a2314"/>
+<rect x="160" y="786" width="704" height="84" rx="16" fill="#b8895e"/>
+</svg>

@@ -6,6 +6,13 @@ import { dailyDeepLinkForId } from "./dailyReminders.ts";
  * imports so scripts/test-reading-reminders.mjs can check them.
  */
 
+/**
+ * The status-bar icon on Android: the logo's white silhouette, a drawable shipped by the
+ * native-audio plugin (res/drawable/ic_notification.xml), tinted amber. Without it
+ * Android shows the plugin's default "i".
+ */
+export const NOTIFICATION_ICON = { icon: "ic_notification", iconColor: "#D97706" } as const;
+
 export type NativeSchedule =
   | { at: { date: Date; repeating: false; allowWhileIdle: true } }
   | { interval: { interval: { hour: number; minute: number; second: 0 }; allowWhileIdle: true } };
@@ -28,6 +35,7 @@ export function toPluginPayload(n: NativeNotification, channelId: string, action
     channelId,
     actionTypeId, // the "Go now" button
     autoCancel: true,
+    ...NOTIFICATION_ICON,
     schedule: n.schedule,
   };
   // Nested once so a notification restored after a reboot still carries itself.

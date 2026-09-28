@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<!-- Adaptive-icon background: the wall. -->
+<defs>
+ <radialGradient id="wall" cx="512" cy="470" r="620" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5e4834"/><stop offset=".6" stop-color="#4d3a2a"/><stop offset="1" stop-color="#463526"/></radialGradient>
+ <radialGradient id="glow" cx="512" cy="520" r="330" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f7b54a" stop-opacity=".32"/><stop offset=".6" stop-color="#f7b54a" stop-opacity=".1"/><stop offset="1" stop-color="#f7b54a" stop-opacity="0"/></radialGradient>
+ <radialGradient id="spill"><stop offset="0" stop-color="#f7b54a" stop-opacity=".34"/><stop offset=".5" stop-color="#f7b54a" stop-opacity=".14"/><stop offset="1" stop-color="#f7b54a" stop-opacity="0"/></radialGradient>
+ <linearGradient id="reveal" x1="0" y1="258" x2="0" y2="718" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a67a50"/><stop offset="1" stop-color="#6b4a31"/></linearGradient>
+ <linearGradient id="sky" x1="0" y1="296" x2="0" y2="706" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff8e8"/><stop offset="0.5" stop-color="#fde6b4"/><stop offset="0.82" stop-color="#f9bd55"/><stop offset="1" stop-color="#f29b17"/></linearGradient>
+ <linearGradient id="hill" x1="0" y1="612" x2="0" y2="706" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e0911f" stop-opacity=".6"/><stop offset="1" stop-color="#b8600c" stop-opacity=".8"/></linearGradient>
+ <linearGradient id="sill" x1="0" y1="702" x2="0" y2="736" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#caa079"/><stop offset=".3" stop-color="#936744"/><stop offset="1" stop-color="#5d402b"/></linearGradient>
+ <linearGradient id="loaf" x1="0" y1="608" x2="0" y2="704" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7a4a27"/><stop offset="1" stop-color="#301c0f"/></linearGradient>
+ <linearGradient id="shade" x1="0" y1="718" x2="0" y2="760" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1a120c" stop-opacity=".32"/><stop offset="1" stop-color="#1a120c" stop-opacity="0"/></linearGradient>
+</defs><g id="background"><rect width="1024" height="1024" fill="url(#wall)"/><g transform="translate(512 512) scale(1.03) translate(-512 -522)"><rect x="-512" y="-512" width="2048" height="2048" fill="url(#glow)"/><ellipse cx="512" cy="736" rx="250" ry="120" fill="url(#spill)"/></g></g>
+</svg>

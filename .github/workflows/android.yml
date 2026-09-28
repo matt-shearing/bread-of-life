@@ -100,9 +100,12 @@ jobs:
           sed -i -E 's/(minSdk[[:space:]]*=[[:space:]]*)[0-9]+/\126/' src-tauri/gen/android/app/build.gradle.kts
           grep -n "minSdk" src-tauri/gen/android/app/build.gradle.kts || true
           # android init scaffolds gen/android with the DEFAULT Tauri icon.
-          # Regenerate our app icon into the now-existing Android project so
-          # the APK ships the real launcher icon (not the default swirl).
-          pnpm tauri icon src-tauri/app-icon.png
+          # Regenerate our icon into the now-existing Android project from the
+          # manifest, which names the adaptive layers: the foreground, the wall
+          # behind it, and the monochrome layer Android 13+ uses for themed icons
+          # (it writes mipmap-anydpi-v26/ic_launcher.xml with <monochrome>). The
+          # layers come from art/logo/build.py.
+          pnpm tauri icon src-tauri/app-icon.json
           pnpm tauri android build --apk --target aarch64
 
       - name: Locate unsigned APK
@@ -129,6 +132,21 @@ jobs:
           [ -n "$DESC" ] || { echo "::error::automotive_app_desc.xml missing from the APK"; exit 1; }
           "$AAPT" dump xmltree "$APK" "$DESC" | tee automotive.txt
           grep -q '"media"' automotive.txt || { echo "::error::automotive_app_desc does not declare media"; exit 1; }
+
+      # The launcher icon must be adaptive with a monochrome layer, and the status-bar
+      # icon must be ours (the plugins look up "ic_notification" by name).
+      - name: Check launcher and notification icons in the APK
+        run: |
+          APK="${{ steps.apk.outputs.path }}"
+          AAPT="$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
+          "$AAPT" dump --values resources "$APK" > apk-res.txt
+          # Release builds may shorten resource paths, so find the file by resource name.
+          ADAPTIVE=$(grep -A1 ':mipmap/ic_launcher:' apk-res.txt | grep -oE 'res/[^"]+\.xml' | head -1)
+          echo "ic_launcher (adaptive) -> $ADAPTIVE"
+          [ -n "$ADAPTIVE" ] || { echo "::error::no adaptive launcher icon in the APK"; exit 1; }
+          "$AAPT" dump xmltree "$APK" "$ADAPTIVE" | tee adaptive.txt
+          grep -q 'monochrome' adaptive.txt || { echo "::error::launcher icon has no monochrome layer"; exit 1; }
+          grep -q 'drawable/ic_notification' apk-res.txt || { echo "::error::ic_notification missing from the APK"; exit 1; }
 
       - name: Sign APK
         id: sign

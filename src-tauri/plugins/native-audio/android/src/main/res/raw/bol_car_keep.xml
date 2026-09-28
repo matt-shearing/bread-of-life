@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The car's tab icons are referenced by name (android.resource://…/drawable/bol_car_*),
-     which resource shrinking cannot see. -->
+<!-- Resources referenced only by name, which resource shrinking cannot see: the car's tab
+     icons (android.resource://…/drawable/bol_car_*) and the status-bar icon that
+     NativeAudioService and tauri-plugin-notification look up as "ic_notification". -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/bol_car_*,@xml/automotive_app_desc" />
+    tools:keep="@drawable/bol_car_*,@drawable/ic_notification,@xml/automotive_app_desc" />

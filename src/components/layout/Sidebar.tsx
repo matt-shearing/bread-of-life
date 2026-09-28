@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
-import { Moon, PanelLeftClose, PanelLeftOpen, Sun, Wheat } from "lucide-react";
+import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
+import logoSmall from "@/assets/logo-small.svg";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { ReactNode } from "react";
 import { db } from "@/db";
@@ -29,9 +30,7 @@ export function Sidebar() {
       )}
     >
       <div className={cn("flex items-center py-5", collapsed ? "flex-col gap-3 px-0" : "gap-2.5 px-5")}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Wheat className="h-5 w-5" />
-        </div>
+        <img src={logoSmall} alt="" className="h-9 w-9 shrink-0 rounded-lg" />
         {!collapsed && (
           <div className="leading-tight">
             <div className="font-serif text-lg font-bold">Bread of Life</div>
