@@ -10,7 +10,11 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.5.0** — **your record is safe, and easier to find**. **Back up** everything to one
+**Latest: v0.5.1** — **a new icon**: an arched window at first light, with a loaf on the sill. It
+replaces the old loaf on every platform, including Android's single-colour themed icons and the
+status bar during playback.
+
+**v0.5.0** — **your record is safe, and easier to find**. **Back up** everything to one
 file and restore it on any device, or **export** your journal, prayers and notes as Markdown. Every
 reference now **opens on its verse**, with a bar to take you back. Type "jn 3:16" into search, or
 press **Ctrl+K** on a keyboard to jump anywhere. A new **Reading history** page keeps every day you
