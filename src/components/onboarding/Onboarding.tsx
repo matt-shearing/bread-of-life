@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import logo from "@/assets/logo.svg";
 import {
   ArrowLeft,
   ArrowRight,
@@ -107,9 +108,7 @@ function Dots({ step, total }: { step: number; total: number }) {
 function WelcomeStep() {
   return (
     <div className="px-7 py-10 text-center">
-      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-card">
-        <BookOpen size={30} />
-      </div>
+      <img src={logo} alt="" className="mx-auto mb-5 h-16 w-16 rounded-2xl shadow-card" />
       <DialogPrimitive.Title asChild>
         <h1 className="font-serif text-3xl font-bold">Welcome to Bread of Life</h1>
       </DialogPrimitive.Title>

@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌾 Bread of Life
+<img src="art/logo/logo-rounded.svg" width="96" height="96" alt="Bread of Life logo: an arched window at dawn with a loaf on the sill">
+
+# Bread of Life
 
 **A warm, offline-first home for your walk with Christ.**
 Read the Word, keep a journal, and tend a prayer life you can look back on —

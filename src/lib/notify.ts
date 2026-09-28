@@ -6,7 +6,7 @@ import { getAnyPlan, countVerses } from "@/data/plans";
 import { useUI } from "@/store/ui";
 import { readingStreak } from "@/lib/streak";
 import { readingDaysFromDb } from "@/db/readingLog";
-import { deepLinkFor, toPluginPayload, type NativeNotification } from "@/lib/notifyPayload";
+import { deepLinkFor, NOTIFICATION_ICON, toPluginPayload, type NativeNotification } from "@/lib/notifyPayload";
 import {
   READING_DEEP_LINK,
   dueReadingReminders,
@@ -129,6 +129,8 @@ function nativeOptions(o: {
     channelId: CHANNEL_ID,
     actionTypeId: ACTION_TYPE, // adds the "Go now" button
     autoCancel: true, // tapping dismisses it
+    // Android only: on desktop `icon` is an image path, and there is no such file.
+    ...(isAndroid ? NOTIFICATION_ICON : {}),
     extra: o.deepLink ? { deepLink: o.deepLink } : undefined,
   };
 }
