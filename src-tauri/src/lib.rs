@@ -3,6 +3,9 @@
 // See docs/DESKTOP.md.
 #[cfg(desktop)]
 mod desktop_audio;
+// Media keys and the desktop media widget for that player (MPRIS on Linux).
+#[cfg(desktop)]
+mod media_keys;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,27 +33,28 @@ pub fn run() {
     // Media3 plugin below, and the desktop crates are not in its dependency graph).
     #[cfg(desktop)]
     {
+        use tauri::Manager;
         builder = builder
-            .manage(desktop_audio::DesktopAudio::default())
+            .setup(|app| {
+                app.manage(desktop_audio::DesktopAudio::new(app.handle().clone()));
+                Ok(())
+            })
             .invoke_handler(tauri::generate_handler![
                 desktop_audio::desktop_audio_load,
                 desktop_audio::desktop_audio_play,
                 desktop_audio::desktop_audio_pause,
                 desktop_audio::desktop_audio_seek,
+                desktop_audio::desktop_audio_volume,
                 desktop_audio::desktop_audio_stop,
                 desktop_audio::desktop_audio_state,
             ]);
     }
 
-    // Native background audio (foreground MediaSessionService) — mobile only.
-    #[cfg(mobile)]
-    {
-        builder = builder.plugin(tauri_plugin_native_audio::init());
-    }
-
-    // "All files access" (MANAGE_EXTERNAL_STORAGE) bridge — Android only.
     #[cfg(target_os = "android")]
     {
+        // Native background audio (Media3 MediaLibraryService, Android Auto).
+        builder = builder.plugin(tauri_plugin_native_audio::init());
+        // "All files access" (MANAGE_EXTERNAL_STORAGE) bridge.
         builder = builder.plugin(tauri_plugin_all_files::init());
         // Reading reminders: exact-alarm permissions + the tap that launched the app.
         builder = builder.plugin(tauri_plugin_reminders::init());

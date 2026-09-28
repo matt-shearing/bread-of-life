@@ -1,0 +1,98 @@
+name: CI
+
+# The "does it still work" gate for every pull request and every push to main:
+# typecheck, lint, the Node test scripts, and a production web build. The native
+# desktop/Android builds stay in desktop.yml / android.yml (tag-only).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The sync tests read the released v0.4.0 server from its tag (`git show v0.4.0:…`).
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # The test scripts import TypeScript directly, which needs Node 22.18+.
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  rust:
+    name: cargo check (src-tauri)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      # Only worth the ~5 minutes when the Rust side changed. Decided here rather
+      # than with a job-level `if:` or a paths filter so the check always reports
+      # (a skipped required check would block merging). A manual run always checks.
+      - name: Did src-tauri change?
+        id: changed
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || [ -z "$BASE" ] \
+             || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BASE" HEAD -- src-tauri .github/workflows/ci.yml; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No changes under src-tauri/ — skipping cargo check."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: System deps
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          sudo apt-get update
+          # Same set as desktop.yml's Linux build (libasound2-dev is for cpal).
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libappindicator3-dev patchelf file libxdo-dev libssl-dev \
+            libasound2-dev
+
+      - name: Rust
+        if: steps.changed.outputs.run == 'true'
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        if: steps.changed.outputs.run == 'true'
+        with:
+          workspaces: src-tauri
+          key: ci-check
+
+      - name: cargo check
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          # tauri's context macro embeds ../dist, which only needs to exist to check.
+          mkdir -p dist && [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
+          cd src-tauri && cargo check --locked

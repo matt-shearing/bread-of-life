@@ -5,13 +5,10 @@ edition = "2021"
 rust-version = "1.77.2"
 build = "build.rs"
 links = "tauri-plugin-native-audio"
-description = "Native mobile audio playback plugin for Tauri"
+description = "Bread of Life's Android audio (Media3 + Android Auto): a vendored fork of tauri-plugin-native-audio 1.0.5"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/uvarov-frontend/tauri-plugin-native-audio"
-homepage = "https://github.com/uvarov-frontend/tauri-plugin-native-audio"
-documentation = "https://docs.rs/tauri-plugin-native-audio"
-keywords = ["tauri", "plugin", "audio", "media", "mobile"]
-categories = ["multimedia::audio"]
+publish = false
+repository = "https://github.com/matt-shearing/bread-of-life"
 
 [lib]
 name = "tauri_plugin_native_audio"

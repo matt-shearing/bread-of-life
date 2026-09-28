@@ -12,6 +12,7 @@ import {
   type MisslerStatus,
 } from "@/data/missler";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
+import { isAndroid } from "@/lib/platform";
 
 interface Progress {
   done: number;
@@ -30,7 +31,6 @@ interface Progress {
  * downloads the whole library over HTTP into the app's own storage — always
  * readable, no permissions. Serve the built folder from your PC and paste the URL.
  */
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 
 /** Best-effort human-readable string for an unknown thrown value — Tauri invoke
  *  rejections are often plain objects/strings, not Error instances, so String(e)
@@ -56,6 +56,9 @@ export function MisslerSettings() {
   const [path, setPath] = useState("");
   const [status, setStatus] = useState<MisslerStatus | null>(null);
   const [saving, setSaving] = useState(false);
+  // B18: a "couldn't read" error means something only after you've tried a path here;
+  // before that, a fresh install just has no library yet.
+  const [attempted, setAttempted] = useState(false);
 
   const [url, setUrl] = useState("");
   const [includeAudio, setIncludeAudio] = useState(true);
@@ -116,6 +119,7 @@ export function MisslerSettings() {
         dir = typeof picked === "string" ? picked : null;
       }
       if (dir) {
+        setAttempted(true);
         setPath(dir);
         setSaving(true);
         await setMisslerLibraryPath(dir);
@@ -138,6 +142,7 @@ export function MisslerSettings() {
   };
 
   const save = async () => {
+    setAttempted(true);
     setSaving(true);
     await setMisslerLibraryPath(path);
     setStatus(await getMisslerStatus());
@@ -165,8 +170,12 @@ export function MisslerSettings() {
         <CardTitle>Missler Inspired (MI) Library</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <label htmlFor="missler-path" className="block text-sm font-medium">
+          Library folder
+        </label>
         <div className="flex items-center gap-2">
           <Input
+            id="missler-path"
             value={path}
             onChange={(e) => setPath(e.target.value)}
             placeholder={
@@ -200,7 +209,7 @@ export function MisslerSettings() {
               </span>
             ) : (
               <span className="text-muted-foreground">
-                {status.error ?? "No library set yet. Paste the path to your built library folder above."}
+                {(attempted && status.error) || "No library set yet. Paste the path to your built library folder above."}
               </span>
             )}
           </div>
@@ -208,7 +217,7 @@ export function MisslerSettings() {
 
         {isAndroid && allFiles === false && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
-            <TriangleAlert style={{ width: 16, height: 16 }} className="mt-0.5 shrink-0 text-amber-600" />
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-amber-600" />
             <div className="space-y-2">
               <p>
                 To read a library folder from Downloads or shared storage, the app needs "All files access."
@@ -230,8 +239,12 @@ export function MisslerSettings() {
             </p>
           </div>
 
+          <label htmlFor="missler-url" className="sr-only">
+            Library URL
+          </label>
           <div className="flex items-center gap-2">
             <Input
+              id="missler-url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="http://100.x.y.z:8765"
@@ -244,7 +257,7 @@ export function MisslerSettings() {
             </Button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm [@media(pointer:coarse)]:min-h-11">
             <input
               type="checkbox"
               className="h-4 w-4 accent-primary"

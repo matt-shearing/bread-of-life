@@ -1,101 +1,18 @@
-import type { AIConfig, AIProvider } from "@/store/ui";
+import type { AIConfig } from "@/store/ui";
+import { PROVIDERS } from "./providers";
+import { isTauri } from "@/lib/platform";
 
-/** Provider metadata for the settings UI. */
-export const PROVIDERS: Record<
-  AIProvider,
-  {
-    label: string;
-    kind: "anthropic" | "openai";
-    defaultModel: string;
-    defaultBaseUrl?: string;
-    needsKey: boolean;
-    needsBaseUrl: boolean;
-    modelSuggestions: string[];
-    keyHint?: string;
-  }
-> = {
-  anthropic: {
-    label: "Claude (Anthropic)",
-    kind: "anthropic",
-    defaultModel: "claude-opus-4-8",
-    needsKey: true,
-    needsBaseUrl: false,
-    modelSuggestions: ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
-    keyHint: "sk-ant-…",
-  },
-  openai: {
-    label: "OpenAI",
-    kind: "openai",
-    defaultModel: "gpt-5.1",
-    defaultBaseUrl: "https://api.openai.com/v1",
-    needsKey: true,
-    needsBaseUrl: false,
-    modelSuggestions: ["gpt-5.1", "gpt-5-mini", "gpt-5-codex", "o4-mini"],
-    keyHint: "sk-…",
-  },
-  xai: {
-    label: "Grok (xAI)",
-    kind: "openai",
-    defaultModel: "grok-4",
-    defaultBaseUrl: "https://api.x.ai/v1",
-    needsKey: true,
-    needsBaseUrl: false,
-    modelSuggestions: ["grok-4", "grok-4-fast", "grok-3", "grok-3-mini"],
-    keyHint: "xai-…",
-  },
-  google: {
-    label: "Google Gemini",
-    kind: "openai",
-    defaultModel: "gemini-2.5-flash",
-    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    needsKey: true,
-    needsBaseUrl: false,
-    modelSuggestions: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-    keyHint: "AIza…",
-  },
-  deepseek: {
-    label: "DeepSeek",
-    kind: "openai",
-    defaultModel: "deepseek-chat",
-    defaultBaseUrl: "https://api.deepseek.com/v1",
-    needsKey: true,
-    needsBaseUrl: false,
-    modelSuggestions: ["deepseek-chat", "deepseek-reasoner"],
-    keyHint: "sk-…",
-  },
-  ollama: {
-    label: "Ollama (local, open models)",
-    kind: "openai",
-    defaultModel: "llama3.3",
-    defaultBaseUrl: "http://localhost:11434/v1",
-    needsKey: false,
-    needsBaseUrl: true,
-    modelSuggestions: ["llama3.3", "qwen2.5", "mistral-small", "gemma3"],
-  },
-  custom: {
-    label: "Custom (OpenAI-compatible)",
-    kind: "openai",
-    defaultModel: "",
-    needsKey: false,
-    needsBaseUrl: true,
-    modelSuggestions: [],
-    keyHint: "optional",
-  },
-};
+export { PROVIDERS };
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
 
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 /** In the desktop app, route through the Tauri HTTP plugin (no CORS); in a
  *  plain browser, use window.fetch. */
 async function getFetch(): Promise<typeof fetch> {
-  if (isTauri()) {
+  if (isTauri) {
     const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
     return tauriFetch as unknown as typeof fetch;
   }
@@ -127,7 +44,8 @@ export async function streamCompanion(
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true",
     };
-    body = { model: config.model || meta.defaultModel, max_tokens: 2048, system, messages: history, stream: true };
+    // Opus 5 thinks by default and thinking counts against max_tokens, so leave room for the answer.
+    body = { model: config.model || meta.defaultModel, max_tokens: 16000, system, messages: history, stream: true };
   } else {
     const base = (config.baseUrl || meta.defaultBaseUrl || "").replace(/\/$/, "");
     if (!base) throw new Error("No base URL configured for this provider.");

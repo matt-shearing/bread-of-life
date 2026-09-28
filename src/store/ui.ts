@@ -12,6 +12,31 @@ import type { ResolvedTheme, ThemeLocation, ThemeMode } from "@/lib/theme";
  */
 export type ReadingLayout = "lines" | "flowing";
 export type DashboardBg = "plain" | "still" | "animated";
+
+/** A verse to bring into view once its chapter has rendered (see `goTo`). */
+export interface VerseTarget {
+  ho: string;
+  chapter: number;
+  verse: number;
+  /** Briefly highlight the verse on arrival. Off when restoring your own place. */
+  flash: boolean;
+  /** Changes on every request, so asking for the verse already on screen still scrolls. */
+  nonce: number;
+}
+/** Where you are in your OWN reading (the Bible tab), as opposed to a plan or a peek. */
+export interface ReadingPos {
+  ho: string;
+  chapter: number;
+  verse: number;
+  at: number;
+}
+/** The page a followed reference came from, for the "Back to …" chip in the reader. */
+export interface ReturnPoint {
+  path: string;
+  label: string;
+  /** The Bible location before the jump, put back when you return. */
+  prev: { ho: string; chapter: number; verse: number | null };
+}
 // The theme types are defined in @/lib/theme (the store imports the resolver, so
 // they cannot live here without a cycle) and re-exported so `@/store/ui` stays the
 // one place to look for UI-state types, as it already is for AIProvider.
@@ -41,7 +66,28 @@ export interface UIState {
   // current Bible location
   ho: string;
   chapter: number;
-  goTo: (ho: string, chapter: number) => void;
+  /**
+   * Move the reader. With a verse, the reader scrolls it into view once the chapter
+   * has rendered and (unless `flash: false`) highlights it briefly.
+   */
+  goTo: (ho: string, chapter: number, verse?: number | null, opts?: { flash?: boolean }) => void;
+  /** Pending scroll request for the reader; consumed (cleared) once honoured. Not persisted. */
+  target: VerseTarget | null;
+  clearTarget: () => void;
+
+  /** Your own reading position (top visible verse on the Bible tab). Written only by the
+   *  Bible page's reader — never by the guided plan reader or a reference peek. */
+  readingPos: ReadingPos | null;
+  setReadingPos: (p: ReadingPos) => void;
+
+  /** Set when a reference is followed from another page; drives "Back to …". Not persisted. */
+  returnTo: ReturnPoint | null;
+  setReturnTo: (r: ReturnPoint | null) => void;
+
+  /** Last few searches typed on the Search page (device-local). */
+  recentSearches: string[];
+  addRecentSearch: (q: string) => void;
+  clearRecentSearches: () => void;
   // The guided reader can scope the reader to a verse range (Soul Food Classic
   // "part of a psalm"). Only honoured where a portion is explicitly wanted;
   // any plain goTo clears it.
@@ -72,6 +118,13 @@ export interface UIState {
   // left nav (Spotify-style collapse to icons-only on desktop)
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  /**
+   * The same choice for COMPACT layouts (768–1023px, or any touch screen such as the
+   * unfolded Fold), remembered separately so expanding it on the Fold doesn't change
+   * the desktop. null = never chosen → collapsed by default.
+   */
+  sidebarCompactPref: boolean | null;
+  setSidebarCompactPref: (collapsed: boolean) => void;
 
   commentarySource: string;
   setCommentarySource: (id: string) => void;
@@ -130,12 +183,66 @@ export interface UIState {
   setHasOnboarded: (v: boolean) => void;
   syncPromptDismissed: boolean;
   dismissSyncPrompt: () => void;
+  /** The reader's first-run hint ("tap a verse to…") has been dismissed. */
+  readerHintDismissed: boolean;
+  dismissReaderHint: () => void;
+
+  // Backups (src/lib/backup.ts). PER DEVICE on purpose: a backup made on the desktop
+  // does nothing for the phone, so each device remembers its own. The monthly nudge
+  // shows only when there is no sync account.
+  lastBackupAt: number | null;
+  setLastBackupAt: (ts: number) => void;
+  backupReminder: boolean;
+  setBackupReminder: (v: boolean) => void;
+  backupNudgeSnoozedAt: number | null;
+  snoozeBackupNudge: () => void;
+
+  /**
+   * Your own keys for licensed Bible APIs (ESV, API.Bible), and the API.Bible texts
+   * you chose to show. Per device, like the AI key; with `keySync` on, the keys (not the
+   * list) are also shared with the user's other devices, end-to-end encrypted only
+   * (src/store/keySync.ts). See
+   * src/store/syncedPrefs.ts for what does travel.
+   */
+  bibleKeys: BibleKeys;
+  setBibleKey: (provider: keyof BibleKeys, key: string) => void;
+  apiBibleBibles: ApiBibleChoice[];
+  setApiBibleBibles: (list: ApiBibleChoice[]) => void;
+  /**
+   * "Sync my keys to my other devices", per device and off until the user turns it on.
+   * The keys then travel only end-to-end encrypted (src/store/keySync.ts).
+   */
+  keySync: boolean;
+  setKeySync: (on: boolean) => void;
+  /**
+   * Per key, the value this device and the synced copy last agreed on, and where it came
+   * from ("other": adopted from another device). Lets key sync tell a key replaced or
+   * removed elsewhere from one the user set here. Written only by src/store/keySync.ts.
+   */
+  keySyncAgreed: Partial<Record<keyof BibleKeys, { value: string; from: "here" | "other" }>>;
+  /** Where each provider's guided key setup was left (per device; sign-up approval can take days). */
+  keySetupStep: Partial<Record<keyof BibleKeys, number>>;
+  setKeySetupStep: (provider: keyof BibleKeys, step: number | null) => void;
 
   // AI study companion
   ai: AIConfig;
   setAI: (patch: Partial<AIConfig>) => void;
   companionSeed: string | null; // a question to auto-send when the companion opens
   setCompanionSeed: (q: string | null) => void;
+}
+
+export interface BibleKeys {
+  esv: string;
+  nlt: string;
+  apiBible: string;
+}
+/** A text on API.Bible that your key can read and you added to the picker. */
+export interface ApiBibleChoice {
+  id: string; // API.Bible bible id
+  abbreviation: string;
+  name: string;
+  /** The copyright statement API.Bible returned with it. */
+  copyright?: string;
 }
 
 export type AIProvider = "anthropic" | "openai" | "xai" | "google" | "deepseek" | "ollama" | "custom";
@@ -189,7 +296,31 @@ export const useUI = create<UIState>()(
       ho: "JHN",
       chapter: 1,
       portion: null,
-      goTo: (ho, chapter) => set({ ho, chapter, portion: null }),
+      goTo: (ho, chapter, verse, opts) =>
+        set({
+          ho,
+          chapter,
+          portion: null,
+          target:
+            verse != null && verse > 0
+              ? { ho, chapter, verse, flash: opts?.flash ?? true, nonce: Date.now() + Math.random() }
+              : null,
+        }),
+      target: null,
+      clearTarget: () => set((s) => (s.target ? { target: null } : s)),
+      readingPos: null,
+      setReadingPos: (p) => set({ readingPos: p }),
+      returnTo: null,
+      setReturnTo: (r) => set({ returnTo: r }),
+      recentSearches: [],
+      addRecentSearch: (q) =>
+        set((s) => {
+          const t = q.trim();
+          if (t.length < 2) return s;
+          const rest = s.recentSearches.filter((x) => x.toLowerCase() !== t.toLowerCase());
+          return { recentSearches: [t, ...rest].slice(0, 8) };
+        }),
+      clearRecentSearches: () => set({ recentSearches: [] }),
       goToPortion: (ho, chapter, start, end) =>
         set({ ho, chapter, portion: { ho, chapter, start, end } }),
 
@@ -219,6 +350,8 @@ export const useUI = create<UIState>()(
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      sidebarCompactPref: null,
+      setSidebarCompactPref: (collapsed) => set({ sidebarCompactPref: collapsed }),
 
       commentarySource: "matthew-henry",
       setCommentarySource: (id) => set({ commentarySource: id }),
@@ -277,8 +410,33 @@ export const useUI = create<UIState>()(
       setHasOnboarded: (v) => set({ hasOnboarded: v }),
       syncPromptDismissed: false,
       dismissSyncPrompt: () => set({ syncPromptDismissed: true }),
+      readerHintDismissed: false,
+      dismissReaderHint: () => set({ readerHintDismissed: true }),
 
-      ai: { provider: "anthropic", model: "claude-opus-4-8", apiKey: "", baseUrl: "" },
+      lastBackupAt: null,
+      setLastBackupAt: (ts) => set({ lastBackupAt: ts }),
+      backupReminder: true,
+      setBackupReminder: (v) => set({ backupReminder: v }),
+      backupNudgeSnoozedAt: null,
+      snoozeBackupNudge: () => set({ backupNudgeSnoozedAt: Date.now() }),
+
+      bibleKeys: { esv: "", nlt: "", apiBible: "" },
+      setBibleKey: (provider, key) => set((s) => ({ bibleKeys: { ...s.bibleKeys, [provider]: key.trim() } })),
+      apiBibleBibles: [],
+      setApiBibleBibles: (list) => set({ apiBibleBibles: list }),
+      keySync: false,
+      setKeySync: (on) => set({ keySync: on }),
+      keySyncAgreed: {},
+      keySetupStep: {},
+      setKeySetupStep: (provider, step) =>
+        set((s) => {
+          const next = { ...s.keySetupStep };
+          if (step === null) delete next[provider];
+          else next[provider] = step;
+          return { keySetupStep: next };
+        }),
+
+      ai: { provider: "anthropic", model: "claude-opus-5", apiKey: "", baseUrl: "" },
       setAI: (patch) => set((s) => ({ ai: { ...s.ai, ...patch } })),
       companionSeed: null,
       setCompanionSeed: (q) => set({ companionSeed: q }),
@@ -290,6 +448,12 @@ export const useUI = create<UIState>()(
        * reading reminder time the user chose (`migrateReminderPrefs`).
        */
       version: 1,
+      // Transient navigation state: a pending scroll or a "Back to …" chip must not
+      // survive a restart.
+      partialize: (s) => {
+        const { target: _t, returnTo: _r, ...rest } = s;
+        return rest as UIState;
+      },
       migrate: (persisted, version) =>
         migrateReminderPrefs(persisted as Record<string, unknown>, version) as unknown as UIState,
       /**
@@ -305,6 +469,7 @@ export const useUI = create<UIState>()(
        */
       merge: (persisted, current) => {
         const next = { ...current, ...(persisted as Partial<UIState> | undefined) };
+        next.bibleKeys = { ...current.bibleKeys, ...next.bibleKeys };
         next.theme = normalizeThemeMode(next.theme);
         next.resolvedTheme = resolveTheme(next.theme, next.themeLocation);
         return next;

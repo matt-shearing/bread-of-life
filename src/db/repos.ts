@@ -6,7 +6,9 @@ import {
   type MemoryCard,
   type Prayer,
   type PrayerCategory,
+  type ReadingSource,
 } from "./index";
+import { logChapterRead, logPlanReadings } from "./readingLog";
 import { refLabel, toBbcccvvv, toOsis } from "@/lib/osis";
 import { localDayKey } from "@/lib/day";
 
@@ -85,10 +87,17 @@ export function isDueToday(p: { status: string; remind?: boolean; lastPrayedAt: 
   return localDayKey(p.lastPrayedAt) !== localDayKey();
 }
 
-export async function prayedFor(id: string) {
+/**
+ * Count one more prayer. Returns the values it replaced so the caller can offer
+ * Undo (`updatePrayer(id, previous)`), or null if the prayer is gone.
+ */
+export async function prayedFor(
+  id: string,
+): Promise<{ prayedCount: number; lastPrayedAt: number | null } | null> {
   const p = await db.prayers.get(id);
-  if (!p) return;
+  if (!p) return null;
   await db.prayers.update(id, { prayedCount: p.prayedCount + 1, lastPrayedAt: Date.now() });
+  return { prayedCount: p.prayedCount, lastPrayedAt: p.lastPrayedAt };
 }
 
 export async function markAnswered(id: string, answerNote: string) {
@@ -120,6 +129,25 @@ export async function deletePrayer(id: string) {
 
 export async function updatePrayer(id: string, patch: Partial<Prayer>) {
   await db.prayers.update(id, patch);
+}
+
+/**
+ * Undo for `deletePrayer`: put the row back as it was and re-link the journal
+ * entries that still exist. Pass the prayer exactly as read before the delete.
+ */
+export async function restorePrayer(snapshot: Prayer) {
+  const journalIds: string[] = [];
+  for (const jid of snapshot.linkedJournalIds ?? []) {
+    const j = await db.journal.get(jid);
+    if (!j) continue;
+    journalIds.push(jid);
+    const ids = new Set(j.linkedPrayerIds ?? []);
+    if (!ids.has(snapshot.id)) {
+      ids.add(snapshot.id);
+      await db.journal.update(jid, { linkedPrayerIds: [...ids] });
+    }
+  }
+  await db.prayers.put({ ...snapshot, linkedJournalIds: journalIds });
 }
 
 /* ---------------------------- custom prayer categories ------------------------- */
@@ -195,6 +223,25 @@ export async function deleteJournalEntry(id: string) {
   }
 }
 
+/**
+ * Undo for `deleteJournalEntry`: put the entry back and re-link the prayers that
+ * still exist. Pass the entry exactly as read before the delete.
+ */
+export async function restoreJournalEntry(snapshot: JournalEntry) {
+  const prayerIds: string[] = [];
+  for (const pid of snapshot.linkedPrayerIds ?? []) {
+    const p = await db.prayers.get(pid);
+    if (!p) continue;
+    prayerIds.push(pid);
+    const ids = new Set(p.linkedJournalIds ?? []);
+    if (!ids.has(snapshot.id)) {
+      ids.add(snapshot.id);
+      await db.prayers.update(pid, { linkedJournalIds: [...ids] });
+    }
+  }
+  await db.journal.put({ ...snapshot, linkedPrayerIds: prayerIds });
+}
+
 /* --------------------------- journal ↔ prayer links ---------------------------- */
 
 /** Cross-reference a journal entry and a prayer, keeping both sides in sync. */
@@ -227,14 +274,27 @@ export async function unlinkJournalPrayer(journalId: string, prayerId: string) {
 
 /* ---------------------------------- progress ----------------------------------- */
 
-export async function recordProgress(ho: string, chapter: number, lastVerse = 1) {
+/**
+ * A chapter was read: `progress` keeps where you are (the latest time per chapter), and
+ * the reading log keeps the day (src/db/readingLog.ts).
+ */
+export async function recordProgress(ho: string, chapter: number, lastVerse = 1, source: ReadingSource = "reader") {
+  const at = Date.now();
   await db.progress.put({
     chapterOsis: toOsis(ho, chapter),
     ho,
     chapter,
     lastVerse,
-    at: Date.now(),
+    at,
   });
+  await logChapterRead(ho, chapter, source, at);
+}
+
+/** How a plan reading was completed, for the reading log: ticked by hand, or heard (and when). */
+export interface ReadOptions {
+  source?: ReadingSource;
+  /** When it was read, if not now (a completion Android collected while the app was away). */
+  at?: number;
 }
 
 /* ------------------------------- reading plans -------------------------------- */
@@ -261,13 +321,25 @@ function stampCompletion(
   return next;
 }
 
-export async function setDayDone(planId: string, day: number, done: boolean) {
+/** `dayAt` with `day` stamped now (after any earlier stamp): see PlanProgress.dayAt. */
+function stampDay(prev: Record<number, number> | undefined, day: number): Record<number, number> {
+  return { ...(prev ?? {}), [day]: Math.max(Date.now(), (prev?.[day] ?? 0) + 1) };
+}
+
+export async function setDayDone(planId: string, day: number, done: boolean, read: ReadOptions = {}) {
   // Transactional for the same reason as setChapterDone below: this races the
   // narration's own mark-read writes.
   await db.transaction("rw", db.plans, async () => {
     const p = await db.plans.get(planId);
     if (!p) {
-      if (done) await db.plans.add({ planId, startedAt: Date.now(), completedDays: [day], completedAt: { [day]: Date.now() } });
+      if (done)
+        await db.plans.add({
+          planId,
+          startedAt: Date.now(),
+          completedDays: [day],
+          completedAt: { [day]: Date.now() },
+          dayAt: stampDay(undefined, day),
+        });
       return;
     }
     const set = new Set(p.completedDays);
@@ -276,8 +348,11 @@ export async function setDayDone(planId: string, day: number, done: boolean) {
     await db.plans.update(planId, {
       completedDays: [...set].sort((a, b) => a - b),
       completedAt: stampCompletion(p.completedAt, p.completedDays, day, done),
+      dayAt: stampDay(p.dayAt, day),
     });
   });
+  // Marking a day done says its chapters were read today.
+  if (done) await logPlanReadings(planId, day, undefined, read.source ?? "plan", read.at);
 }
 
 /**
@@ -292,6 +367,7 @@ export async function setChapterDone(
   chapterIndex: number,
   done: boolean,
   totalChapters: number,
+  read: ReadOptions = {},
 ) {
   // Read-modify-write INSIDE a transaction. Narration marks readings done as the
   // queue advances while the reader may be ticking one by hand at the same moment;
@@ -322,10 +398,13 @@ export async function setChapterDone(
       completedDays: [...days].sort((a, b) => a - b),
       chapterProgress,
       completedAt: stampCompletion(base.completedAt, base.completedDays, day, days.has(day)),
+      dayAt: stampDay(base.dayAt, day),
     };
     if (existing) await db.plans.update(planId, next);
     else await db.plans.add(next);
   });
+  // After the transaction: resolving a built-in plan fetches, which would end it early.
+  if (done) await logPlanReadings(planId, day, [chapterIndex], read.source ?? "plan", read.at);
 }
 
 export async function resetPlan(planId: string) {

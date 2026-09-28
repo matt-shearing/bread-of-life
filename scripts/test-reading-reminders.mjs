@@ -493,3 +493,39 @@ test(`[${TZ}] daily reminder ids: unique, inside a Java int, clear of reading id
   assert.equal(deepLinkFor({ id: daily.dailyReminderId("memory", "2026-09-25") }), "/memory");
   assert.equal(deepLinkFor({ id: daily.dailyReminderId("prayers", "2026-09-25") }), "/prayers");
 });
+
+/* ------------------------- day keys and devotion completion keys ------------------------- */
+
+const day = await import("../src/lib/day.ts");
+const devotion = await import("../src/lib/devotionDone.ts");
+
+test(`[${TZ}] yesterdayKey is the previous calendar day, across daylight-saving changes too`, () => {
+  // New York: clocks go forward on 8 March 2026 and back on 1 November 2026.
+  assert.equal(day.yesterdayKey(at(2026, 3, 9, 0, 30)), "2026-03-08");
+  assert.equal(day.yesterdayKey(at(2026, 3, 8, 23, 30)), "2026-03-07");
+  assert.equal(day.yesterdayKey(at(2026, 11, 2, 0, 30)), "2026-11-01");
+  assert.equal(day.yesterdayKey(at(2026, 11, 1, 23, 30)), "2026-10-31");
+  assert.equal(day.yesterdayKey(at(2026, 1, 1, 8)), "2025-12-31");
+});
+
+test(`[${TZ}] the verse of the day changes at local midnight, not at UTC midnight`, () => {
+  const n = day.localDayNumber(at(2026, 9, 27, 0, 5));
+  for (const h of [1, 7, 8, 9, 12, 23]) assert.equal(day.localDayNumber(at(2026, 9, 27, h, 59)), n, `${h}:59`);
+  assert.equal(day.localDayNumber(at(2026, 9, 28, 0, 1)), n + 1);
+});
+
+test(`[${TZ}] devotion completion keys carry the year of the reading`, () => {
+  assert.equal(devotion.devotionDoneId("spurgeon-morning-evening", "09-27", 0, at(2026, 9, 27, 7)), "spurgeon-morning-evening:2026-09-27:0");
+  // Finished just after midnight on New Year's Day: still last year's 31 December.
+  assert.equal(devotion.devotionYear("12-31", at(2027, 1, 1, 0, 20)), 2026);
+  // Tomorrow's reading opened early (a time-zone edge) belongs to this year.
+  assert.equal(devotion.devotionYear("09-28", at(2026, 9, 27, 23)), 2026);
+  // Catching up on an earlier day: the most recent one.
+  assert.equal(devotion.devotionYear("10-15", at(2026, 9, 27, 12)), 2025);
+  // 29 February only exists in leap years.
+  assert.equal(devotion.devotionYear("02-29", at(2026, 9, 27, 12)), 2024);
+  // Keys written before v0.5 convert using their completion time.
+  assert.equal(devotion.normaliseDevotionId("faiths-checkbook:03-01:0", at(2026, 3, 1, 9)), "faiths-checkbook:2026-03-01:0");
+  assert.equal(devotion.normaliseDevotionId("03-01:e", at(2026, 3, 1, 21)), "spurgeon-morning-evening:2026-03-01:1");
+  assert.equal(devotion.normaliseDevotionId("faiths-checkbook:2026-03-01:0", at(2026, 3, 1, 9)), null);
+});

@@ -1,10 +1,12 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Brain, Check, Copy, NotebookPen, HandHeart, Sparkles, StickyNote, TextSelect, X } from "lucide-react";
 import { db, type HighlightColor } from "@/db";
 import { setHighlight, clearHighlight, saveNote, recordProgress, addMemoryVerse } from "@/db/repos";
-import { getChapterFor, translationById, type Chapter } from "@/data/bible";
+import { bookVerseCount, loadChapterFor, translationById, type Chapter, type ChapterFailure, type Translation } from "@/data/bible";
+import { reportShown } from "@/data/licensed";
 import { refLabel, refRange, bookByHo } from "@/lib/osis";
 import {
   citation,
@@ -15,7 +17,9 @@ import {
   type VerseSelection,
 } from "@/lib/quote";
 import { useUI } from "@/store/ui";
+import { TRANSLATION_SETTINGS } from "./TranslationPicker";
 import { useChapterNav } from "@/lib/useChapterNav";
+import { useCoarsePointer } from "@/lib/layout";
 import {
   Button,
   Dialog,
@@ -73,19 +77,35 @@ interface VerseRange {
  * `scopeToPortion` (guided reader only) honours a store `portion` verse range:
  * the day's verses stay bright and are scrolled into view, the rest of the
  * chapter is dimmed for context. The Bible page leaves it off.
+ *
+ * `trackPosition` (default true) makes this reader the keeper of YOUR reading
+ * position: the top visible verse is saved as you scroll, and restored when you come
+ * back. The guided plan reader passes `false`, so reading a plan never moves
+ * "Continue reading" (it still counts towards the streak).
+ *
+ * `footerSpace` leaves room under the last verse for a floating button bar.
  */
 export function Reader({
   swipeToChapter = true,
   scopeToPortion = false,
+  trackPosition = true,
+  footerSpace = false,
   onListen,
 }: {
   swipeToChapter?: boolean;
   scopeToPortion?: boolean;
+  trackPosition?: boolean;
+  footerSpace?: boolean;
   /** Override what the chapter audio button queues — see AudioPlayer's `onStart`. */
   onListen?: (label: string) => void;
 } = {}) {
   const { ho, chapter, translation, parallel, fontScale, readingLayout, selectVerse, setCompanionSeed, railOpen, setRailOpen, portion } =
     useUI();
+  const target = useUI((s) => s.target);
+  const peeking = useUI((s) => s.returnTo != null);
+  // On touch screens the verse actions open as a bottom sheet with labelled buttons
+  // (tooltips never show on touch, and the popover covered the verses above).
+  const sheetMode = useCoarsePointer();
   const active =
     scopeToPortion && portion && portion.ho === ho && portion.chapter === chapter ? portion : null;
   const activeKey = active ? `${active.ho}.${active.chapter}.${active.start}.${active.end}` : "";
@@ -94,11 +114,30 @@ export function Reader({
   const misslerAudio = useMisslerAudio(ho, chapter);
   const [ch, setCh] = useState<Chapter | null>(null);
   const [ch2, setCh2] = useState<Chapter | null>(null);
+  const [failure, setFailure] = useState<ChapterFailure | undefined>();
+  const [failure2, setFailure2] = useState<ChapterFailure | undefined>();
   const [loading, setLoading] = useState(true);
   const [capture, setCapture] = useState<{ mode: "journal" | "prayer"; verse: number; text: string } | null>(null);
   const [noteVerse, setNoteVerse] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const translationShort = translationById(translation)?.short ?? translation;
+  // Keyboard: one verse is in the Tab order at a time (roving tabindex); the arrow
+  // keys move between verses. Enter/Space opens that verse's actions.
+  const [focusN, setFocusN] = useState<number | null>(null);
+  // A verse just jumped to, briefly highlighted so the eye finds it.
+  const [flashN, setFlashN] = useState<number | null>(null);
+  // Touch: the verse whose action sheet is open.
+  const [sheet, setSheet] = useState<{ n: number; fragment: { n: number; text: string }[] | null } | null>(null);
+  // Parallel view stacks the second translation under each verse when the column is narrow.
+  const [narrow, setNarrow] = useState(false);
+
+  // Re-read the translation when a key or the API.Bible list changes.
+  const bibleKeys = useUI((s) => s.bibleKeys);
+  const apiBibles = useUI((s) => s.apiBibleBibles);
+  const tMain = translationById(translation);
+  const tPar = translationById(parallel);
+  const translationShort = tMain?.short ?? translation;
+  const copyNotice = tMain?.copyNotice;
 
   /* ------------------------------ grabbing verses ----------------------------- */
 
@@ -125,6 +164,8 @@ export function Reader({
     setRange(null);
     setPickFrom(null);
     setSelection(null);
+    setSheet(null);
+    setFocusN(null);
     anchor.current = null;
   }, [ho, chapter]);
 
@@ -202,20 +243,66 @@ export function Reader({
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    getChapterFor(translation, ho, chapter).then((c) => {
+    loadChapterFor(translation, ho, chapter).then(({ chapter: c, failure: why, fumsToken }) => {
       if (!alive) return;
       setCh(c);
+      setFailure(why);
+      void reportShown(fumsToken); // API.Bible's FUMS: every display is counted
       setLoading(false);
-      recordProgress(ho, chapter, 1);
-      document.getElementById("reader-scroll")?.scrollTo({ top: 0 });
+      const st = useUI.getState();
+      const jump = st.target && st.target.ho === ho && st.target.chapter === chapter ? st.target : null;
+      let startVerse = jump?.verse ?? 1;
+      if (!trackPosition) {
+        // A plan reading counts for the streak but is not "your place": lastVerse 0
+        // marks the row so Continue reading skips it.
+        void recordProgress(ho, chapter, 0).catch(() => {});
+        return;
+      }
+      if (st.returnTo) return; // a peek at a reference — your place stays where it was
+      const own = st.readingPos;
+      if (!jump && own && own.ho === ho && own.chapter === chapter && own.verse > 1) {
+        // Coming back to the chapter you were reading: pick up at the same verse.
+        startVerse = own.verse;
+        useUI.setState({ target: { ho, chapter, verse: own.verse, flash: false, nonce: Date.now() } });
+      }
+      st.setReadingPos({ ho, chapter, verse: startVerse, at: Date.now() });
+      void recordProgress(ho, chapter, startVerse).catch(() => {});
     });
     return () => {
       alive = false;
     };
-  }, [translation, ho, chapter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translation, ho, chapter, bibleKeys, apiBibles]);
+
+  // Land on a requested verse once its chapter has rendered: scroll it into view,
+  // flash it, and give it keyboard focus. The request is then cleared.
+  useEffect(() => {
+    if (loading || !ch || !target || target.ho !== ho || target.chapter !== chapter) return;
+    const { verse, flash } = target;
+    const raf = window.requestAnimationFrame(() => {
+      const el = document.getElementById(`rv-${verse}`);
+      if (el) {
+        el.scrollIntoView({ block: flash ? "center" : "start" });
+        setFocusN(verse);
+        if (flash) {
+          setFlashN(verse);
+          el.focus({ preventScroll: true });
+        }
+      }
+      useUI.getState().clearTarget();
+    });
+    return () => window.cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.nonce, loading, ch, ho, chapter]);
+
+  useEffect(() => {
+    if (flashN == null) return;
+    const t = window.setTimeout(() => setFlashN(null), 2400);
+    return () => window.clearTimeout(t);
+  }, [flashN]);
 
   // When scoped to a verse portion, bring the day's verses into view once the
-  // chapter has rendered (the load effect above resets scroll to the top first).
+  // chapter has rendered.
   useEffect(() => {
     if (!active || loading) return;
     const t = window.setTimeout(() => {
@@ -225,17 +312,115 @@ export function Reader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey, loading]);
 
+  /* ---------------------------- your reading position --------------------------- */
+
+  // Save the top visible verse as you read (settled, not on every scroll frame).
+  const savePosition = useCallback(() => {
+    const el = scrollRef.current;
+    const st = useUI.getState();
+    if (!el || !trackPosition || st.returnTo) return;
+    const n = topVisibleVerse(el);
+    if (n == null) return;
+    const cur = st.readingPos;
+    if (cur && cur.ho === ho && cur.chapter === chapter && cur.verse === n) return;
+    st.setReadingPos({ ho, chapter, verse: n, at: Date.now() });
+    void recordProgress(ho, chapter, n).catch(() => {});
+  }, [trackPosition, ho, chapter]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!trackPosition || loading || !el) return;
+    let timer = 0;
+    const onScroll = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(savePosition, 900);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [trackPosition, loading, savePosition]);
+
+  // "Stay here" on the Back chip: this becomes your place.
+  const wasPeeking = useRef(peeking);
+  useEffect(() => {
+    if (wasPeeking.current && !peeking && !loading) savePosition();
+    wasPeeking.current = peeking;
+  }, [peeking, loading, savePosition]);
+
+  // Parallel columns get cramped beside the study rail on the Fold; stack them there.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !parallel) return;
+    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 560));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [parallel, loading]);
+
   useEffect(() => {
     if (!parallel) {
       setCh2(null);
+      setFailure2(undefined);
       return;
     }
     let alive = true;
-    getChapterFor(parallel, ho, chapter).then((c) => alive && setCh2(c));
+    loadChapterFor(parallel, ho, chapter).then(({ chapter: c, failure: why, fumsToken }) => {
+      if (!alive) return;
+      setCh2(c);
+      setFailure2(why);
+      void reportShown(fumsToken);
+    });
     return () => {
       alive = false;
     };
-  }, [parallel, ho, chapter]);
+  }, [parallel, ho, chapter, bibleKeys, apiBibles]);
+
+  // Some licences cap how much of one book may be on screen (the ESV: half). A chapter
+  // that is more than that — only ever in a one- or two-chapter book — is shown a
+  // part at a time, with a button to the other part.
+  const pageShare = Math.min(tMain?.maxBookShareOnPage ?? 1, parallel ? (tPar?.maxBookShareOnPage ?? 1) : 1);
+  const [bookVerses, setBookVerses] = useState<number | undefined>();
+  useEffect(() => {
+    let alive = true;
+    if (pageShare >= 1) return setBookVerses(undefined);
+    bookVerseCount(ho).then((n) => alive && setBookVerses(n));
+    return () => {
+      alive = false;
+    };
+  }, [ho, pageShare]);
+  const [part, setPart] = useState(0);
+  useEffect(() => setPart(0), [ho, chapter, translation, parallel]);
+  const pages = useMemo(() => {
+    if (!ch || pageShare >= 1 || !bookVerses) return null;
+    const nums = ch.items.filter((i) => i.t === "v").map((i) => (i as { n: number }).n);
+    const limit = Math.max(1, Math.floor(bookVerses * pageShare));
+    if (nums.length <= limit) return null;
+    // As few parts as the limit allows, evenly sized (Jude: 1–9, 10–18, 19–25).
+    const size = Math.ceil(nums.length / Math.ceil(nums.length / limit));
+    const out: { start: number; end: number }[] = [];
+    for (let i = 0; i < nums.length; i += size) out.push({ start: nums[i], end: nums[Math.min(nums.length, i + size) - 1] });
+    return out;
+  }, [ch, pageShare, bookVerses]);
+  const window_ = pages ? pages[Math.min(part, pages.length - 1)] : null;
+  const shown = useMemo(() => {
+    if (!ch || !window_) return ch?.items ?? [];
+    // Keep a heading only when the verse after it is on this page.
+    const out: typeof ch.items = [];
+    let pending: (typeof ch.items)[number] | null = null;
+    for (const it of ch.items) {
+      if (it.t === "h") {
+        pending = it;
+        continue;
+      }
+      if (it.n >= window_.start && it.n <= window_.end) {
+        if (pending) out.push(pending);
+        out.push(it);
+      }
+      pending = null;
+    }
+    return out;
+  }, [ch, window_]);
 
   const secMap = useMemo(() => {
     const m = new Map<number, string>();
@@ -247,9 +432,10 @@ export function Reader({
   // takes the whole of every verse it covers, not whatever happens to be on screen).
   const textByVerse = useMemo(() => {
     const m = new Map<number, string>();
-    if (ch) for (const it of ch.items) if (it.t === "v") m.set(it.n, it.text);
+    for (const it of shown) if (it.t === "v") m.set(it.n, it.text);
     return m;
-  }, [ch]);
+  }, [shown]);
+  const verseNums = useMemo(() => [...textByVerse.keys()], [textByVerse]);
 
   // Stable merged audio set (BSB narrators + Missler) — a fresh object literal each
   // render would retrigger AudioPlayer's chapter-reset effect and stall playback.
@@ -314,6 +500,25 @@ export function Reader({
     return false;
   }
 
+  /** Arrow keys / Home / End between verses (roving focus). */
+  function moveFocus(from: number, key: string) {
+    const i = verseNums.indexOf(from);
+    if (i < 0) return;
+    const j =
+      key === "ArrowDown"
+        ? Math.min(verseNums.length - 1, i + 1)
+        : key === "ArrowUp"
+          ? Math.max(0, i - 1)
+          : key === "Home"
+            ? 0
+            : verseNums.length - 1;
+    const m = verseNums[j];
+    setFocusN(m);
+    const el = document.getElementById(`rv-${m}`);
+    el?.focus({ preventScroll: true });
+    el?.scrollIntoView({ block: "nearest" });
+  }
+
   /** The verses the tray would copy, or null when there is nothing grabbed. */
   const grabbed = useMemo((): { n: number; text: string }[] | null => {
     if (selection) return selection.verses;
@@ -328,24 +533,50 @@ export function Reader({
 
   function copyGrabbed() {
     if (!grabbed) return;
-    void navigator.clipboard?.writeText(citation(ho, chapter, grabbed, translationShort));
+    void navigator.clipboard?.writeText(citation(ho, chapter, grabbed, translationShort, copyNotice));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
+  }
+
+  /** Everything a verse's actions (popover or sheet) can do, for verse `n`. */
+  function handlersFor(n: number, text: string) {
+    return {
+      onPickRange: () => {
+        setSelection(null);
+        clearLiveSelection();
+        setRange(null);
+        setPickFrom(n);
+      },
+      onNote: () => setNoteVerse(n),
+      onMemorise: () => addMemoryVerse({ ho, chapter, verse: n, text, translation }),
+      onCapture: (mode: "journal" | "prayer") => setCapture({ mode, verse: n, text }),
+      onAsk: () => {
+        setCompanionSeed(`Help me understand ${refLabel(ho, chapter, n)}: “${text}”`);
+        navigate("/companion");
+      },
+    };
   }
 
   if (loading) return <div className="p-10 text-muted-foreground">Loading…</div>;
   if (!ch)
     return (
-      <div className="p-10 text-muted-foreground">
-        {translation === "BSB"
-          ? "Chapter not found."
-          : `Couldn't load ${translationById(translation)?.name ?? translation} here — you may be offline. It caches after the first online view; BSB always works offline.`}
+      <div className="space-y-3 p-10 text-muted-foreground">
+        <p>{failureMessage(translation, tMain, failure)}</p>
+        {needsSettings(failure) && (
+          <Button variant="outline" size="sm" onClick={() => navigate(TRANSLATION_SETTINGS)}>
+            Open Bible translation settings
+          </Button>
+        )}
       </div>
     );
+
+  const tabStop = focusN ?? verseNums[0];
+  const sheetText = sheet ? textByVerse.get(sheet.n) : undefined;
 
   return (
     <div
       id="reader-scroll"
+      ref={scrollRef}
       className="h-full overflow-y-auto"
       style={{ fontSize: `${fontScale}rem` }}
       onTouchStart={onTouchStart}
@@ -381,7 +612,7 @@ export function Reader({
         onDismiss={clearGrab}
       />
 
-      <article className={cn("mx-auto px-4 py-6 md:px-8 md:py-8", parallel ? "max-w-4xl" : "max-w-2xl")}>
+      <article className={cn("mx-auto px-4 py-6 md:px-8 md:py-8", parallel && !narrow ? "max-w-4xl" : "max-w-2xl")}>
         <div className="mb-6 flex items-center justify-between gap-3">
           <h2 className="font-serif text-3xl font-bold">{refLabel(ho, chapter)}</h2>
           <AudioPlayer audio={audio} onStart={onListen} />
@@ -392,13 +623,26 @@ export function Reader({
             <span className="text-muted-foreground"> · the rest of the chapter is dimmed for context</span>
           </div>
         )}
-        {parallel && (
+        {parallel && !narrow && (
           <div className="mb-3 grid grid-cols-2 gap-6 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <div>{translationById(translation)?.short ?? translation}</div>
-            <div>{translationById(parallel)?.short ?? parallel}</div>
+            <div>{translationShort}</div>
+            <div>
+              {tPar?.short ?? parallel}
+              {!ch2 && failure2 && (
+                <span className="ml-2 font-normal normal-case tracking-normal">— {failureMessage(parallel, tPar, failure2)}</span>
+              )}
+            </div>
           </div>
         )}
-        {ch.items.map((item, i) => {
+        {parallel && narrow && !ch2 && failure2 && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            {tPar?.short ?? parallel}: {failureMessage(parallel, tPar, failure2)}
+          </p>
+        )}
+        {pages && window_ && (
+          <PagePart pages={pages} part={Math.min(part, pages.length - 1)} onPart={setPart} />
+        )}
+        {shown.map((item, i) => {
           if (item.t === "h") {
             return (
               <h3 key={i} className="mb-2 mt-6 font-serif text-lg font-bold text-primary-700 dark:text-primary-300">
@@ -421,31 +665,37 @@ export function Reader({
               memorised={memByVerse.has(item.n)}
               inRange={!!range && item.n >= range.start && item.n <= range.end}
               isRangeAnchor={pickFrom === item.n}
+              tabbable={item.n === tabStop}
+              flash={flashN === item.n}
+              sheetMode={sheetMode}
+              sheetOpen={sheet?.n === item.n}
+              onOpenSheet={(fragment) => setSheet({ n: item.n, fragment })}
+              onFocusVerse={() => setFocusN(item.n)}
+              onArrow={(key) => moveFocus(item.n, key)}
               onTap={(shift) => claimVerseTap(item.n, shift)}
               onSelect={() => selectVerse(item.n)}
-              onPickRange={() => {
-                setSelection(null);
-                clearLiveSelection();
-                setRange(null);
-                setPickFrom(item.n);
-              }}
-              onNote={() => setNoteVerse(item.n)}
-              onMemorise={() =>
-                addMemoryVerse({ ho, chapter, verse: item.n, text: item.text, translation })
-              }
-              onCapture={(mode) => setCapture({ mode, verse: item.n, text: item.text })}
-              onAsk={() => {
-                setCompanionSeed(`Help me understand ${refLabel(ho, chapter, item.n)}: “${item.text}”`);
-                navigate("/companion");
-              }}
+              {...handlersFor(item.n, item.text)}
             />
           );
+          if (parallel && narrow) {
+            return (
+              <div key={i} className="mb-3">
+                <div className="leading-relaxed">{verse}</div>
+                <div className="mt-1 border-l-2 border-border pl-3 font-serif text-[0.9em] leading-relaxed text-muted-foreground">
+                  <span className="mr-1 font-sans text-[0.7em] font-semibold uppercase tracking-wide">
+                    {tPar?.short ?? parallel}
+                  </span>
+                  {secMap.get(item.n) ?? "…"}
+                </div>
+              </div>
+            );
+          }
           if (parallel) {
             return (
               <div key={i} className="mb-3 grid grid-cols-2 gap-6">
                 <div>{verse}</div>
                 <div className="font-serif leading-relaxed text-foreground/90">
-                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-600">
+                  <sup className="mr-0.5 align-super text-[0.62em] font-sans font-semibold text-primary-700 dark:text-primary-400">
                     {item.n}
                   </sup>
                   {secMap.get(item.n) ?? "…"}
@@ -461,10 +711,39 @@ export function Reader({
             <Fragment key={i}>{verse} </Fragment>
           );
         })}
-        <p className="mt-10 text-center text-xs text-muted-foreground">
-          {translationById(translation)?.name ?? translation} · Public Domain
-        </p>
+        <div className="mt-10 space-y-1 text-center text-xs text-muted-foreground" data-testid="translation-notice">
+          <TranslationNotice t={tMain} chapter={ch} fallback={translation} />
+          {parallel && ch2 && <TranslationNotice t={tPar} chapter={ch2} fallback={parallel} />}
+          {pages && window_ && (
+            <PagePart pages={pages} part={Math.min(part, pages.length - 1)} onPart={setPart} />
+          )}
+        </div>
+        {/* Room to scroll the last verses clear of a floating button bar or the action sheet. */}
+        {(footerSpace || sheet) && <div aria-hidden style={{ height: sheet ? "50vh" : "7rem" }} />}
       </article>
+
+      {sheet && sheetText !== undefined &&
+        createPortal(
+          <VerseSheet n={sheet.n} onClose={() => setSheet(null)}>
+            {(close) => (
+              <VerseActions
+                variant="sheet"
+                ho={ho}
+                chapter={chapter}
+                n={sheet.n}
+                text={sheetText}
+                translationShort={translationShort}
+                color={hlByVerse.get(sheet.n)}
+                hasNote={noteByVerse.has(sheet.n)}
+                memorised={memByVerse.has(sheet.n)}
+                fragment={sheet.fragment}
+                onClose={close}
+                {...handlersFor(sheet.n, sheetText)}
+              />
+            )}
+          </VerseSheet>,
+          document.body,
+        )}
 
       {capture && (
         <CaptureDialog
@@ -489,6 +768,95 @@ export function Reader({
       )}
     </div>
   );
+}
+
+/** What to tell the reader when a chapter could not be loaded. */
+function failureMessage(id: string, t: Translation | undefined, failure: ChapterFailure | undefined): string {
+  const name = t?.name ?? id;
+  switch (failure) {
+    case "no-key":
+      return `${name} is read with your own free API key. Add one in Settings → Bible translations.`;
+    case "bad-key":
+      return `The ${t?.source === "esv" ? "ESV" : "API.Bible"} API did not accept your key. Check it in Settings → Bible translations.`;
+    case "not-licensed":
+      return `Your API key is not licensed to read ${name}. Check which texts your key can read in Settings → Bible translations.`;
+    case "rate-limited":
+      return `The ${name} provider says too many passages were asked for just now. Try again in a minute.`;
+    case "not-found":
+      return `${name} does not include this chapter.`;
+    default:
+      return id === "BSB"
+        ? "Chapter not found."
+        : t && t.source !== "helloao"
+          ? `Couldn't load ${name} — you may be offline. Only a small number of recent chapters are kept offline, as its licence requires; BSB always works offline.`
+          : `Couldn't load ${name} here — you may be offline. It caches after the first online view; BSB always works offline.`;
+  }
+}
+
+const needsSettings = (f: ChapterFailure | undefined) => f === "no-key" || f === "bad-key" || f === "not-licensed";
+
+/** The copyright or licence line for a translation, linked where the licence asks for it. */
+function TranslationNotice({ t, chapter, fallback }: { t: Translation | undefined; chapter: Chapter | null; fallback: string }) {
+  if (!t) return <p>{fallback}</p>;
+  const notice = (t.preferChapterCopyright && chapter?.copyright) || t.notice;
+  const label = notice === "Public Domain" ? `${t.name} · Public Domain` : notice;
+  return (
+    <p className="mx-auto max-w-xl">
+      {t.noticeUrl ? (
+        <a href={t.noticeUrl} target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">
+          {label}
+        </a>
+      ) : (
+        label
+      )}
+      {t.credit && (
+        <>
+          {" "}
+          <a href={t.credit.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+            {t.credit.label}
+          </a>
+          .
+        </>
+      )}
+    </p>
+  );
+}
+
+/** "Verses 1–12 of 25 · Show verses 13–25": a chapter shown in parts, as a licence requires. */
+function PagePart({
+  pages,
+  part,
+  onPart,
+}: {
+  pages: { start: number; end: number }[];
+  part: number;
+  onPart: (i: number) => void;
+}) {
+  const cur = pages[part];
+  const last = pages[pages.length - 1].end;
+  return (
+    <div className="my-4 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="page-part">
+      <span>
+        Verses {cur.start}–{cur.end} of {last}. The licence allows only half of a book on screen at once.
+      </span>
+      {pages.map((p, i) =>
+        i === part ? null : (
+          <Button key={i} size="sm" variant="outline" onClick={() => onPart(i)}>
+            {p.start === p.end ? `Show verse ${p.start}` : `Show verses ${p.start}–${p.end}`}
+          </Button>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** The first verse whose bottom edge is below the top of the reading pane. */
+function topVisibleVerse(scroller: HTMLElement): number | null {
+  const top = scroller.getBoundingClientRect().top + 8;
+  for (const node of scroller.querySelectorAll<HTMLElement>("[data-verse]")) {
+    if (node.getBoundingClientRect().bottom > top) return Number(node.dataset.verse);
+  }
+  return null;
 }
 
 /**
@@ -525,11 +893,11 @@ function QuoteTray({
             <Button size="sm" variant={copied ? "success" : "primary"} className="shrink-0 rounded-full" onClick={onCopy}>
               {copied ? (
                 <>
-                  <Check style={{ width: 14, height: 14 }} /> Copied
+                  <Check size={14} /> Copied
                 </>
               ) : (
                 <>
-                  <Copy style={{ width: 14, height: 14 }} /> Copy
+                  <Copy size={14} /> Copy
                 </>
               )}
             </Button>
@@ -541,7 +909,7 @@ function QuoteTray({
             onClick={onDismiss}
             aria-label={onCopy ? "Clear selection" : "Cancel"}
           >
-            <X style={{ width: 15, height: 15 }} />
+            <X size={15} />
           </Button>
         </div>
       </div>
@@ -549,7 +917,15 @@ function QuoteTray({
   );
 }
 
-interface VerseProps {
+interface VerseHandlers {
+  onPickRange: () => void;
+  onNote: () => void;
+  onMemorise: () => void;
+  onCapture: (mode: "journal" | "prayer") => void;
+  onAsk: () => void;
+}
+
+interface VerseProps extends VerseHandlers {
   ho: string;
   chapter: number;
   n: number;
@@ -562,14 +938,19 @@ interface VerseProps {
   memorised: boolean;
   inRange: boolean;
   isRangeAnchor: boolean;
+  /** This verse is the one in the Tab order (roving tabindex). */
+  tabbable: boolean;
+  /** Just jumped to — highlight briefly. */
+  flash: boolean;
+  /** Touch: open the actions as a bottom sheet (owned by the Reader) instead of a popover. */
+  sheetMode: boolean;
+  sheetOpen: boolean;
+  onOpenSheet: (fragment: { n: number; text: string }[] | null) => void;
+  onFocusVerse: () => void;
+  onArrow: (key: "ArrowUp" | "ArrowDown" | "Home" | "End") => void;
   /** Give the parent first refusal on the tap; true means it used it for a range. */
   onTap: (shift: boolean) => boolean;
   onSelect: () => void;
-  onPickRange: () => void;
-  onNote: () => void;
-  onMemorise: () => void;
-  onCapture: (mode: "journal" | "prayer") => void;
-  onAsk: () => void;
 }
 
 function Verse({
@@ -585,53 +966,69 @@ function Verse({
   memorised,
   inRange,
   isRangeAnchor,
+  tabbable,
+  flash,
+  sheetMode,
+  sheetOpen,
+  onOpenSheet,
+  onFocusVerse,
+  onArrow,
   onTap,
   onSelect,
-  onPickRange,
-  onNote,
-  onMemorise,
-  onCapture,
-  onAsk,
+  ...handlers
 }: VerseProps) {
   const [open, setOpen] = useState(false);
-  const [justAdded, setJustAdded] = useState(false);
   // The words that were selected inside THIS verse when the toolbar opened. Read at
   // open time rather than at copy time so it survives the popover taking focus.
   const [fragment, setFragment] = useState<{ n: number; text: string }[] | null>(null);
   const down = useRef<{ x: number; y: number } | null>(null);
 
-  const toggleColor = (c: HighlightColor) => {
-    if (color === c) clearHighlight(ho, chapter, n);
-    else setHighlight(ho, chapter, n, c);
-  };
-
-  function captureFragment() {
+  function readFragment() {
     const live = readVerseSelection(document.getElementById("reader-scroll"));
     const mine = !!live && live.partial && live.verses.length === 1 && live.verses[0].n === n;
-    setFragment(mine && live ? live.verses : null);
+    return mine && live ? live.verses : null;
   }
 
-  const copy = () =>
-    navigator.clipboard?.writeText(citation(ho, chapter, fragment ?? [{ n, text }], translationShort));
+  /** Open this verse's actions: a popover with a mouse, a bottom sheet on touch. */
+  function openActions() {
+    const frag = readFragment();
+    onSelect();
+    if (sheetMode) {
+      onOpenSheet(frag);
+      return;
+    }
+    setFragment(frag);
+    setOpen(true);
+  }
 
   // The verse itself is the trigger: click or right-click pops a floating
   // toolbar anchored to the verse. Nothing is reserved in the text flow, so
   // the reading column stays clean.
   return (
     <Popover
-      open={open}
+      open={open && !sheetMode}
       onOpenChange={(o) => {
-        setOpen(o);
-        if (o) {
-          captureFragment();
-          onSelect();
-        }
+        if (o) openActions();
+        else setOpen(false);
       }}
     >
       <PopoverTrigger asChild>
         <span
           id={anchorId}
           data-verse={n}
+          role="button"
+          tabIndex={tabbable ? 0 : -1}
+          onFocus={onFocusVerse}
+          onKeyDown={(e) => {
+            if (e.altKey || e.ctrlKey || e.metaKey) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openActions();
+            } else if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+              e.preventDefault();
+              onArrow(e.key);
+            }
+          }}
           onPointerDown={(e) => {
             down.current = { x: e.clientX, y: e.clientY };
             // Shift+click is the browser's own "extend the selection to here", and
@@ -656,21 +1053,22 @@ function Verse({
             // Right-click keeps working over a selection, which is how you reach
             // the toolbar's other actions without losing the phrase you highlighted.
             e.preventDefault();
-            captureFragment();
-            setOpen(true);
+            openActions();
           }}
           className={cn(
             "cursor-pointer rounded-sm font-serif leading-[2] transition-colors hover:bg-accent/60",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             color && CLASS_BY_COLOR[color],
             color && "px-0.5",
             dim && "opacity-40",
             inRange && "ring-2 ring-primary/45",
             inRange && !color && "bg-primary/10",
             isRangeAnchor && "ring-2 ring-primary/70",
-            open && "bg-accent ring-1 ring-primary/40",
+            (open || sheetOpen) && "bg-accent ring-1 ring-primary/40",
+            flash && "verse-flash",
           )}
         >
-          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-600">
+          <sup className="mr-0.5 select-none align-super text-[0.62em] font-sans font-semibold text-primary-700 dark:text-primary-400">
             {n}
           </sup>
           {/* The words, and only the words — see src/lib/quote.ts. `select-text`
@@ -680,142 +1078,259 @@ function Verse({
           </span>
           {hasNote && (
             <StickyNote
+              aria-label="Has a note"
               className="ml-1 inline-block select-none align-super text-primary-500"
-              style={{ width: 12, height: 12 }}
+              size={12}
             />
           )}
-          {(memorised || justAdded) && (
+          {memorised && (
             <Brain
+              aria-label="In Memory Lane"
               className="ml-1 inline-block select-none align-super text-primary-500"
-              style={{ width: 12, height: 12 }}
+              size={12}
             />
           )}
         </span>
       </PopoverTrigger>
       <PopoverContent side="top" align="start" sideOffset={4} className="w-auto p-2">
-        <div className="mb-1.5 px-0.5 text-xs font-semibold text-muted-foreground">
-          {refLabel(ho, chapter, n)}
-          {fragment && <span className="ml-1 font-normal text-primary-600">· selected words</span>}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {COLORS.map((c) => (
-            <button
-              key={c.key}
-              aria-label={`Highlight ${c.key}`}
-              onClick={() => toggleColor(c.key)}
-              className={cn(
-                "h-6 w-6 rounded-full border border-border transition-transform hover:scale-110",
-                c.className,
-                color === c.key && "ring-2 ring-primary ring-offset-1",
-              )}
-            />
-          ))}
-          {color && (
-            <button
-              onClick={() => clearHighlight(ho, chapter, n)}
-              className="ml-0.5 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-accent"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-        <div className="mt-2 flex items-center gap-0.5 border-t border-border pt-2">
-          <IconBtn
-            label="Note"
-            onClick={() => {
-              setOpen(false);
-              onNote();
-            }}
-            active={hasNote}
-          >
-            <NotebookPen style={{ width: 15, height: 15 }} />
-          </IconBtn>
-          <IconBtn
-            label={memorised || justAdded ? "In Memory Lane" : "Memorise"}
-            onClick={() => {
-              onMemorise();
-              setJustAdded(true);
-              setTimeout(() => setOpen(false), 550);
-            }}
-            active={memorised || justAdded}
-          >
-            <Brain style={{ width: 15, height: 15 }} />
-          </IconBtn>
-          <IconBtn
-            label={fragment ? "Copy selected words" : "Copy"}
-            onClick={() => {
-              copy();
-              setOpen(false);
-            }}
-          >
-            <Copy style={{ width: 15, height: 15 }} />
-          </IconBtn>
-          <IconBtn
-            label="Select to…"
-            onClick={() => {
-              setOpen(false);
-              onPickRange();
-            }}
-          >
-            <TextSelect style={{ width: 15, height: 15 }} />
-          </IconBtn>
-          <IconBtn
-            label="Journal"
-            onClick={() => {
-              setOpen(false);
-              onCapture("journal");
-            }}
-          >
-            <span className="text-[12px] font-semibold">J</span>
-          </IconBtn>
-          <IconBtn
-            label="Pray"
-            onClick={() => {
-              setOpen(false);
-              onCapture("prayer");
-            }}
-          >
-            <HandHeart style={{ width: 15, height: 15 }} />
-          </IconBtn>
-          <IconBtn
-            label="Ask companion"
-            onClick={() => {
-              setOpen(false);
-              onAsk();
-            }}
-          >
-            <Sparkles style={{ width: 15, height: 15 }} />
-          </IconBtn>
-        </div>
+        <VerseActions
+          variant="popover"
+          ho={ho}
+          chapter={chapter}
+          n={n}
+          text={text}
+          translationShort={translationShort}
+          color={color}
+          hasNote={hasNote}
+          memorised={memorised}
+          fragment={fragment}
+          onClose={() => setOpen(false)}
+          {...handlers}
+        />
       </PopoverContent>
     </Popover>
   );
 }
 
-function IconBtn({
-  label,
-  onClick,
-  active,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  active?: boolean;
-  children: ReactNode;
+/**
+ * A verse's actions. The same set in two shapes: a compact icon toolbar in a popover
+ * (mouse, with tooltips), and a sheet of labelled 44px+ buttons on touch.
+ * Note and Journal have their own icons (sticky note vs. the journal's pen).
+ */
+function VerseActions({
+  variant,
+  ho,
+  chapter,
+  n,
+  text,
+  translationShort,
+  color,
+  hasNote,
+  memorised,
+  fragment,
+  onClose,
+  onPickRange,
+  onNote,
+  onMemorise,
+  onCapture,
+  onAsk,
+}: VerseHandlers & {
+  variant: "popover" | "sheet";
+  ho: string;
+  chapter: number;
+  n: number;
+  text: string;
+  translationShort: string;
+  color?: HighlightColor;
+  hasNote: boolean;
+  memorised: boolean;
+  fragment: { n: number; text: string }[] | null;
+  onClose: () => void;
 }) {
+  const [justAdded, setJustAdded] = useState(false);
+  const copyNotice = useUI((s) => translationById(s.translation)?.copyNotice);
+  const inMemory = memorised || justAdded;
+  const sheet = variant === "sheet";
+
+  const toggleColor = (c: HighlightColor) => {
+    if (color === c) clearHighlight(ho, chapter, n);
+    else setHighlight(ho, chapter, n, c);
+  };
+  const copy = () =>
+    navigator.clipboard?.writeText(citation(ho, chapter, fragment ?? [{ n, text }], translationShort, copyNotice));
+
+  const actions: { key: string; label: string; icon: ReactNode; active?: boolean; run: () => void }[] = [
+    { key: "note", label: hasNote ? "Edit note" : "Note", icon: <StickyNote size={18} />, active: hasNote, run: () => { onClose(); onNote(); } },
+    {
+      key: "memorise",
+      label: inMemory ? "In Memory Lane" : "Memorise",
+      icon: <Brain size={18} />,
+      active: inMemory,
+      run: () => {
+        if (inMemory) return;
+        onMemorise();
+        setJustAdded(true);
+        setTimeout(onClose, 550);
+      },
+    },
+    { key: "copy", label: fragment ? "Copy words" : "Copy", icon: <Copy size={18} />, run: () => { void copy(); onClose(); } },
+    { key: "range", label: "Select to…", icon: <TextSelect size={18} />, run: () => { onClose(); onPickRange(); } },
+    { key: "journal", label: "Journal", icon: <NotebookPen size={18} />, run: () => { onClose(); onCapture("journal"); } },
+    { key: "pray", label: "Pray", icon: <HandHeart size={18} />, run: () => { onClose(); onCapture("prayer"); } },
+    { key: "ask", label: "Ask", icon: <Sparkles size={18} />, run: () => { onClose(); onAsk(); } },
+  ];
+
+  const heading = (
+    <>
+      {refLabel(ho, chapter, n)}
+      {fragment && <span className="ml-1 font-normal text-primary-700 dark:text-primary-300">· selected words</span>}
+    </>
+  );
+
+  const swatches = (
+    <div className={cn("flex items-center", sheet ? "gap-0.5" : "gap-1.5")} role="group" aria-label="Highlight colour">
+      {COLORS.map((c) => (
+        <button
+          key={c.key}
+          aria-label={`Highlight ${c.key}`}
+          aria-pressed={color === c.key}
+          onClick={() => toggleColor(c.key)}
+          className={cn(
+            "flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            sheet ? "h-11 w-11" : "h-7 w-7",
+          )}
+        >
+          <span
+            className={cn(
+              "block rounded-full border border-border transition-transform hover:scale-110",
+              sheet ? "h-8 w-8" : "h-6 w-6",
+              c.className,
+              color === c.key && "ring-2 ring-primary ring-offset-1 ring-offset-card",
+            )}
+          />
+        </button>
+      ))}
+      {color && (
+        <button
+          onClick={() => clearHighlight(ho, chapter, n)}
+          className={cn(
+            "ml-0.5 rounded px-2 text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            sheet ? "min-h-11 text-sm" : "py-1 text-xs",
+          )}
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
+
+  if (!sheet) {
+    return (
+      <>
+        <div className="mb-1.5 px-0.5 text-xs font-semibold text-muted-foreground">{heading}</div>
+        {swatches}
+        <div className="mt-2 flex items-center gap-0.5 border-t border-border pt-2">
+          {actions.map((a) => (
+            <Tooltip key={a.key} label={a.label === "Ask" ? "Ask companion" : a.label}>
+              <button
+                onClick={a.run}
+                aria-label={a.label === "Ask" ? "Ask companion" : a.label}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  a.active && "text-primary-700 dark:text-primary-400",
+                )}
+              >
+                {a.icon}
+              </button>
+            </Tooltip>
+          ))}
+        </div>
+      </>
+    );
+  }
+
   return (
-    <Tooltip label={label}>
-      <button
-        onClick={onClick}
-        aria-label={label}
-        className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground",
-          active && "text-primary-600",
-        )}
+    <>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate text-sm font-semibold">{heading}</div>
+        <button
+          onClick={onClose}
+          aria-label="Close verse actions"
+          className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <X size={18} />
+        </button>
+      </div>
+      {swatches}
+      <div className="mt-2 grid grid-cols-4 gap-1 border-t border-border pt-2 sm:grid-cols-7">
+        {actions.map((a) => (
+          <button
+            key={a.key}
+            onClick={a.run}
+            className={cn(
+              "flex min-h-[3.5rem] flex-col items-center justify-center gap-1 rounded-lg px-1 text-xs font-medium text-foreground/80 hover:bg-accent active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              a.active && "text-primary-700 dark:text-primary-300",
+            )}
+          >
+            {a.icon}
+            <span className="leading-tight">{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+
+/**
+ * Bottom sheet for a verse's actions on touch screens. It scrolls the tapped verse
+ * clear of itself (so you can still see what you're acting on), closes on Esc or a
+ * tap outside, and hands focus back to the verse.
+ */
+function VerseSheet({ n, onClose, children }: { n: number; onClose: () => void; children: (close: () => void) => ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => {
+    onClose();
+    document.getElementById(`rv-${n}`)?.focus({ preventScroll: true });
+  }, [n, onClose]);
+
+  useLayoutEffect(() => {
+    const p = panel.current;
+    const v = document.getElementById(`rv-${n}`);
+    const sc = document.getElementById("reader-scroll");
+    if (!p || !v || !sc) return;
+    // Measure where the sheet will SETTLE: it is mid slide-up animation right now.
+    const limit = window.innerHeight - p.offsetHeight - 12;
+    const r = v.getBoundingClientRect();
+    const scTop = sc.getBoundingClientRect().top + 8;
+    if (r.bottom > limit) sc.scrollTop += Math.min(r.bottom - limit, r.top - scTop);
+    p.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+  }, [n]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/10" onClick={close} aria-hidden />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-label="Verse actions"
+        className="fixed inset-x-0 bottom-0 z-50 animate-sheet-up rounded-t-2xl border-t border-border bg-card px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 shadow-2xl motion-reduce:animate-none"
       >
-        {children}
-      </button>
-    </Tooltip>
+        <div className="mx-auto max-w-2xl">{children(close)}</div>
+      </div>
+    </>
   );
 }
 
@@ -837,7 +1352,7 @@ function NoteDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogTitle>Note on {refLabel(ho, chapter, verse)}</DialogTitle>
-        <Textarea autoFocus rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your note…" />
+        <Textarea aria-label="Note" autoFocus rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Your note…" />
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel

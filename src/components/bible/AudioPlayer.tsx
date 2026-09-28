@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Headphones, Pause, Play } from "lucide-react";
 import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip } from "@/components/ui";
 import { useUI } from "@/store/ui";
-import { useAudio, playQueue, toggle, isCurrentChapter } from "@/audio/controller";
+import { useAudioSelector, playQueue, toggle, isCurrentChapter } from "@/audio/controller";
 import { trackFromAudio, buildContinuousQueue } from "@/audio/queue";
 import { recordProgress } from "@/db/repos";
 import { cn } from "@/lib/cn";
@@ -25,7 +25,7 @@ export function AudioPlayer({
   onStart?: (label: string) => void;
 }) {
   const { ho, chapter, translation } = useUI();
-  const { playing } = useAudio();
+  const playing = useAudioSelector((s) => s.playing);
   const narrators = audio ? Object.keys(audio) : [];
   const [narrator, setNarrator] = useState(narrators[0] ?? "");
 
@@ -56,7 +56,7 @@ export function AudioPlayer({
     // in step as it advances (marks fire live in-app, or batch when you reopen the app).
     const q = await buildContinuousQueue(ho, chapter, url, label, translation);
     if (q.length) {
-      playQueue(q, { startIndex: 0, onComplete: (t) => void recordProgress(t.ho, t.chapter).catch(() => {}) });
+      playQueue(q, { startIndex: 0, onComplete: (t) => void recordProgress(t.ho, t.chapter, 1, "audio").catch(() => {}) });
     }
   }
 
@@ -69,13 +69,13 @@ export function AudioPlayer({
           onClick={() => (isThis ? toggle() : void start(narrator))}
           aria-label="Play chapter audio"
         >
-          {showPause ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+          {showPause ? <Pause size={18} /> : <Headphones size={18} />}
         </Button>
       </Tooltip>
       {narrators.length > 1 && (
         <Popover>
           <PopoverTrigger asChild>
-            <button className="rounded px-1.5 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent">
+            <button className="rounded px-1.5 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2.5">
               {narrator}
             </button>
           </PopoverTrigger>
@@ -92,7 +92,7 @@ export function AudioPlayer({
                   n === narrator && "bg-accent",
                 )}
               >
-                {n === narrator && <Play style={{ width: 12, height: 12 }} className="text-primary-600" />}
+                {n === narrator && <Play size={12} className="text-primary-700 dark:text-primary-400" />}
                 {n}
               </button>
             ))}

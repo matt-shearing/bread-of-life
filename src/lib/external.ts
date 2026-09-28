@@ -1,6 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+import { isTauri } from "./platform";
 
 /** Open a URL in the system browser (native in Tauri, new tab in a plain browser). */
 export async function openExternal(url: string): Promise<void> {

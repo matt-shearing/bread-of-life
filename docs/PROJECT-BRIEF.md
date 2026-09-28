@@ -1,5 +1,21 @@
 # Bread of Life — Project Brief (v1, first-principles)
 
+> **Note, 28 September 2026.** This brief records the plan of 9 July 2026 and is kept as written.
+> The principles still hold; several facts have moved on:
+>
+> - **Sync shipped** in v0.2.0 as optional delta sync over Dexie, with our own server in
+>   `deploy/sync-server/`, not libsql or Turso. Journal, prayers and notes can be end-to-end
+>   encrypted. An account is still optional.
+> - **The UI** uses Radix with the app's own primitives in `src/components/ui.tsx`, not shadcn/ui.
+> - **The data model** has grown. Journal entries live in `journal` and reading progress in
+>   `progress`, and there are tables for plans, devotions, Memory Lane, the reading log and sync.
+>   `src/db/index.ts` is the source of truth.
+> - **Built since v1:** streaming AI replies, reminders scheduled by the operating system, the audio
+>   Bible, Android Auto, devotional references that open the verse with a way back, and links between
+>   journal entries and prayers. The SQLite swap is still deferred.
+>
+> What has shipped and what comes next is in [`ROADMAP.md`](ROADMAP.md).
+
 _2026-07-09. This is the new brief. It supersedes every prior plan. It is deliberately short: the
 prior attempts failed from too much plan and too little shipped._
 

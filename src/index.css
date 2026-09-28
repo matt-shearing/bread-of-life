@@ -1,10 +1,4 @@
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
-@import "@fontsource/merriweather/400.css";
-@import "@fontsource/merriweather/700.css";
-@import "@fontsource/merriweather/400-italic.css";
+@import "./fonts.css";
 
 @tailwind base;
 @tailwind components;
@@ -22,17 +16,18 @@
     --muted-foreground: 24 6% 42%;
     --primary: 38 92% 50%; /* amber-500 #f59e0b */
     --primary-foreground: 30 40% 12%;
-    --secondary: 240 30% 96%;
-    --secondary-foreground: 240 20% 25%;
+    /* warm stone: sits beside amber instead of the old lavender */
+    --secondary: 32 20% 91%;
+    --secondary-foreground: 24 14% 20%;
     --accent: 40 40% 92%;
     --accent-foreground: 24 10% 15%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 55% 40%;
+    --success: 142 64% 28%; /* white on it 5.7:1; as text on white 5.7:1 */
     --success-foreground: 0 0% 100%;
     --border: 36 20% 88%;
     --input: 36 20% 88%;
-    --ring: 38 92% 50%;
+    --ring: 32 95% 40%; /* amber, dark enough for a visible focus ring (3.6:1 on paper) */
   }
 
   .dark {
@@ -46,14 +41,14 @@
     --muted-foreground: 40 10% 62%;
     --primary: 38 92% 55%;
     --primary-foreground: 30 40% 10%;
-    --secondary: 240 12% 20%;
-    --secondary-foreground: 240 15% 85%;
+    --secondary: 28 9% 22%;
+    --secondary-foreground: 36 18% 88%;
     --accent: 24 10% 20%;
     --accent-foreground: 40 20% 90%;
     --destructive: 0 62% 52%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 45% 45%;
-    --success-foreground: 0 0% 100%;
+    --success: 142 50% 48%; /* as text on the dark card 6.5:1 */
+    --success-foreground: 142 60% 8%; /* dark text on the green button, 6.7:1 */
     --border: 24 8% 22%;
     --input: 24 8% 24%;
     --ring: 38 92% 55%;
@@ -69,6 +64,14 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* A visible keyboard focus ring on everything, including native buttons, chips and
+     links that don't bring their own. Controls with their own ring (focus-visible:
+     outline-none + ring) keep it; this only fills the gaps. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 }
 
@@ -97,9 +100,19 @@
 .dark .hl-green { background-color: rgba(34, 197, 94, 0.26); }
 .dark .hl-violet { background-color: rgba(139, 92, 246, 0.26); }
 
-/* Dashboard countryside background + ambient animation.
- * "Living" is an explicit opt-in, so it animates regardless of the OS
- * reduce-motion preference (that's the whole point of choosing it). */
+/* A verse you just jumped to (search, a reference, Ctrl+K) glows briefly so the eye
+   finds it. With reduced motion it is a steady outline for the same 2.4s instead. */
+@keyframes verse-flash {
+  0%, 55% { box-shadow: 0 0 0 3px hsl(var(--primary) / 0.7); background-color: hsl(var(--primary) / 0.22); }
+  100% { box-shadow: 0 0 0 3px hsl(var(--primary) / 0); }
+}
+.verse-flash { animation: verse-flash 2.4s ease-out forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .verse-flash { animation: none; box-shadow: 0 0 0 3px hsl(var(--primary) / 0.7); }
+}
+
+/* Dashboard countryside background + ambient animation. "Living" moves only when the
+ * OS allows motion; with reduced motion it shows the still scene. */
 @keyframes bol-kenburns {
   0% { transform: scale(1.04) translate(0, 0); }
   50% { transform: scale(1.1) translate(-1.2%, -1.6%); }
@@ -119,6 +132,10 @@
     radial-gradient(100px 38px at 90% 44%, rgba(255, 255, 255, 0.88), transparent 72%);
   animation: bol-cloud-drift 40s ease-in-out infinite alternate;
   will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bol-bg-anim { animation: none; }
+  .bol-clouds { display: none; }
 }
 .dark .bol-clouds {
   background-image:
@@ -150,3 +167,7 @@
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
+
+/* Programmatic focus targets (dialogs, the main region after "Skip to content") don't
+   need a ring: the ring is for things you move to with the keyboard. */
+[tabindex="-1"]:focus-visible { outline: none; }

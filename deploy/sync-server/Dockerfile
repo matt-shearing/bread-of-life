@@ -3,7 +3,7 @@ FROM node:24-slim
 WORKDIR /app
 COPY package.json server.mjs ./
 RUN mkdir -p /app/data
-ENV PORT=4000 DB_PATH=/app/data/sync.db
+ENV NODE_ENV=production PORT=4000 DB_PATH=/app/data/sync.db
 VOLUME ["/app/data"]
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

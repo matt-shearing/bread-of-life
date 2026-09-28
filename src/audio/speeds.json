@@ -1,0 +1,4 @@
+{
+  "//": "Playback speeds, slowest first. The app's speed menu and the car's speed button (SessionCommands.SPEEDS in the native-audio plugin) both use these; PlaybackReviewTest.speedButton_stepsThroughTheAppsSpeeds checks the two agree. Each has its own Media3 icon in the car.",
+  "speeds": [0.8, 1, 1.2, 1.5, 1.8, 2]
+}

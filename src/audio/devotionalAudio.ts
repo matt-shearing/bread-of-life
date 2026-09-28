@@ -1,8 +1,10 @@
-import type { CarDevotional } from "./car";
+import type { CarDevotional } from "./carSnapshot";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { devotionalById, getDevotionDay, type DevotionReading } from "@/data/devotional";
 import { setDevotionDone } from "@/db/repos";
 import { buildSpeechScript, type DevotionSlot, type SpeechSegment } from "@/lib/devotionalSpeech";
+import { MONTH_NAMES } from "@/lib/day";
+import { isTauri } from "@/lib/platform";
 import { deviceTtsAvailable, deviceTtsSupported, fileUri, renderDeviceSpeech } from "@/lib/deviceTts";
 import { playQueue, type Track } from "./controller";
 import { carDevotionalId, devotionDoneId } from "./devotionalIds";
@@ -23,8 +25,6 @@ import { estimateSpeechSeconds, pickVoice, speechSynthesisSupported, speechVoice
  * it marks the devotional complete.
  */
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
 /** Where the recordings live. Override for local testing with VITE_DEVOTIONAL_AUDIO_BASE. */
 export const DEVOTIONAL_AUDIO_BASE: string = (
   (import.meta.env.VITE_DEVOTIONAL_AUDIO_BASE as string | undefined) ||
@@ -34,10 +34,6 @@ export const DEVOTIONAL_AUDIO_BASE: string = (
 /** Only this devotional has recordings and a speech script. */
 export const SPOKEN_DEVOTIONAL_ID = "spurgeon-morning-evening";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 export function slotOf(reading: DevotionReading): DevotionSlot | null {
   if (reading.label === "Morning") return "morning";
@@ -48,7 +44,7 @@ export function slotOf(reading: DevotionReading): DevotionSlot | null {
 /** "Morning — 25 September · Spurgeon" */
 export function devotionalTrackTitle(slot: DevotionSlot, day: string): string {
   const [m, d] = day.split("-").map(Number);
-  return `${slot === "morning" ? "Morning" : "Evening"} — ${d} ${MONTHS[m - 1]} · Spurgeon`;
+  return `${slot === "morning" ? "Morning" : "Evening"} — ${d} ${MONTH_NAMES[m - 1]} · Spurgeon`;
 }
 
 /* --------------------------------- manifest --------------------------------- */

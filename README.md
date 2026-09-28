@@ -8,7 +8,17 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.4.0** — **listen properly**. Pausing from your earphones and resuming no longer
+**Latest: v0.5.0** — **your record is safe, and easier to find**. **Back up** everything to one
+file and restore it on any device, or **export** your journal, prayers and notes as Markdown. Every
+reference now **opens on its verse**, with a bar to take you back. Type "jn 3:16" into search, or
+press **Ctrl+K** on a keyboard to jump anywhere. A new **Reading history** page keeps every day you
+read, so re-reading a chapter no longer breaks your streak, and the dashboard shows what God
+answered **on this day** in earlier years. **Pray through** today's prayers one at a time; edit,
+archive and restore prayers; and journal drafts are saved as you type. Now Playing gains a **sleep
+timer** that fades the narration out. Sync no longer loses edits, the Bible fits the unfolded Fold,
+and the app starts faster.
+
+**v0.4.0** — **listen properly**. Pausing from your earphones and resuming no longer
 loses the sound. Tap the player for a **Now Playing** screen that shows the day's readings as they
 play, with a button to skip to the next reading. Bread of Life now works in **Android Auto**, with
 tabs for today's reading, the Bible, the devotional and what you played recently, and it answers
@@ -59,6 +69,9 @@ Free and open source on every platform. Beta desktop builds are unsigned — a q
 > **Android via Obtainium:** tap the link on your phone (with [Obtainium](https://github.com/ImranR98/Obtainium)
 > installed) and it adds the app and keeps it updated from each GitHub release — no store, no account.
 > See [`docs/MOBILE.md`](docs/MOBILE.md). Desktop details in [`docs/DESKTOP.md`](docs/DESKTOP.md).
+>
+> **Unsigned desktop builds:** on Windows, SmartScreen may warn you; choose **More info → Run anyway**.
+> On macOS, right-click the app and choose **Open** the first time.
 
 ## A look inside
 
@@ -75,25 +88,41 @@ and Strong's word study right beside it._
 
 ## What's inside
 
-- **The whole Word, offline** — the Berean Standard Bible (CC0), all 66 books bundled for full offline
-  use. Book/chapter nav, section headings, per-verse actions: highlight (5 colors), note, copy,
-  → journal, → prayer. Your reading position and streak are remembered.
+- **The whole Word, offline** — the Berean Standard Bible (CC0), all 66 books bundled for offline
+  use, plus WEB, KJV, ASV and YLT side by side. Tap a verse to highlight it (5 colours), add a note,
+  copy it, memorise it, or take it to your journal or prayers. The app remembers the verse you were
+  reading.
+- **Find it and land on it** — search the Bible and your own journal, prayers and notes, or type a
+  reference such as "jn 3:16". Every link opens on its verse, with a bar to take you back. On a
+  keyboard, **Ctrl+K** jumps anywhere and the arrow keys turn the chapter.
 - **Answered-prayer log** ⭐ — add prayers, track how often you've prayed, and **mark them answered with a
-  note on _how_ God answered**. A dedicated *Answered* view is your record of His faithfulness.
-- **Journal** — rich entries with tags and verse links; capture a verse straight from the reader, and
-  cross-link entries with the prayers they belong to (each side references the other).
+  note on _how_ God answered**. Edit, archive and restore prayers, and **pray through** today's list one
+  at a time. The **Faithfulness review** gathers your answered prayers by year or month, with the verses
+  and journal entries linked to each.
+- **Journal** — rich entries with tags and verse links, saved as you type. Capture a verse straight from
+  the reader, and cross-link entries with the prayers they belong to.
+- **Reading history** — every day you read is kept: a calendar of the year, your streaks, and how much of
+  each book you've read. The dashboard shows prayers answered and entries written **on this day** in
+  earlier years.
 - **Memory Lane** 🧠 — memorise verses from the reader and review them on a spaced-repetition
   schedule (SM-2), with fill-in-the-blank tests and a review streak to keep the habit warm.
 - **Reading plans & devotionals** — structured plans (including **Soul Food**, a four-track
   *Bible-in-a-year*: an Old Testament, New Testament, Psalm and Proverbs portion every day) plus
-  Spurgeon's *Morning & Evening* and more. Start a day and drop into a **guided on-rails reader**
+  Spurgeon's *Morning & Evening* and *Faith's Checkbook*. Start a day and drop into a **guided reader**
   that ticks off each passage and remembers where you left off.
+- **Listen** 🎧 — the audio Bible plays on in the background from chapter to chapter, with a
+  **Now Playing** screen, a **sleep timer**, lock-screen and media-key controls, and **Android Auto**.
+  *Morning & Evening* is read aloud too.
+- **Reminders** — daily-reading reminders that stop once you've read, plus devotional, prayer and
+  Memory Lane reminders at the times you choose.
 - **Commentary, cross-references & Strong's** — public-domain commentaries that track your chapter,
   OpenBible cross-references, and Greek/Hebrew word study, right beside the text.
 - **AI study companion** — optional, grounded in the passage you're reading; bring your own key
   (Claude, OpenAI, Grok, Gemini, DeepSeek, or local Ollama). Private and entirely your choice.
-- **Dashboard** — a warm landing: Verse of the Day, Continue Reading, reading streak, prayer counts,
-  recent journal, over a cozy countryside scene.
+- **Dashboard** — a warm landing: a **Today** card for the plan reading, prayer and the devotional, the
+  Verse of the Day, Continue Reading, your streak and prayer counts, over a cozy countryside scene.
+- **Your data, yours to keep** — back up everything to one file and restore it on any device, or export
+  your journal, prayers and notes as Markdown (it opens in any editor or an Obsidian vault).
 
 All user data lives locally on your device (offline-first). No account is needed — the app is fully
 usable with no cloud and no tracking.
@@ -109,8 +138,14 @@ source of truth and sync is purely additive.
   **Settings → Sync → Self-hosted**. The server is open source in [`deploy/sync-server`](deploy/sync-server)
   (a small Node service with a Docker Compose + Caddy setup); see its README to stand one up.
 
-Local-only remains the default. End-to-end encryption of the synced payload is on the roadmap
-(today the relay stores data server-side); see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Local-only remains the default. Once signed in you can also turn on **end-to-end encryption**:
+your journal, prayers and notes are encrypted on the device (AES-256-GCM) before they're sent, so
+the server only stores ciphertext. You get a 24-word recovery phrase to unlock them on another
+device; lose it and the synced copies can't be read (the copy on your device is unaffected). Other
+synced data (highlights, reading progress, plans, settings) is stored on the server as sent.
+
+With a v0.5 or later server, **Settings → Sync & account** also lets you sign out on all devices,
+change your password and delete your account.
 
 ## Run it from source
 
@@ -121,6 +156,8 @@ pnpm fetch:bible     # downloads the BSB into public/bible/bsb/ (already present
 pnpm dev             # run in a browser at http://localhost:1420
 pnpm tauri:dev       # run as the native desktop app
 pnpm build           # typecheck + production web build → dist/
+pnpm lint && pnpm test   # what CI runs on every pull request, besides the build
+pnpm test:sync       # sync tests, against the v0.4.0 server and the current one
 pnpm tauri:build     # native installers (AppImage/deb on Linux, etc.)
 ```
 

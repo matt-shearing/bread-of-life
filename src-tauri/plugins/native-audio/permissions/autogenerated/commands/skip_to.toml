@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-skip-to"
+description = "Enables the skip_to command without any pre-configured scope."
+commands.allow = ["skip_to"]
+
+[[permission]]
+identifier = "deny-skip-to"
+description = "Denies the skip_to command without any pre-configured scope."
+commands.deny = ["skip_to"]

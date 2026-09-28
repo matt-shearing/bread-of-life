@@ -76,9 +76,17 @@ What is affected where:
   `src/audio/engine.ts`).
 - **macOS and Windows Tauri** keep the `<audio>` element. WKWebView and WebView2
   play media in-process, with nothing to work around.
-- **Android and iOS** are untouched and still use `tauri-plugin-native-audio`
-  (Media3 ExoPlayer). The Rust player is `#[cfg(desktop)]` and rodio/cpal are
-  scoped to non-mobile targets, so they never enter the mobile build.
+- **Android** is untouched and uses the native-audio plugin (Media3 ExoPlayer;
+  see `docs/NATIVE-AUDIO.md`). The Rust player is `#[cfg(desktop)]` and rodio/cpal
+  are scoped to non-mobile targets, so they never enter the mobile build.
+
+Media keys and the desktop's media widget come from Rust too. WebKitGTK publishes
+an MPRIS player only for an `<audio>` element that plays, and none does, so
+`src-tauri/src/media_keys.rs` registers the app as
+`org.mpris.MediaPlayer2.breadoflife` when the first track loads (through the
+`souvlaki` crate, over the libdbus that tao already links) and passes the
+widget's play, pause, next, previous and seek to the webview. Check it with
+`playerctl -l` while something plays.
 
 Building on Linux now needs ALSA headers (`libasound2-dev` on Debian/Ubuntu,
 `alsa-lib` on Arch — already a dependency of a desktop install).

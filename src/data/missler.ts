@@ -4,7 +4,10 @@
  * The library is built by `~/dev/missler-commentary` from Matt's own copies of
  * Chuck Missler's teaching. It is copyrighted, so NOTHING here is ever bundled in
  * the app or synced — the app reads it at runtime from a folder the user points at
- * in Settings (`misslerLibraryPath`). An empty path means the feature is off.
+ * in Settings (`misslerLibraryPath`). An empty path means the feature is off. The path
+ * is a device-local settings row: sync leaves it out (src/db/syncSchema.ts). Versions
+ * before v0.5 did sync it, which is why an Android device drops a desktop path on
+ * upgrade (src/db/index.ts, version 10).
  *
  * Two runtimes:
  *  - **Desktop (Tauri)** — JSON is read with `@tauri-apps/plugin-fs` and audio is
@@ -20,7 +23,7 @@ import { getSetting, setSetting } from "@/db/repos";
 import { toOsis } from "@/lib/osis";
 import type { CommentaryBlock, CommentaryChapter } from "./commentary";
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+import { isAndroid, isTauri } from "@/lib/platform";
 
 /* ------------------------------ library shapes ------------------------------ */
 
@@ -75,7 +78,6 @@ const ANDROID_AUTO_PATHS = [
   "/storage/emulated/0/Android/media/com.breadoflife.app/files/missler-library",
   "/storage/emulated/0/Android/data/com.breadoflife.app/files/missler-library",
 ];
-const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 let autoPath: string | undefined; // probe result cache
 
 /** The permission-free Android/media drop folder — writable by file managers,
@@ -310,6 +312,7 @@ export async function importLibrary(
   } catch (e) {
     throw new Error(
       `Couldn't read missler-library.json from ${base} — check the URL and that the folder is being served. (${String(e)})`,
+      { cause: e },
     );
   }
   if (!index || typeof index.books !== "object") {

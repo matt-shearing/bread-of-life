@@ -93,14 +93,17 @@ export function citation(
   chapter: number,
   verses: { n: number; text: string }[],
   translationShort: string,
+  /** A copyright line the translation's licence asks quotations to carry. */
+  notice?: string,
 ): string {
   if (verses.length === 0) return "";
+  const tail = notice ? `\n\n${notice}` : "";
   if (verses.length === 1) {
-    return `${verses[0].text} — ${refLabel(ho, chapter, verses[0].n)} (${translationShort})`;
+    return `${verses[0].text} — ${refLabel(ho, chapter, verses[0].n)} (${translationShort})${tail}`;
   }
   const body = verses.map((v) => v.text).join("\n");
   const ref = refRange(ho, chapter, verses[0].n, verses[verses.length - 1].n);
-  return `${body}\n — ${ref} (${translationShort})`;
+  return `${body}\n — ${ref} (${translationShort})${tail}`;
 }
 
 /** The label a selection tray shows: "John 3:16" or "John 3:16-18". */

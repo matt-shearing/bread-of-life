@@ -1,5 +1,5 @@
 import { BookMarked, MoveHorizontal, X } from "lucide-react";
-import { useUI } from "@/store/ui";
+import { useRailLayout } from "@/lib/layout";
 
 /**
  * A gentle, one-off discovery hint for the study rail on touch tablets/folds,
@@ -18,7 +18,7 @@ export function StudyRailCoach({
   step: "toggle" | "resize";
   onDismiss: () => void;
 }) {
-  const railWidth = useUI((s) => s.railWidth);
+  const { width: railWidth } = useRailLayout();
 
   if (step === "toggle") {
     return (
@@ -29,7 +29,7 @@ export function StudyRailCoach({
           </div>
           <div className="rounded-xl border border-primary/40 bg-card p-3 shadow-card">
             <div className="flex items-start gap-2">
-              <BookMarked style={{ width: 18, height: 18 }} className="mt-0.5 shrink-0 text-primary-600" />
+              <BookMarked size={18} className="mt-0.5 shrink-0 text-primary-700 dark:text-primary-400" />
               <div className="min-w-0">
                 <div className="text-sm font-semibold">Commentary &amp; more, right here</div>
                 <div className="mt-0.5 text-xs text-muted-foreground">
@@ -41,7 +41,7 @@ export function StudyRailCoach({
                 aria-label="Dismiss"
                 className="-mr-1 -mt-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent"
               >
-                <X style={{ width: 14, height: 14 }} />
+                <X size={14} />
               </button>
             </div>
           </div>
@@ -60,7 +60,7 @@ export function StudyRailCoach({
       >
         <div className="rounded-xl border border-primary/40 bg-card p-3 shadow-card">
           <div className="flex items-start gap-2">
-            <MoveHorizontal style={{ width: 18, height: 18 }} className="mt-0.5 shrink-0 text-primary-600" />
+            <MoveHorizontal size={18} className="mt-0.5 shrink-0 text-primary-700 dark:text-primary-400" />
             <div className="min-w-0">
               <div className="text-sm font-semibold">Drag to resize</div>
               <div className="mt-0.5 text-xs text-muted-foreground">

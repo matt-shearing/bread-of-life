@@ -74,6 +74,14 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
     private val appContext: Context = activity.applicationContext
     /** One reading at a time: the engine is a single, stateful voice. */
     private val worker = Executors.newSingleThreadExecutor()
+    /**
+     * `isAvailable` runs here, not on [worker], so a Listen button asking "can this phone read
+     * aloud?" is not kept waiting (showing "loading") behind a whole reading being rendered.
+     */
+    private val probe = Executors.newSingleThreadExecutor()
+    /** Guards starting the engine, which both threads may ask for first. */
+    private val engineLock = Any()
+    @Volatile
     private var tts: TextToSpeech? = null
     private val pending = ConcurrentHashMap<String, CountDownLatch>()
     private val failed = ConcurrentHashMap.newKeySet<String>()
@@ -122,7 +130,12 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
             invoke.resolve(availability(false, engines))
             return
         }
-        worker.execute {
+        // Already started (a reading was rendered, or asked before): no need to wait.
+        if (tts != null) {
+            invoke.resolve(availability(true, engines))
+            return
+        }
+        probe.execute {
             val ok = try {
                 engine(AVAILABILITY_TIMEOUT_SEC)
                 true
@@ -207,8 +220,29 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
         put("cached", cached)
     }
 
-    /** Start the engine once and wait for it; called on the worker thread. */
-    private fun engine(timeoutSec: Long = 15): TextToSpeech {
+    /**
+     * The engine, released with the plugin. The activity (and so this plugin) is recreated on
+     * some configuration changes, such as folding or unfolding a Pixel Fold; without this each
+     * one leaked a bound TextToSpeech engine and a thread.
+     */
+    override fun onDestroy() {
+        // Not under engineLock: a thread starting the engine holds it while it waits for the
+        // init callback on this (main) thread. It sees [destroyed] and shuts its engine down.
+        destroyed = true
+        worker.shutdownNow()
+        probe.shutdownNow()
+        runCatching { tts?.shutdown() }
+        tts = null
+        super.onDestroy()
+    }
+
+    @Volatile
+    private var destroyed = false
+
+    /** Start the engine once and wait for it; called on the worker or probe thread. */
+    private fun engine(timeoutSec: Long = 15): TextToSpeech = synchronized(engineLock) { startEngine(timeoutSec) }
+
+    private fun startEngine(timeoutSec: Long): TextToSpeech {
         tts?.let { return it }
         val latch = CountDownLatch(1)
         var status = TextToSpeech.ERROR
@@ -224,6 +258,10 @@ class DeviceTtsPlugin(private val activity: Activity) : Plugin(activity) {
         if (status != TextToSpeech.SUCCESS) {
             engine.shutdown()
             throw IllegalStateException("This phone has no text-to-speech voice available")
+        }
+        if (destroyed) {
+            engine.shutdown()
+            throw IllegalStateException("The app is closing")
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String) {}

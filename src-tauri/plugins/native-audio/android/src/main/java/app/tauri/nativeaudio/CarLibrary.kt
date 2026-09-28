@@ -20,10 +20,10 @@ import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
  *   Recent      the last ten chapters or devotionals played
  *
  * Nothing here needs the app to be running: the Bible comes from [BibleCatalog], Today and
- * Devotional from the app's last [CarSnapshot], Recent and Continue from [CarStore].
+ * Devotional from the app's last [CarSnapshot], Recent and Continue from [PlaybackStore].
  */
 @OptIn(UnstableApi::class)
-internal class CarLibrary(private val context: Context, val store: CarStore) {
+internal class CarLibrary(private val context: Context, val store: PlaybackStore) {
 
     fun snapshot(): CarSnapshot = store.snapshot()
 
@@ -91,11 +91,11 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
     }
 
     private fun tabs(snap: CarSnapshot, includeAll: Boolean = false): List<MediaItem> = buildList {
-        add(folder(MediaIds.TAB_TODAY, "Today", iconUri = CarArtwork.resourceUri(context, "bol_car_today"), mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+        add(folder(MediaIds.TAB_TODAY, "Today", iconUri = ArtworkTiles.resourceUri(context, "bol_car_today"), mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
         add(
             folder(
                 MediaIds.TAB_BIBLE, "Bible",
-                iconUri = CarArtwork.resourceUri(context, "bol_car_bible"),
+                iconUri = ArtworkTiles.resourceUri(context, "bol_car_bible"),
                 mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                 childBrowsable = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM,
             ),
@@ -103,9 +103,9 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         // Only when the app has devotional audio for today; a tab that opens on nothing is
         // worse than no tab.
         if (includeAll || snap.devotional.isNotEmpty()) {
-            add(folder(MediaIds.TAB_DEVOTIONAL, "Devotional", iconUri = CarArtwork.resourceUri(context, "bol_car_devotional"), mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+            add(folder(MediaIds.TAB_DEVOTIONAL, "Devotional", iconUri = ArtworkTiles.resourceUri(context, "bol_car_devotional"), mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
         }
-        add(folder(MediaIds.TAB_RECENT, "Recent", iconUri = CarArtwork.resourceUri(context, "bol_car_recent"), mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+        add(folder(MediaIds.TAB_RECENT, "Recent", iconUri = ArtworkTiles.resourceUri(context, "bol_car_recent"), mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
     }
 
     private fun todayChildren(snap: CarSnapshot): List<MediaItem> = buildList {
@@ -133,7 +133,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
             val id = chapter?.let { (ho, c) -> MediaIds.chapter(ho, c) } ?: r.mediaId
             playable(
                 id, r.title, r.subtitle, r.src,
-                artwork = chapter?.let { (ho, c) -> CarArtwork.chapterUri(context, ho, c) } ?: CarArtwork.devotionalUri(context, r.title),
+                artwork = chapter?.let { (ho, c) -> ArtworkTiles.chapterUri(context, ho, c) } ?: ArtworkTiles.devotionalUri(context, r.title),
             )
         }
     }
@@ -156,7 +156,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         MediaIds.testament(code),
         if (code == "OT") "Old Testament" else "New Testament",
         subtitle = if (code == "OT") "Genesis to Malachi" else "Matthew to Revelation",
-        artwork = CarArtwork.testamentUri(context, code),
+        artwork = ArtworkTiles.testamentUri(context, code),
         mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_AUDIO_BOOKS,
         childBrowsable = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM,
     )
@@ -165,7 +165,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         MediaIds.book(book.ho),
         book.name,
         subtitle = if (book.chapters == 1) "1 chapter" else "${book.chapters} chapters",
-        artwork = CarArtwork.bookUri(context, book.ho),
+        artwork = ArtworkTiles.bookUri(context, book.ho),
         mediaType = MediaMetadata.MEDIA_TYPE_AUDIO_BOOK,
         childPlayable = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM,
         childBrowsable = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM,
@@ -176,7 +176,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         return folder(
             MediaIds.bookRange(book.ho, from),
             "${book.name} $from–$to",
-            artwork = CarArtwork.rangeUri(context, book.ho, from, to),
+            artwork = ArtworkTiles.rangeUri(context, book.ho, from, to),
             mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_AUDIO_BOOKS,
             childPlayable = MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM,
         )
@@ -189,7 +189,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
             BibleCatalog.label(ho, chapter),
             subtitleFor(snap),
             BibleCatalog.chapterAudioUrl(ho, chapter, snap.narrator, BibleCatalog.DEFAULT_TRANSLATION),
-            artwork = CarArtwork.chapterUri(context, ho, chapter),
+            artwork = ArtworkTiles.chapterUri(context, ho, chapter),
         )
     }
 
@@ -202,7 +202,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         }
         return playable(
             MediaIds.TODAY_ALL, "Play today’s reading", subtitle, today.tracks.first().src,
-            artwork = CarArtwork.namedUri(context, "today"),
+            artwork = ArtworkTiles.namedUri(context, "today"),
             groupTitle = heading,
         )
     }
@@ -217,7 +217,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
             reading.label.ifBlank { first.title },
             listOf(reading.kicker, if (allDone) "Read" else "").filter { it.isNotBlank() }.joinToString(" · "),
             first.src,
-            artwork = CarArtwork.chapterUri(context, first.ho, first.chapter),
+            artwork = ArtworkTiles.chapterUri(context, first.ho, first.chapter),
             groupTitle = heading,
             completion = when {
                 allDone -> MediaConstants.EXTRAS_VALUE_COMPLETION_STATUS_FULLY_PLAYED
@@ -230,7 +230,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
     private fun planTrackItem(today: CarToday, t: CarTrack, heading: String?): MediaItem = playable(
         MediaIds.plan(today.planId, today.day, t.readingIndex, t.ho, t.chapter),
         t.title, t.subtitle, t.src,
-        artwork = CarArtwork.chapterUri(context, t.ho, t.chapter),
+        artwork = ArtworkTiles.chapterUri(context, t.ho, t.chapter),
         groupTitle = heading,
         group = t.group,
         completion = if (t.done) MediaConstants.EXTRAS_VALUE_COMPLETION_STATUS_FULLY_PLAYED else null,
@@ -238,7 +238,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
 
     private fun devotionalItem(d: CarDevotional): MediaItem = playable(
         MediaIds.devotional(d.id), d.title, d.subtitle, d.src,
-        artwork = CarArtwork.devotionalUri(context, d.label),
+        artwork = ArtworkTiles.devotionalUri(context, d.label),
     )
 
     private fun continueItem(groupTitle: String?): MediaItem? {
@@ -247,7 +247,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         val at = if (last.positionMs >= 60_000) " · ${formatPosition(last.positionMs)} in" else ""
         return playable(
             MediaIds.CONTINUE, last.title, "Continue listening$at", last.src,
-            artwork = chapter?.let { (ho, c) -> CarArtwork.chapterUri(context, ho, c) } ?: CarArtwork.namedUri(context, "continue"),
+            artwork = chapter?.let { (ho, c) -> ArtworkTiles.chapterUri(context, ho, c) } ?: ArtworkTiles.namedUri(context, "continue"),
             groupTitle = groupTitle,
             completion = MediaConstants.EXTRAS_VALUE_COMPLETION_STATUS_PARTIALLY_PLAYED,
         )
@@ -256,14 +256,14 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
     private fun noPlanItem(): MediaItem = folder(
         MediaIds.NO_PLAN, "No reading plan yet",
         subtitle = "Choose one in Bread of Life on your phone",
-        artwork = CarArtwork.namedUri(context, "today"),
+        artwork = ArtworkTiles.namedUri(context, "today"),
         mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
     )
 
     private fun nothingRecentItem(): MediaItem = folder(
         MediaIds.NOTHING_RECENT, "Nothing played yet",
         subtitle = "Chapters you listen to appear here",
-        artwork = CarArtwork.namedUri(context, "bible"),
+        artwork = ArtworkTiles.namedUri(context, "bible"),
         mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
     )
 
@@ -360,7 +360,7 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
             is MediaIds.Parsed.Devotional -> {
                 snap.devotional.firstOrNull { it.id == parsed.id }?.let { devotionalItem(it) }
                     ?: store.recent().firstOrNull { it.mediaId == mediaId }?.let {
-                        playable(mediaId, it.title, it.subtitle, it.src, artwork = CarArtwork.devotionalUri(context, it.title))
+                        playable(mediaId, it.title, it.subtitle, it.src, artwork = ArtworkTiles.devotionalUri(context, it.title))
                     }
             }
             null -> null
@@ -464,7 +464,9 @@ internal class CarLibrary(private val context: Context, val store: CarStore) {
         return MediaItem.Builder().setMediaId(id).setUri(src).setMediaMetadata(metadata).build()
     }
 
+    /** The app's own line when the snapshot has one (it knows the translation's name). */
     private fun subtitleFor(snap: CarSnapshot): String {
+        if (snap.subtitle.isNotBlank()) return snap.subtitle
         val name = if (snap.translation == "BSB") "Berean Standard Bible" else snap.translation
         return "$name · ${snap.narrator.replaceFirstChar { it.uppercase() }}"
     }

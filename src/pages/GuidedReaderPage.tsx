@@ -20,7 +20,8 @@ import { getAnyPlan, type Plan } from "@/data/plans";
 import { refRange } from "@/lib/osis";
 import { useUI } from "@/store/ui";
 import { isDesktopMouse } from "@/lib/device";
-import { useAudio, playQueue, pause } from "@/audio/controller";
+import { useRailLayout } from "@/lib/layout";
+import { useAudioSelector, playQueue, pause } from "@/audio/controller";
 import { buildReadingQueue } from "@/audio/queue";
 import { Reader } from "@/components/bible/Reader";
 import { StudyRail } from "@/components/bible/StudyRail";
@@ -44,7 +45,9 @@ export function GuidedReaderPage() {
   const requestedReading = searchParams.has("reading") ? Number(searchParams.get("reading")) : null;
   const navigate = useNavigate();
   const { goTo, goToPortion, translation, railOpen, toggleRail, setRailOpen } = useUI();
-  const { queue, index: audioIndex, playing } = useAudio();
+  // Not the time: this whole page must not re-render twice a second while audio plays.
+  const { queue, audioIndex, playing } = useAudioSelector((s) => ({ queue: s.queue, audioIndex: s.index, playing: s.playing }));
+  const rail = useRailLayout();
 
   const [plan, setPlan] = useState<Plan | null | undefined>(undefined); // undefined = loading
   const [cursor, setCursor] = useState(0);
@@ -120,13 +123,35 @@ export function GuidedReaderPage() {
     }
     setCursor(start);
     setInitialised(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, progress, total, day, initialised, requestedReading]);
+
+  /**
+   * Plan reading is kept apart from your own reading (B11). The plan borrows the
+   * shared reader location while you are here; on the way out we put back YOUR place
+   * (the Bible tab's saved position), so a plan never moves the Bible tab, "Continue
+   * reading" or the Companion's context. Declared before the effect that points the
+   * reader at the plan, so StrictMode's mount/unmount/mount replays in the right order.
+   */
+  const planLoc = useRef<{ ho: string; chapter: number } | null>(null);
+  useEffect(() => {
+    const s = useUI.getState();
+    const entry = { ho: s.ho, chapter: s.chapter, verse: null as number | null };
+    return () => {
+      const st = useUI.getState();
+      const mine = planLoc.current;
+      // Something else moved the reader on the way out (a cross-reference followed
+      // from the study panel) — that navigation wins.
+      if (mine && (st.ho !== mine.ho || st.chapter !== mine.chapter)) return;
+      const own = st.readingPos ?? entry;
+      st.goTo(own.ho, own.chapter, own.verse, { flash: false });
+    };
+  }, []);
 
   // Drive the reused Reader by pointing the shared Bible location at the cursor.
   // Verse-portion readings (Soul Food Classic) scope the reader to their range.
   useEffect(() => {
     if (current) {
+      planLoc.current = { ho: current.ho, chapter: current.chapter };
       if (current.vStart != null) {
         goToPortion(current.ho, current.chapter, current.vStart, current.vEnd ?? current.vStart);
       } else {
@@ -221,7 +246,7 @@ export function GuidedReaderPage() {
       onComplete: (t) => {
         if (t.planReadingIndex != null) {
           setTicked((prev) => new Set(prev).add(t.planReadingIndex!));
-          void setChapterDone(planId, day, t.planReadingIndex, true, total).catch(() => {});
+          void setChapterDone(planId, day, t.planReadingIndex, true, total, { source: "audio" }).catch(() => {});
         }
       },
     });
@@ -262,7 +287,7 @@ export function GuidedReaderPage() {
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background/80 px-3 py-2.5 backdrop-blur md:px-4 md:py-3">
         <Tooltip label="Leave guided reading">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Leave guided reading">
-            <ArrowLeft style={{ width: 18, height: 18 }} />
+            <ArrowLeft size={18} />
           </Button>
         </Tooltip>
         <div className="min-w-0">
@@ -282,7 +307,7 @@ export function GuidedReaderPage() {
                   onClick={() => setCursor(i)}
                   aria-label={`Go to ${refRange(r.ho, r.chapter, r.vStart, r.vEnd)}`}
                   className={cn(
-                    "flex h-6 min-w-6 items-center justify-center rounded-full border px-1.5 text-[11px] font-semibold transition-colors",
+                    "relative flex h-6 min-w-6 items-center justify-center rounded-full border px-1.5 text-[11px] font-semibold transition-colors [@media(pointer:coarse)]:after:absolute [@media(pointer:coarse)]:after:-inset-2.5 [@media(pointer:coarse)]:after:content-['']",
                     done
                       ? "border-success bg-success text-success-foreground"
                       : i === cursor
@@ -290,7 +315,7 @@ export function GuidedReaderPage() {
                         : "border-border text-muted-foreground hover:border-primary/40",
                   )}
                 >
-                  {done ? <Check style={{ width: 13, height: 13 }} /> : i + 1}
+                  {done ? <Check size={13} /> : i + 1}
                 </button>
               </Tooltip>
             );
@@ -305,7 +330,7 @@ export function GuidedReaderPage() {
               onClick={() => void listenToDay()}
               aria-label={listening ? "Pause today's readings" : "Listen to today's readings"}
             >
-              {listening ? <Pause style={{ width: 18, height: 18 }} /> : <Headphones style={{ width: 18, height: 18 }} />}
+              {listening ? <Pause size={18} /> : <Headphones size={18} />}
             </Button>
           </Tooltip>
           <Tooltip label="Previous chapter">
@@ -316,7 +341,7 @@ export function GuidedReaderPage() {
               disabled={cursor === 0}
               aria-label="Previous chapter"
             >
-              <ChevronLeft style={{ width: 18, height: 18 }} />
+              <ChevronLeft size={18} />
             </Button>
           </Tooltip>
           <Tooltip label="Next chapter">
@@ -327,27 +352,30 @@ export function GuidedReaderPage() {
               disabled={cursor >= total - 1}
               aria-label="Next chapter"
             >
-              <ChevronRight style={{ width: 18, height: 18 }} />
+              <ChevronRight size={18} />
             </Button>
           </Tooltip>
           <TranslationPicker />
           <Tooltip label={railOpen ? "Hide study panel" : "Show study panel"}>
             <Button variant="ghost" size="icon" onClick={toggleRail} aria-label="Toggle study panel">
               {railOpen ? (
-                <PanelRightClose style={{ width: 18, height: 18 }} />
+                <PanelRightClose size={18} />
               ) : (
-                <PanelRightOpen style={{ width: 18, height: 18 }} />
+                <PanelRightOpen size={18} />
               )}
             </Button>
           </Tooltip>
         </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        <div className="h-full min-w-0" style={{ paddingRight: rail.reserve }}>
           <Reader
             swipeToChapter={false}
             scopeToPortion
+            // Plan chapters are not "your place" — see the restore effect above.
+            trackPosition={false}
+            footerSpace={!dayComplete}
             // The reader's own headphones button plays TODAY'S readings, not the
             // continuous whole-Bible queue — that one dropped the plan's mark-read.
             onListen={(label) => void listenToDay(label)}
@@ -357,7 +385,11 @@ export function GuidedReaderPage() {
 
         {/* Footer action bar — advance through the day's readings. */}
         {!dayComplete && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-4 md:pr-[376px]">
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-2 p-4"
+            // Centre the bar over the reading column: leave the rail's width only while it's open.
+            style={{ paddingRight: rail.reserve ? rail.reserve + 16 : undefined }}
+          >
             {atEnd && !currentDone && (
               <div className="pointer-events-auto rounded-full border border-primary/30 bg-card/95 px-4 py-1.5 text-xs font-medium text-primary-700 shadow-card backdrop-blur dark:text-primary-300">
                 You've reached the end of {current ? refRange(current.ho, current.chapter, current.vStart, current.vEnd) : "this reading"} — mark it read?
@@ -366,16 +398,16 @@ export function GuidedReaderPage() {
             <Button
               size="lg"
               variant={currentDone ? "secondary" : "primary"}
-              className={cn("pointer-events-auto shadow-card", atEnd && !currentDone && "animate-pulse")}
+              className={cn("pointer-events-auto whitespace-nowrap shadow-card", atEnd && !currentDone && "motion-safe:animate-pulse")}
               onClick={markReadAndNext}
             >
               {currentDone ? (
                 <>
-                  <ArrowRight style={{ width: 17, height: 17 }} /> Next chapter
+                  <ArrowRight size={17} /> Next chapter
                 </>
               ) : (
                 <>
-                  <Check style={{ width: 17, height: 17 }} /> Mark read &amp; next
+                  <Check size={17} /> Mark read &amp; next
                 </>
               )}
             </Button>
@@ -420,7 +452,7 @@ function DayCompleteCard({
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/70 p-6 backdrop-blur-sm">
       <Card className="max-w-md p-8 text-center shadow-card">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-success/15">
-          <CheckCircle2 style={{ width: 30, height: 30 }} className="text-success" />
+          <CheckCircle2 size={30} className="text-success" />
         </div>
         <h2 className="font-serif text-2xl font-bold">Day {day + 1} complete</h2>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -428,7 +460,7 @@ function DayCompleteCard({
           done — a faithful day in the Word. See you tomorrow.
         </p>
         <div className="mt-5 flex items-center justify-center gap-2">
-          <Sparkles style={{ width: 15, height: 15 }} className="text-primary-500" />
+          <Sparkles size={15} className="text-primary-500" />
           <Button onClick={onLeave}>Back to plan</Button>
         </div>
       </Card>

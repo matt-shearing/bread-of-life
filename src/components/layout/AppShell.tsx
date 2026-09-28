@@ -7,10 +7,11 @@ import { NowPlaying } from "@/components/audio/NowPlaying";
 import { useUI } from "@/store/ui";
 import { useAutoTheme } from "@/lib/useAutoTheme";
 import { useReadingReminders } from "@/lib/useReadingReminders";
-import { registerCarDevotionalSource, useCarSync } from "@/audio/car";
+import { registerCarDevotionalSource, useCarSync } from "@/audio/carSnapshot";
 import { carDevotionals } from "@/audio/devotionalAudio";
 import { TooltipProvider } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding/Onboarding";
+import { KeyboardLayer } from "@/components/layout/CommandPalette";
 import {
   initNotificationRouting,
   maybeNotifyDevotion,
@@ -48,7 +49,7 @@ export function AppShell() {
   // (fires even when closed). No-op on desktop and in a browser — the foreground
   // checks below cover app-open reminders there instead.
   useEffect(() => {
-    void syncReminderSchedules({ notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime });
+    void syncReminderSchedules(); // reads the settings from the store; the deps below trigger it
   }, [notifyDevotion, devotionTime, notifyMemory, notifyPrayers, reminderTime]);
 
   // Daily-reading reminders: re-planned on start, return to the app, completion
@@ -79,9 +80,18 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
+      {/* Skip link (A9): the first Tab stop jumps past the navigation to the page. A
+          button, not an #anchor, because the router owns the URL hash. */}
+      <button
+        type="button"
+        onClick={() => document.getElementById("app-main")?.focus()}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg"
+      >
+        Skip to content
+      </button>
       <div className="flex h-[100dvh] w-full overflow-hidden pt-[env(safe-area-inset-top)]">
         <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
+        <main id="app-main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <div className="min-h-0 flex-1 overflow-hidden">
             <Outlet />
           </div>
@@ -93,6 +103,8 @@ export function AppShell() {
       {/* Opened from the mini-player; covers the page (and the bottom nav) while shown. */}
       <NowPlaying />
       <Onboarding />
+      {/* Ctrl/⌘+K palette and the ← → / ? shortcuts. */}
+      <KeyboardLayer />
     </TooltipProvider>
   );
 }

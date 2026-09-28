@@ -77,9 +77,9 @@ export function VersePicker({
           <Popover open={bookOpen} onOpenChange={setBookOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5 font-serif">
-                <BookOpen style={{ width: 14, height: 14 }} />
+                <BookOpen size={14} />
                 {BOOKS.find((b) => b.ho === ho)?.name ?? ho}
-                <ChevronDown style={{ width: 14, height: 14 }} className="opacity-60" />
+                <ChevronDown size={14} className="opacity-60" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="max-h-72 w-56 overflow-y-auto p-2">
@@ -120,7 +120,7 @@ export function VersePicker({
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5 font-serif">
                 Ch. {chapter}
-                <ChevronDown style={{ width: 14, height: 14 }} className="opacity-60" />
+                <ChevronDown size={14} className="opacity-60" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="max-h-72 w-56 overflow-y-auto p-3">
@@ -183,7 +183,7 @@ export function VersePicker({
                 className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary-700 hover:bg-primary/10 dark:text-primary-300"
               >
                 {osisToLabel(o)}
-                <X style={{ width: 11, height: 11 }} />
+                <X size={11} />
               </button>
             ))}
           </div>

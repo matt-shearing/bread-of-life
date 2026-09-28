@@ -1,16 +1,24 @@
-import { useSyncExternalStore } from "react";
-import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack, type NativeQueueItem } from "./engine";
+import { useRef, useSyncExternalStore } from "react";
+import { selectEngine, type AudioEngine, type EngineHandlers, type EngineTrack, type RemoteCommand } from "./engine";
+import type { NativeQueueItem, NativeSleepTimer, NativeSleepTimerArg } from "./nativeAudio";
 import { WebSpeechEngine } from "./speechEngine";
+import { parseChapterAudioUrl } from "./audioUrl";
+import { carDevotionalId } from "./devotionalIds";
 import type { SpeechSegment } from "@/lib/devotionalSpeech";
 
 /**
  * A single, app-wide audio player for scripture narration. It lives OUTSIDE the React
- * tree (one `Audio()` element) so playback survives route changes and the mini-player,
- * and it drives the OS **Media Session** (lock-screen / notification transport controls,
- * like a podcast app). A queue lets a plan day play straight through all its readings.
+ * tree, so playback survives route changes, and it owns the queue, auto-advance,
+ * mark-read and the mini-player's state. The actual playing is done by an engine
+ * (engine.ts): the Android native player, the Rust player on the Linux desktop, or an
+ * `<audio>` element elsewhere, where the controller also drives the web Media Session
+ * (lock-screen / notification controls). A queue lets a plan day play straight through
+ * all its readings.
  *
  * Kept as a plain singleton + `useSyncExternalStore` (not a second Zustand store, and not
- * persisted — playback position changes too often to write to localStorage).
+ * persisted — playback position changes too often to write to localStorage). Components
+ * subscribe to just the fields they show with `useAudioSelector`, so the twice-a-second
+ * time updates only re-render what displays the time.
  */
 
 export interface Track {
@@ -63,15 +71,41 @@ export interface AudioState {
   loading: boolean;
   /** Playback speed (1 = normal). Only changeable when `canSetRate` is true. */
   rate: number;
+  /** The sleep timer, or null when none is set. See setSleepTimer. */
+  sleep: SleepTimer | null;
 }
 
-const EMPTY: AudioState = { queue: [], index: -1, playing: false, currentTime: 0, duration: 0, loading: false, rate: 1 };
+/**
+ * A sleep timer: pause at a time (`endsAt`, epoch ms), at the end of the chapter playing,
+ * or at the end of the reading playing (a plan day's passage, which can span chapters).
+ * The last SLEEP_FADE_MS fade out; playback then PAUSES, so Play carries on from there.
+ */
+export type SleepTimer = { kind: "time"; endsAt: number } | { kind: "chapter" } | { kind: "reading" };
+
+/** What the listener chooses: minutes from now, or the end of the chapter or reading. */
+export type SleepChoice = { minutes: number } | { endOf: "chapter" | "reading" };
+
+/** The minutes offered in Now Playing. */
+export const SLEEP_MINUTES = [5, 10, 15, 30, 45, 60] as const;
+/** The fade before the pause. Native uses the same length (SLEEP_FADE_MS in the plugin). */
+export const SLEEP_FADE_MS = 10_000;
+
+const EMPTY: AudioState = {
+  queue: [],
+  index: -1,
+  playing: false,
+  currentTime: 0,
+  duration: 0,
+  loading: false,
+  rate: 1,
+  sleep: null,
+};
 
 let state: AudioState = EMPTY;
 const listeners = new Set<() => void>();
 
-// The swappable playback engine (HTML5 today; native Media3 later). The queue,
-// auto-advance, mark-read and Media Session all live here in the controller.
+// The playback engine for this platform (see selectEngine). The queue, auto-advance,
+// mark-read and the web Media Session all live here in the controller.
 const mainEngine: AudioEngine = selectEngine();
 // A second engine, created on first use, for tracks read aloud by the browser's
 // speechSynthesis (a devotional with no recording on a desktop browser). The controller
@@ -161,6 +195,8 @@ function handlersFor(e: AudioEngine): EngineHandlers {
     onRate: live(h.onRate),
     onPendingCompletions: live(h.onPendingCompletions),
     onEnded: live(h.onEnded),
+    onRemote: live(h.onRemote),
+    onSleepTimer: live(h.onSleepTimer),
   };
 }
 
@@ -171,11 +207,13 @@ const sharedHandlers: EngineHandlers = {
   },
   onPause: () => {
     set({ playing: false });
-    setMediaPlaybackState("paused");
+    // The pause that follows stop() finds nothing loaded: the OS controls should say "none".
+    setMediaPlaybackState(state.queue.length ? "paused" : "none");
   },
   onTime: (t) => {
     set({ currentTime: t });
     syncPositionState();
+    checkSleep(); // timeupdate keeps coming in a background tab, where timers are throttled
   },
   onDuration: (d) => set({ duration: d }),
   onLoading: (b) => set({ loading: b }),
@@ -190,7 +228,7 @@ const sharedHandlers: EngineHandlers = {
   onFinished: (indexes) => markHeard(indexes),
   // Android Auto (or the system's resume card) loaded a queue the app did not: take it as
   // ours so the mini-player and Now Playing show it. Its plan chapters are recorded by
-  // native (they reach the app through take_car_completions), so nothing marks here.
+  // native (they reach the app through take_completions), so nothing marks here.
   onExternalQueue: (items, index) => {
     const queue = items.map(trackFromNative);
     onTrackComplete = null;
@@ -202,15 +240,30 @@ const sharedHandlers: EngineHandlers = {
   },
   onRate: (rate) => set({ rate }),
   onPendingCompletions: (count) => onNativeCompletions?.(count),
+  onSleepTimer: (t) => {
+    const next = sleepFromNative(t);
+    if (!sameSleep(next, state.sleep)) set({ sleep: next });
+  },
   onEnded: () => {
     set({ playing: false });
     // Native: the last track's natural end arrives in onFinished like every other.
-    if (!engine.supportsNativeQueue) advanceQueue(); // HTML5: one track ended, step forward
+    if (engine.supportsNativeQueue) return;
+    // A sleep timer that ends with this chapter (or reading): stop at the boundary.
+    if (sleepEndsWithCurrentTrack()) pauseAtBoundary();
+    else advanceQueue(); // HTML5: one track ended, step forward
+  },
+  // Media keys and the desktop's media widget (Linux MPRIS, from Rust).
+  onRemote: (c: RemoteCommand) => {
+    if (c.action === "seek") seekTo(c.position);
+    else if (c.action === "seekBy") seekBy(c.offset);
+    else if (c.action === "previous") prev();
+    else if (c.action === "stop") stop();
+    else ({ play, pause, toggle, next })[c.action]();
   },
 };
 mainEngine.handlers = handlersFor(mainEngine);
 
-/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/car.ts). */
+/** Plan chapters or devotionals native heard to the end are waiting to be recorded (see src/audio/nativeCompletions.ts). */
 let onNativeCompletions: ((count: number) => void) | null = null;
 export function setNativeCompletionsHandler(fn: ((count: number) => void) | null) {
   onNativeCompletions = fn;
@@ -219,7 +272,17 @@ export function setNativeCompletionsHandler(fn: ((count: number) => void) | null
 function emit() {
   listeners.forEach((l) => l());
 }
+/** Apply `patch`, and tell subscribers only when something in it actually changed. Native
+ *  events repeat most fields every time, and a new state object re-renders every reader. */
 function set(patch: Partial<AudioState>) {
+  let changed = false;
+  for (const k in patch) {
+    if (!Object.is(state[k as keyof AudioState], patch[k as keyof AudioState])) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return;
   state = { ...state, ...patch };
   emit();
 }
@@ -241,13 +304,16 @@ function trackFromNative(item: NativeQueueItem): Track {
 /**
  * The name the native player (and Android Auto's Recent and Continue listening) knows a
  * track by: a plan day's chapter as "plan/<plan>/<day>/<reading>/<book>/<chapter>", any
- * other Bible chapter as "ch/<book>/<chapter>". Mirrors MediaIds in CarData.kt. Other audio
- * (Missler, devotionals) has none.
+ * other Bible chapter as "ch/<book>/<chapter>", a spoken devotional as "dev/<car id>".
+ * Mirrors MediaIds in CarData.kt. Native records a plan chapter or devotional that plays to
+ * its end under this id, so it is marked done even if the app is gone by then. Missler
+ * audio has none.
  */
 export function nativeMediaId(t: Track): string | undefined {
-  const m = /\/([0-9A-Z]{3})\/(\d+)\/audio\/[A-Za-z0-9_-]+\.mp3$/.exec(t.src.split(/[?#]/)[0]);
-  const isChapter = !!m && m[1] === t.ho && Number(m[2]) === t.chapter;
-  if (!isChapter) return undefined;
+  const d = t.devotional;
+  if (d) return `dev/${encodeURIComponent(carDevotionalId(d.devotionalId, d.day, d.slot))}`;
+  const parsed = parseChapterAudioUrl(t.src);
+  if (!parsed || parsed.ho !== t.ho || parsed.chapter !== t.chapter) return undefined;
   if (t.planId != null && t.planDay != null && t.planReadingIndex != null) {
     return `plan/${encodeURIComponent(t.planId)}/${t.planDay}/${t.planReadingIndex}/${t.ho}/${t.chapter}`;
   }
@@ -327,6 +393,8 @@ function loadIndex(index: number, autoplay: boolean) {
  *  on HTML5 the controller steps through track by track. */
 export function playQueue(tracks: Track[], opts?: { startIndex?: number; onComplete?: TrackCompleteHandler }) {
   if (!tracks.length) return;
+  // A new queue starts without a sleep timer (native clears its own with set_queue).
+  clearSleep();
   onTrackComplete = opts?.onComplete ?? null;
   const start = Math.max(0, Math.min(opts?.startIndex ?? 0, tracks.length - 1));
   set({ queue: tracks });
@@ -335,7 +403,7 @@ export function playQueue(tracks: Track[], opts?: { startIndex?: number; onCompl
     heard = new Set(); // a new queue: native's list starts empty with it
     set({ index: start, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(tracks[start]);
-    engine.loadQueue(tracks.map(toEngineTrack), start);
+    engine.loadQueue?.(tracks.map(toEngineTrack), start);
   } else {
     loadIndex(start, true);
   }
@@ -353,7 +421,7 @@ export function toggle() {
 }
 export function next() {
   if (engine.supportsNativeQueue) {
-    engine.queueNext(); // native player advances; onIndexChange updates us
+    engine.queueNext?.(); // native player advances; onIndexChange updates us
     return;
   }
   if (state.index < state.queue.length - 1) loadIndex(state.index + 1, true);
@@ -367,7 +435,7 @@ export function next() {
 }
 export function prev() {
   if (engine.supportsNativeQueue) {
-    engine.queuePrev();
+    engine.queuePrev?.();
     return;
   }
   // restart current if we're >3s in, else go to the previous track
@@ -382,19 +450,18 @@ export function prev() {
 export function jumpTo(index: number) {
   if (index < 0 || index >= state.queue.length) return;
   if (engine.supportsNativeQueue) {
-    // The native player holds the whole playlist; `load` would replace it with one
-    // track. Re-hand it the same playlist starting at `index` instead. Native starts a new
-    // list of chapters heard with it (skipping ahead is not listening).
-    heard = new Set();
+    // The native player holds the whole playlist: skip within it. A skip is not listening,
+    // so nothing between is marked, and the chapters already heard stay heard.
     set({ index, currentTime: 0, duration: 0, loading: true });
     setMediaMetadata(state.queue[index]);
-    engine.loadQueue(state.queue.map(toEngineTrack), index);
+    engine.queueSkipTo?.(index, state.queue.map(toEngineTrack));
     return;
   }
   loadIndex(index, true);
 }
 
-/** Whether the active engine can change playback speed (the Linux desktop one can't). */
+/** Whether the active engine can change playback speed (the Linux desktop one can't).
+ *  The speeds offered are src/audio/speeds.json, shared with Android Auto's speed button. */
 export const canSetRate = !!mainEngine.supportsRate;
 
 export function setRate(rate: number) {
@@ -411,6 +478,7 @@ export function seekBy(delta: number) {
   seekTo(engine.currentTime() + delta);
 }
 export function stop() {
+  clearSleep(); // native's stop clears its own
   engine.release();
   setMediaPlaybackState("none");
   const ms = mediaSession();
@@ -421,17 +489,198 @@ export function stop() {
   set({ ...EMPTY, rate: state.rate }); // the chosen speed outlives the queue
 }
 
+/* -------------------------------- sleep timer --------------------------------- */
+
+/*
+ * On Android the timer runs natively (`set_sleep_timer`): the WebView's timers are frozen in
+ * the background, while the playback service keeps running. Everywhere else it runs here,
+ * checked on every time update (which a playing <audio> element keeps firing in a background
+ * tab) and on a one-second interval (which covers a paused player).
+ */
+
+let sleepInterval: ReturnType<typeof setInterval> | null = null;
+/** The volume the JS timer last set (1 = untouched). */
+let sleepVolume = 1;
+
+function sameSleep(a: SleepTimer | null, b: SleepTimer | null): boolean {
+  if (!a || !b) return a === b;
+  return a.kind === b.kind && (a.kind !== "time" || a.endsAt === (b as { endsAt: number }).endsAt);
+}
+
+function sleepFromNative(t: NativeSleepTimer | null): SleepTimer | null {
+  if (!t) return null;
+  if (t.mode === "item") return { kind: "chapter" };
+  if (t.mode === "group") return { kind: "reading" };
+  if (typeof t.endsAtEpochMs === "number") return { kind: "time", endsAt: t.endsAtEpochMs };
+  if (typeof t.remainingMs === "number") return { kind: "time", endsAt: Date.now() + t.remainingMs };
+  return null;
+}
+
+function sleepToNative(t: SleepTimer | null): NativeSleepTimerArg | null {
+  if (!t) return null;
+  if (t.kind === "chapter") return { endOfItem: true };
+  if (t.kind === "reading") return { endOfGroup: true };
+  return { atEpochMs: Math.round(t.endsAt) };
+}
+
+/** Is queue[index] the last chapter of its reading (or not part of a plan day's reading)? */
+export function isLastOfReading(queue: Track[], index: number): boolean {
+  const t = queue[index];
+  if (!t || t.readingGroup == null) return true;
+  const n = queue[index + 1];
+  return !n || n.readingGroup !== t.readingGroup || n.planId !== t.planId || n.planDay !== t.planDay;
+}
+
+/** Whether "End of this reading" means more than "End of this chapter": a plan day's queue. */
+export function hasReadings(s: AudioState): boolean {
+  return s.queue[s.index]?.readingGroup != null;
+}
+
+/**
+ * Milliseconds until the sleep timer pauses playback, or null when that is not known yet (a
+ * chapter whose length is unknown, or a reading with chapters still to come). At normal speed
+ * for the time left in a chapter, so 1.5× speed ends a chapter sooner.
+ */
+export function sleepRemainingMs(s: AudioState, now = Date.now()): number | null {
+  const t = s.sleep;
+  if (!t) return null;
+  if (t.kind === "time") return Math.max(0, t.endsAt - now);
+  if (t.kind === "reading" && !isLastOfReading(s.queue, s.index)) return null;
+  if (!(s.duration > 0)) return null;
+  return Math.max(0, ((s.duration - s.currentTime) / (s.rate > 0 ? s.rate : 1)) * 1000);
+}
+
+function sleepEndsWithCurrentTrack(): boolean {
+  const t = state.sleep;
+  if (!t || t.kind === "time") return false;
+  return t.kind === "chapter" || isLastOfReading(state.queue, state.index);
+}
+
+function setEngineVolume(v: number) {
+  if (Math.abs(v - sleepVolume) < 0.01 && !(v === 1 && sleepVolume !== 1)) return;
+  sleepVolume = v;
+  engine.setVolume?.(v);
+}
+
+/** Forget the timer and put the volume back. Native's own timer is cleared by the caller. */
+function clearSleep() {
+  if (sleepInterval !== null) clearInterval(sleepInterval);
+  sleepInterval = null;
+  if (sleepVolume !== 1) {
+    sleepVolume = 1;
+    engine.setVolume?.(1);
+  }
+  if (state.sleep) set({ sleep: null });
+}
+
+/** JS timer: fade as the end nears, and pause when it comes. */
+function checkSleep() {
+  const t = state.sleep;
+  if (!t || engine.supportsNativeSleepTimer) return;
+  const remaining = sleepRemainingMs(state);
+  if (t.kind === "time" && remaining !== null && remaining <= 0) {
+    // Pause first, then restore the volume: the engine applies them in that order.
+    if (state.playing) pause();
+    clearSleep();
+    return;
+  }
+  if (t.kind !== "time" && !sleepEndsWithCurrentTrack()) return setEngineVolume(1);
+  setEngineVolume(remaining === null ? 1 : Math.max(0, Math.min(1, remaining / SLEEP_FADE_MS)));
+}
+
+/** The chapter (or reading) the timer ends with has just ended: record it as heard, load the
+ *  next chapter paused (so Play carries on with it), and clear the timer. */
+function pauseAtBoundary() {
+  const finished = state.queue[state.index];
+  const idx = state.index;
+  if (finished && onTrackComplete) {
+    try {
+      onTrackComplete(finished, idx);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  if (idx < state.queue.length - 1) {
+    loadIndex(idx + 1, false);
+    // Nothing asked the next chapter to play, so nothing will say it has stopped loading.
+    set({ loading: false, playing: false });
+  }
+  clearSleep();
+}
+
+/**
+ * Start, replace or cancel (null) the sleep timer. It pauses (never stops) playback after a
+ * fade, keeps going while the app is in the background, and is cleared by stop and by a new
+ * queue. "reading" is the end of a plan day's passage; outside a plan day it is the chapter.
+ */
+export function setSleepTimer(choice: SleepChoice | null) {
+  if (!state.queue.length) return;
+  let next: SleepTimer | null = null;
+  if (choice && "minutes" in choice) {
+    if (!Number.isFinite(choice.minutes) || choice.minutes <= 0) return;
+    next = { kind: "time", endsAt: Date.now() + Math.round(choice.minutes * 60_000) };
+  } else if (choice) {
+    next = { kind: choice.endOf === "reading" && hasReadings(state) ? "reading" : "chapter" };
+  }
+  if (mainEngine.supportsNativeSleepTimer) {
+    set({ sleep: next });
+    mainEngine.setSleepTimer?.(sleepToNative(next));
+    return;
+  }
+  clearSleep();
+  if (!next) return;
+  set({ sleep: next });
+  sleepInterval = setInterval(checkSleep, 1000);
+  checkSleep();
+}
+
 /* ---------------------------------- react ------------------------------------ */
 
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+/** The whole audio state. Re-renders on every change, the time included: prefer
+ *  `useAudioSelector` for anything that does not show the time. */
 export function useAudio(): AudioState {
-  return useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
-    () => state,
-    () => EMPTY,
-  );
+  return useSyncExternalStore(subscribe, () => state, () => EMPTY);
+}
+
+/** Equal when both are the same value, or objects with the same keys holding the same values. */
+export function shallowEqual<T>(a: T, b: T): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const ka = Object.keys(a) as (keyof T)[];
+  if (ka.length !== Object.keys(b).length) return false;
+  return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && Object.is(a[k], b[k]));
+}
+
+/**
+ * Part of the audio state: the component re-renders only when what `select` returns
+ * changes (compared shallowly), not on every time update.
+ *
+ *   const { playing, loading } = useAudioSelector((s) => ({ playing: s.playing, loading: s.loading }));
+ */
+export function useAudioSelector<T>(select: (s: AudioState) => T, isEqual: (a: T, b: T) => boolean = shallowEqual): T {
+  const last = useRef<{ from: AudioState; value: T } | null>(null);
+  const read = () => {
+    const prev = last.current;
+    if (prev && prev.from === state) return prev.value;
+    const value = select(state);
+    // Same selection from a newer state: keep the old value so React sees no change.
+    const kept = prev && isEqual(prev.value, value) ? prev.value : value;
+    last.current = { from: state, value: kept };
+    return kept;
+  };
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/** For tests: how many components (or hooks) are subscribed. */
+export function audioSubscriberCount(): number {
+  return listeners.size;
 }
 
 /** Is the given chapter the one currently loaded in the player? */

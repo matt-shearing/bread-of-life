@@ -1,5 +1,5 @@
 import { Headphones, Loader2, Pause, Play } from "lucide-react";
-import { toggle, useAudio } from "@/audio/controller";
+import { toggle, useAudioSelector } from "@/audio/controller";
 import {
   SPOKEN_DEVOTIONAL_ID,
   formatListenDuration,
@@ -23,6 +23,7 @@ export function ListenButton({
   index,
   reading,
   size = "sm",
+  quiet,
   className,
 }: {
   devotionalId: string;
@@ -30,35 +31,42 @@ export function ListenButton({
   index: number;
   reading: DevotionReading;
   size?: "sm" | "md";
+  /** For tight spots (the dashboard): hide the button when there is nothing to play,
+   *  and keep the "device voice" note in its tooltip rather than a line under it. */
+  quiet?: boolean;
   className?: string;
 }) {
   const mode = useListenMode(dayKey, reading);
   const prep = usePrepareState();
-  const { queue, index: qi, playing, loading, currentTime, duration: audioDuration } = useAudio();
+  const { cur, playing, loading, finished } = useAudioSelector((s) => ({
+    cur: s.queue[s.index]?.devotional,
+    playing: s.playing,
+    loading: s.loading,
+    // Loaded and not yet finished: this button becomes pause/resume. Once it has played to
+    // the end, it goes back to "Listen" so a tap starts it again from the top. Worked out
+    // here so the button does not re-render on every time update.
+    finished: !s.playing && s.duration > 0 && s.currentTime >= s.duration - 0.5,
+  }));
   const slot = slotOf(reading);
   if (devotionalId !== SPOKEN_DEVOTIONAL_ID || !slot) return null;
 
   const id = `${slot}/${dayKey}`;
-  const cur = queue[qi]?.devotional;
-  // Loaded and not yet finished: this button becomes pause/resume. Once it has played to
-  // the end, it goes back to "Listen" so a tap starts it again from the top.
-  const finished = !playing && audioDuration > 0 && currentTime >= audioDuration - 0.5;
   const isThis = !!cur && cur.devotionalId === devotionalId && cur.day === dayKey && cur.index === index && !finished;
   const preparing = prep.id === id;
   const failed = prep.error?.id === id ? prep.error.message : null;
   const duration = formatListenDuration(mode);
-  const icon = { width: 15, height: 15 };
-
+  
   if (isThis) {
     return (
       <Button size={size} variant="secondary" onClick={toggle} className={className} aria-label={playing ? "Pause the reading" : "Resume the reading"}>
-        {loading ? <Loader2 style={icon} className="animate-spin" /> : playing ? <Pause style={icon} /> : <Play style={icon} />}
+        {loading ? <Loader2 size={15} className="animate-spin" /> : playing ? <Pause size={15} /> : <Play size={15} />}
         {playing ? "Pause" : "Resume"}
       </Button>
     );
   }
 
   const unavailable = mode.kind === "unavailable";
+  if (quiet && (unavailable || mode.kind === "loading") && !preparing) return null;
   const title =
     mode.kind === "recording"
       ? `Listen to the ${slot} reading (${duration})`
@@ -79,11 +87,11 @@ export function ListenButton({
         aria-label={title ?? "Listen"}
         data-listen-mode={mode.kind}
       >
-        {preparing ? <Loader2 style={icon} className="animate-spin" /> : <Headphones style={icon} />}
+        {preparing ? <Loader2 size={15} className="animate-spin" /> : <Headphones size={15} />}
         {preparing ? `Preparing voice… ${Math.round(prep.progress * 100)}%` : "Listen"}
         {!preparing && duration && <span className="font-normal tabular-nums text-muted-foreground">· {duration}</span>}
       </Button>
-      {mode.kind === "device" && !preparing && <span className="text-[11px] text-muted-foreground">Device voice: no recording available</span>}
+      {mode.kind === "device" && !preparing && !quiet && <span className="text-[11px] text-muted-foreground">Device voice: no recording available</span>}
       {unavailable && mode.reason && <span className="text-[11px] text-muted-foreground">{mode.reason}</span>}
       {failed && <span className="text-[11px] text-destructive">Could not read it aloud: {failed}</span>}
     </div>

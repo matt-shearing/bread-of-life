@@ -5,7 +5,6 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
-import android.content.SharedPreferences
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
@@ -13,13 +12,11 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
-import android.app.ActivityManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
@@ -35,9 +32,11 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.BitmapLoader
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CacheBitmapLoader
+import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -47,6 +46,7 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlin.math.max
@@ -54,23 +54,53 @@ import kotlin.math.max
 private const val TAG = "plugin/native-audio"
 private const val EVENT_STATE = "native_audio_state"
 private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 9512
-private const val FOREGROUND_PROGRESS_TICK_MS = 25L
-private const val BACKGROUND_PROGRESS_TICK_MS = 250L
+/**
+ * While the app is on screen and something plays, a state event every half second: the UI
+ * shows time to the second, and the scrubber moves smoothly enough at this rate. (Upstream
+ * ticked every 25 ms, which woke the WebView and re-rendered React 40 times a second.)
+ */
+internal const val FOREGROUND_PROGRESS_TICK_MS = 500L
+/**
+ * While the app is not visible nothing is sent on a timer: a frozen WebView would only queue
+ * the events up, and JS re-reads the state when it becomes visible. The tick still runs this
+ * often to save the Continue-listening position.
+ */
+internal const val BACKGROUND_PROGRESS_TICK_MS = 5_000L
 private const val SEEK_INCREMENT_MS = 10_000L
 private const val SEEK_STATE_STALE_MS = 1_500L
-private const val PROGRESS_PERSIST_THROTTLE_MS = 1_000L
-private const val PROGRESS_NEAR_START_EPSILON_SEC = 0.25
-private const val PROGRESS_PERSIST_EPSILON_SEC = 0.05
-private const val PROGRESS_PREFS_NAME = "tauri_native_audio_progress"
-private const val PROGRESS_KEY_STORY_ID = "story_id"
-private const val PROGRESS_KEY_CURRENT_TIME = "current_time"
-private const val PROGRESS_KEY_UPDATED_AT_MS = "updated_at_ms"
-private const val PROGRESS_KEY_STATUS = "status"
 // Turn on logcat output in a release build with: adb shell setprop log.tag.BoLAudio DEBUG
 private const val DEBUG_TAG = "BoLAudio"
 private const val DEBUG_LOG_CAPACITY = 300
 private const val ARTWORK_SIZE_PX = 256
 private const val LAST_PLAYED_THROTTLE_MS = 5_000L
+/** The sleep timer fades the volume out over this long before it pauses (as the app does). */
+internal const val SLEEP_FADE_MS = 10_000L
+/** How often the sleep timer adjusts the volume during the fade. */
+private const val SLEEP_FADE_STEP_MS = 250L
+/** Before the fade, the longest the sleep timer waits between checks. A chapter's end moves
+ *  with seeks and speed changes, so it is looked at again rather than scheduled once. */
+private const val SLEEP_CHECK_MAX_MS = 5_000L
+
+/**
+ * The sleep timer: pause at a time, at the end of the current item, or at the end of the
+ * current reading (the last item of its reading group). See [NativeAudioRuntime.setSleepTimer].
+ */
+internal sealed class SleepTimer {
+    /** Pause at [deadlineElapsedMs] ([SystemClock.elapsedRealtime]); [minutes] labels the car's button. */
+    data class At(val deadlineElapsedMs: Long, val minutes: Int) : SleepTimer()
+    object EndOfItem : SleepTimer()
+    object EndOfGroup : SleepTimer()
+}
+
+/** The sleep timer as the state event reports it. */
+data class SleepTimerState(
+    /** "time", "item" or "group". */
+    val mode: String,
+    /** "time" only: when playback pauses, in wall-clock ms. */
+    val endsAtEpochMs: Long? = null,
+    /** How long until the pause, when known. */
+    val remainingMs: Long? = null,
+)
 
 data class NativeAudioState(
     val status: String,
@@ -85,7 +115,11 @@ data class NativeAudioState(
     val capturedAtMs: Long = SystemClock.elapsedRealtime(),
     /** Bumped whenever the queue is replaced, by the app or from outside it (the car). */
     val queueGeneration: Long = 0,
-    /** "app" when the app loaded the queue, "car" when Android Auto (or any other controller) did. */
+    /**
+     * "app" when the app loaded the queue, "external" when anything else did through the
+     * session: Android Auto, a voice request, the system's resume card, an earphone press
+     * that resumed the last chapter. (Called "car" before v0.4.1; the app accepts both.)
+     */
     val queueOrigin: String = "app",
     /** Plan chapters and devotionals heard to the end that the app has not collected yet. */
     val pendingCompletions: Int = 0,
@@ -98,23 +132,9 @@ data class NativeAudioState(
      * the app complete in whichever event it sees next.
      */
     val finished: List<Int> = emptyList(),
+    /** The sleep timer, or null when none is set. */
+    val sleepTimer: SleepTimerState? = null,
 )
-
-data class NativeAudioProgressCheckpoint(
-    val id: Long,
-    val currentTime: Double,
-    val updatedAtMs: Long,
-    val status: String? = null,
-)
-
-@InvokeArg
-class SetSourceArgs {
-    var src: String? = null
-    var id: Long? = null
-    var title: String? = null
-    var artist: String? = null
-    var artworkUrl: String? = null
-}
 
 @InvokeArg
 class SeekToArgs {
@@ -129,7 +149,6 @@ class SetRateArgs {
 @InvokeArg
 class QueueItemArg {
     var src: String? = null
-    var id: Long? = null
     var title: String? = null
     var artist: String? = null
     var artworkUrl: String? = null
@@ -148,6 +167,25 @@ class CarSnapshotArgs {
 @InvokeArg
 class AckCompletionsArgs {
     var upTo: Long? = null
+}
+
+@InvokeArg
+class SkipToArgs {
+    var index: Int? = null
+    /** Where in the item to start, in seconds (a Missler chapter that starts mid-file). */
+    var positionSec: Double? = null
+    /** The queue the app believes is loaded; a skip into any other queue is refused. */
+    var queueGeneration: Long? = null
+}
+
+@InvokeArg
+class SetSleepTimerArgs {
+    /** Pause at this wall-clock time (ms since the epoch). */
+    var atEpochMs: Long? = null
+    /** Pause at the end of the current item. */
+    var endOfItem: Boolean? = null
+    /** Pause at the end of the current reading (its reading group). */
+    var endOfGroup: Boolean? = null
 }
 
 @InvokeArg
@@ -215,32 +253,47 @@ object NativeAudioRuntime {
     private var mediaSessionPlayer: Player? = null
     private var lastError: String? = null
     private var pendingSeekState: PendingSeekState? = null
-    private var currentStoryId: Long? = null
-    private var lastProgressPersistedAtMs = 0L
-    private var lastProgressPersistedStoryId: Long? = null
-    private var lastProgressPersistedTimeSec: Double? = null
+
+    /** The sleep timer, and its check on the main looper (see [sleepCheck]). */
+    private var sleepTimer: SleepTimer? = null
+    /** The index of the item the sleep timer paused at the end of: recorded as heard when
+     *  it paused, so the AUTO transition that follows the next play does not record it again. */
+    private var sleepCompletedIndex: Int? = null
+    private val sleepRunnable = Runnable { sleepCheck() }
+
+    /**
+     * Whether the app's activity is on screen, from the plugin's lifecycle callbacks (see
+     * [NativeAudioPlugin.onResume] / [NativeAudioPlugin.onStop]). Only then does the progress
+     * tick send state events. Cheaper than asking ActivityManager and PowerManager on every
+     * tick, which is what upstream did.
+     */
+    @Volatile
+    private var appVisible = false
 
     private val tickRunnable = object : Runnable {
         override fun run() {
-            val shouldContinue = synchronized(lock) {
-                val snapshot = snapshotLocked()
-                appContext?.let { persistProgressCheckpointLocked(it, snapshot, force = false) }
+            val (snapshot, delay) = synchronized(lock) {
                 persistLastPlayedLocked(force = false)
-                NativeAudioPlugin.emitToActive(snapshot)
                 val isPlaying = player?.isPlaying == true
                 tickScheduled = isPlaying
-                isPlaying
+                val visible = appVisible
+                Pair(
+                    if (isPlaying && visible) snapshotLocked() else null,
+                    if (!isPlaying) -1L else if (visible) FOREGROUND_PROGRESS_TICK_MS else BACKGROUND_PROGRESS_TICK_MS,
+                )
             }
-            if (shouldContinue) {
-                val delay = synchronized(lock) { nextProgressTickDelayLocked() }
-                tickHandler.postDelayed(this, delay)
-            }
+            snapshot?.let { NativeAudioPlugin.emitToActive(it) }
+            if (delay >= 0) tickHandler.postDelayed(this, delay)
         }
     }
 
     private val playerListener = object : Player.Listener {
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             debugLog("player", "playWhenReady=$playWhenReady reason=${playWhenReadyReasonName(reason)}")
+            // The sleep timer's end of item (or reading): Media3 paused at the item's end.
+            if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                onSleepPausedAtEndOfItem()
+            }
         }
 
         override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
@@ -251,26 +304,26 @@ object NativeAudioRuntime {
         override fun onPlaybackStateChanged(playbackState: Int) {
             debugLog("player", "playbackState=${playbackStateName(playbackState)}")
             if (playbackState == Player.STATE_ENDED) {
-                synchronized(lock) {
-                    appContext?.let { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
+                val hadSleepTimer = synchronized(lock) {
                     // The last chapter of the queue finished.
                     player?.let { p ->
-                        p.currentMediaItem?.let { recordCompletionLocked(it) }
-                        if (p.currentMediaItemIndex >= 0) finishedIndexes.add(p.currentMediaItemIndex)
+                        val index = p.currentMediaItemIndex
+                        if (index != sleepCompletedIndex) p.currentMediaItem?.let { recordCompletionLocked(it) }
+                        if (index >= 0) finishedIndexes.add(index)
                     }
                     persistLastPlayedLocked(force = true)
+                    // Nothing is left to pause: the timer is done.
+                    (sleepTimer != null).also { if (it) clearSleepTimerLocked("queue ended") }
                 }
+                if (hadSleepTimer) sleepTimerChanged()
             }
             syncTicking()
             emitState()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            // ExoPlayer advanced to the next playlist item on its own — tell JS so it can
-            // update the mini-player + mark the finished chapter read.
-            appContext?.let {
-                synchronized(lock) { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
-            }
+            // ExoPlayer moved to another playlist item — tell JS so it can update the
+            // mini-player (and, for a natural end, mark the finished chapter read).
             synchronized(lock) {
                 // The chapter before this one ran to its end (not a skip): heard. Every other
                 // reason (SEEK: a skip from anywhere; PLAYLIST_CHANGED: a new queue) is not.
@@ -279,9 +332,13 @@ object NativeAudioRuntime {
                     val previousIndex = exo?.let { it.currentMediaItemIndex - 1 }?.takeIf { it >= 0 }
                     if (exo != null && previousIndex != null && previousIndex < exo.mediaItemCount) {
                         finishedIndexes.add(previousIndex)
-                        recordCompletionLocked(exo.getMediaItemAt(previousIndex))
+                        // Already recorded when the sleep timer paused at its end.
+                        if (previousIndex != sleepCompletedIndex) recordCompletionLocked(exo.getMediaItemAt(previousIndex))
                     }
                 }
+                sleepCompletedIndex = null
+                // End of reading: pause at the end of this item only if it ends the reading.
+                applyPauseAtEndLocked()
                 currentItemId = mediaItem?.mediaId
                 if (player?.isPlaying == true) recordStartLocked()
                 persistLastPlayedLocked(force = true)
@@ -301,7 +358,7 @@ object NativeAudioRuntime {
 
         override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
             // The speed button shows the current speed.
-            synchronized(lock) { mediaSession }?.setCustomLayout(CarCommands.layout(playbackParameters.speed))
+            refreshCustomLayout()
             emitState()
         }
 
@@ -322,7 +379,6 @@ object NativeAudioRuntime {
                             exoPlayer.playbackState == Player.STATE_READY &&
                             lastError == null
                     if (shouldRecoverPlayback) exoPlayer.play()
-                    appContext?.let { persistProgressCheckpointLocked(it, snapshotLocked(), force = true) }
                 }
             }
             syncTicking()
@@ -348,9 +404,13 @@ object NativeAudioRuntime {
             val ctx = context.applicationContext
             appContext = ctx
 
+            // Speech, not music: with a "may duck" focus loss (a Maps prompt in the car, a
+            // notification sound) ExoPlayer pauses spoken content instead of lowering it, so
+            // the listener does not lose words under the prompt (AudioFocusManager's
+            // willPauseWhenDucked checks exactly this content type).
             val audioAttributes = AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
                 .build()
 
             val exoPlayer = playerFactory(ctx)
@@ -437,28 +497,19 @@ object NativeAudioRuntime {
                 // earphone must not lose the chapter). In the car the same buttons are the big
                 // on-screen skip buttons, where a listener expects the previous/next chapter.
                 override fun seekToPrevious() {
-                    if (isCarRequest()) carPrevious() else exoPlayer.seekBack()
+                    if (isCarRequest()) stepPrevious(exoPlayer) else exoPlayer.seekBack()
                 }
 
                 override fun seekToPreviousMediaItem() {
-                    if (isCarRequest()) carPrevious() else exoPlayer.seekBack()
+                    if (isCarRequest()) stepPrevious(exoPlayer) else exoPlayer.seekBack()
                 }
 
                 override fun seekToNext() {
-                    if (isCarRequest()) carNext() else exoPlayer.seekForward()
+                    if (isCarRequest()) stepNext(exoPlayer) else exoPlayer.seekForward()
                 }
 
                 override fun seekToNextMediaItem() {
-                    if (isCarRequest()) carNext() else exoPlayer.seekForward()
-                }
-
-                private fun carPrevious() {
-                    if (exoPlayer.currentPosition > 3000L || !exoPlayer.hasPreviousMediaItem()) exoPlayer.seekTo(0L)
-                    else exoPlayer.seekToPreviousMediaItem()
-                }
-
-                private fun carNext() {
-                    if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem()
+                    if (isCarRequest()) stepNext(exoPlayer) else exoPlayer.seekForward()
                 }
             }
 
@@ -469,15 +520,15 @@ object NativeAudioRuntime {
                 PendingIntent.getActivity(ctx, 0, it, flags)
             }
 
-            val library = CarLibrary(ctx, CarStore(ctx))
+            val library = CarLibrary(ctx, PlaybackStore(ctx))
             carLibrary = library
             val sessionPlayer = mediaSessionPlayer ?: exoPlayer
             // A library session: the same session the phone, lock screen and earphones use, plus
             // the browse tree Android Auto shows (see CarLibrary). Built from a Context, not the
             // service, because it outlives any one service instance (see NativeAudioService).
-            mediaSession = MediaLibrarySession.Builder(ctx, sessionPlayer, CarSessionCallback { synchronized(lock) { carLibrary } })
+            mediaSession = MediaLibrarySession.Builder(ctx, sessionPlayer, LibrarySessionCallback { synchronized(lock) { carLibrary } })
                 .setBitmapLoader(AppIconBitmapLoader(CacheBitmapLoader(DataSourceBitmapLoader(ctx))) { appIcon(ctx) })
-                .setCustomLayout(CarCommands.layout(exoPlayer.playbackParameters.speed))
+                .setCustomLayout(SessionCommands.layout(exoPlayer.playbackParameters.speed, sleepLabelLocked()))
                 .apply {
                     if (pendingIntent != null) setSessionActivity(pendingIntent)
                 }
@@ -510,7 +561,7 @@ object NativeAudioRuntime {
         debugLog("service", "bind requested ok=$bound")
     }
 
-    /** Drop our binding so the service can stop (dispose, or the app swiped away while paused). */
+    /** Drop our binding so the service can stop (the app's stop, or the app swiped away while paused). */
     fun releaseServiceBinding(context: Context) {
         synchronized(lock) {
             if (!serviceBindRequested) return
@@ -554,25 +605,6 @@ object NativeAudioRuntime {
         context.applicationContext.stopService(serviceIntent)
     }
 
-    fun setSource(context: Context, src: String, storyId: Long?, title: String?, artist: String?, artworkUrl: String?) {
-        synchronized(lock) {
-            ensure(context)
-            val exoPlayer = player ?: return
-
-            val mediaItem = buildMediaItem(src, title, artist, artworkUrl, null, null)
-
-            pendingSeekState = null
-            currentStoryId = storyId?.takeIf { it > 0 }
-            onAppQueueLocked()
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-            lastError = null
-            ensureServiceBoundLocked(context)
-            syncTickingLocked()
-        }
-        emitState()
-    }
-
     // Load a whole PLAYLIST so ExoPlayer advances chapter→chapter itself — no JS needed,
     // which is what makes it seamless when the app is backgrounded (the WebView/JS freezes).
     fun setQueue(context: Context, items: List<QueueItemArg>, startIndex: Int) {
@@ -584,7 +616,6 @@ object NativeAudioRuntime {
                 .map { buildMediaItem(it.src!!.trim(), it.title, it.artist, it.artworkUrl, it.mediaId, it.group) }
             if (mediaItems.isEmpty()) return
             pendingSeekState = null
-            currentStoryId = null
             onAppQueueLocked()
             val start = startIndex.coerceIn(0, mediaItems.size - 1)
             exoPlayer.setMediaItems(mediaItems, start, 0L)
@@ -596,36 +627,63 @@ object NativeAudioRuntime {
         emitState()
     }
 
-    fun next(context: Context) {
+    /**
+     * Jump to [index] of the loaded queue and play: the app's Now Playing list and "Next
+     * reading". A seek within the playlist, so Media3 reports a SEEK transition and nothing
+     * skipped over counts as heard. Refused (false) when the app's idea of the queue is out
+     * of date ([expectedGeneration] is not the loaded one) or the index is out of range; the
+     * app then hands over the whole queue again with [setQueue].
+     */
+    fun skipTo(context: Context, index: Int, positionSec: Double, expectedGeneration: Long?): Boolean {
         synchronized(lock) {
-            val exoPlayer = player ?: return
-            if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem()
+            ensure(context)
+            val exoPlayer = player ?: return false
+            if (expectedGeneration != null && expectedGeneration != queueGeneration) return false
+            if (index !in 0 until exoPlayer.mediaItemCount) return false
+            pendingSeekState = null
+            val startMs = if (positionSec.isFinite() && positionSec > 0.0) (positionSec * 1000.0).toLong() else 0L
+            exoPlayer.seekTo(index, startMs)
+            Util.handlePlayButtonAction(mediaSessionPlayer ?: exoPlayer)
+            ensureServiceBoundLocked(context)
+            syncTickingLocked()
         }
+        emitState()
+        return true
+    }
+
+    fun next(@Suppress("UNUSED_PARAMETER") context: Context) {
+        synchronized(lock) { player?.let { stepNext(it) } }
         emitState()
     }
 
-    fun previous(context: Context) {
-        synchronized(lock) {
-            val exoPlayer = player ?: return
-            if (exoPlayer.currentPosition > 3000L || !exoPlayer.hasPreviousMediaItem()) {
-                exoPlayer.seekTo(0L)
-            } else {
-                exoPlayer.seekToPreviousMediaItem()
-            }
-        }
+    fun previous(@Suppress("UNUSED_PARAMETER") context: Context) {
+        synchronized(lock) { player?.let { stepPrevious(it) } }
         emitState()
     }
 
-    /** The app's Play button. Goes through the same wrapper as every other play command. */
+    /** The next chapter: the app's Next and the car's skip button. */
+    private fun stepNext(exoPlayer: Player) {
+        if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem()
+    }
+
+    /** Back to the start of this chapter when more than 3 s in, else the previous chapter. */
+    private fun stepPrevious(exoPlayer: Player) {
+        if (exoPlayer.currentPosition > 3000L || !exoPlayer.hasPreviousMediaItem()) exoPlayer.seekTo(0L)
+        else exoPlayer.seekToPreviousMediaItem()
+    }
+
+    /**
+     * The app's Play button. Goes through the same wrapper as every other play command, and
+     * through the same [Util.handlePlayButtonAction] Media3 uses for the lock screen and
+     * earphones: after a playback error (the phone left Wi-Fi and ExoPlayer's retries gave up)
+     * the player is idle, and only a `prepare()` loads the item again. A bare `play()` there
+     * set play-when-ready and nothing happened.
+     */
     fun play(context: Context) {
         synchronized(lock) {
             ensure(context)
             val exoPlayer = player ?: return
-            val sessionPlayer = mediaSessionPlayer ?: exoPlayer
-            if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                exoPlayer.seekTo(0L)
-            }
-            sessionPlayer.play()
+            Util.handlePlayButtonAction(mediaSessionPlayer ?: exoPlayer)
             syncTickingLocked()
         }
         emitState()
@@ -637,8 +695,34 @@ object NativeAudioRuntime {
             pendingSeekState = null
             (mediaSessionPlayer ?: player)?.pause()
             syncTickingLocked()
-            persistProgressCheckpointLocked(context.applicationContext, snapshotLocked(), force = true)
+            persistLastPlayedLocked(force = true)
         }
+        emitState()
+    }
+
+    /**
+     * The app closed its player (the mini-player's ✕). Unload the queue, not just pause it:
+     * otherwise an earphone or lock-screen press played it again with no player in the app.
+     * Continue listening keeps the position; the queue generation moves on so the app's
+     * stale indexes mean nothing; and the service binding goes, so Android can stop the
+     * service. The session stays, so a later earphone press still reaches it, and Media3
+     * then asks [LibrarySessionCallback.onPlaybackResumption] what to play (Continue
+     * listening), which the app adopts as an external queue.
+     */
+    fun stop(context: Context) {
+        synchronized(lock) {
+            val exoPlayer = player ?: return@synchronized
+            persistLastPlayedLocked(force = true)
+            pendingSeekState = null
+            lastError = null
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+            onAppQueueLocked()
+            syncTickingLocked()
+        }
+        releaseServiceBinding(context)
+        runCatching { stopService(context) }.onFailure { Log.w(TAG, "stopService failed", it) }
+        debugLog("command", "stop")
         emitState()
     }
 
@@ -665,46 +749,20 @@ object NativeAudioRuntime {
         emitState()
     }
 
-    fun getState(context: Context): NativeAudioState {
+    /**
+     * The current state. Does NOT build the player: the app asks at start whether anything is
+     * already playing (the car, or the service outliving an earlier app session), and a
+     * session that never plays should not create ExoPlayer and the media session for that.
+     */
+    fun getState(@Suppress("UNUSED_PARAMETER") context: Context): NativeAudioState {
         synchronized(lock) {
-            ensure(context)
             return snapshotLocked()
         }
     }
 
-    fun getProgressCheckpoint(context: Context): NativeAudioProgressCheckpoint? {
-        val prefs = progressPrefs(context.applicationContext)
-        val storyId = prefs.getLong(PROGRESS_KEY_STORY_ID, 0L)
-        if (storyId <= 0L) return null
-        val currentTime = prefs.getFloat(PROGRESS_KEY_CURRENT_TIME, 0f).toDouble()
-        val updatedAtMs = prefs.getLong(PROGRESS_KEY_UPDATED_AT_MS, 0L)
-        if (!currentTime.isFinite() || currentTime <= 0.0 || updatedAtMs <= 0L) return null
-        val status = prefs.getString(PROGRESS_KEY_STATUS, null)
-        return NativeAudioProgressCheckpoint(
-            id = storyId,
-            currentTime = currentTime,
-            updatedAtMs = updatedAtMs,
-            status = status,
-        )
-    }
-
-    fun clearProgressCheckpoint(context: Context) {
+    /** Tear everything down. Tests only: the app never releases the player it may need again. */
+    internal fun dispose(context: Context) {
         synchronized(lock) {
-            progressPrefs(context.applicationContext).edit()
-                .remove(PROGRESS_KEY_STORY_ID)
-                .remove(PROGRESS_KEY_CURRENT_TIME)
-                .remove(PROGRESS_KEY_UPDATED_AT_MS)
-                .remove(PROGRESS_KEY_STATUS)
-                .apply()
-            lastProgressPersistedAtMs = 0L
-            lastProgressPersistedStoryId = null
-            lastProgressPersistedTimeSec = null
-        }
-    }
-
-    fun dispose(context: Context) {
-        synchronized(lock) {
-            persistProgressCheckpointLocked(context.applicationContext, snapshotLocked(), force = true)
             tickHandler.removeCallbacks(tickRunnable)
             tickScheduled = false
 
@@ -718,7 +776,9 @@ object NativeAudioRuntime {
 
             lastError = null
             pendingSeekState = null
-            currentStoryId = null
+            sleepTimer = null
+            sleepCompletedIndex = null
+            tickHandler.removeCallbacks(sleepRunnable)
             carLibrary = null
             currentItemId = null
             recordedStartOf = null
@@ -728,6 +788,24 @@ object NativeAudioRuntime {
         stopService(context)
         emitState()
     }
+
+    /** The activity came on screen or went off it (see [appVisible]). */
+    fun setAppVisible(visible: Boolean) {
+        if (appVisible == visible) return
+        appVisible = visible
+        if (!visible) return
+        // Back on screen: send the state now and tick at the foreground rate from here.
+        tickHandler.post {
+            synchronized(lock) {
+                tickHandler.removeCallbacks(tickRunnable)
+                tickScheduled = false
+                syncTickingLocked()
+            }
+            emitState()
+        }
+    }
+
+    internal fun isAppVisible(): Boolean = appVisible
 
     fun mediaSession(): MediaLibrarySession? {
         synchronized(lock) {
@@ -858,57 +936,9 @@ object NativeAudioRuntime {
         }
     }
 
-    private fun nextProgressTickDelayLocked(): Long {
-        val context = appContext ?: return BACKGROUND_PROGRESS_TICK_MS
-        val isForeground = isAppInForeground()
-        val isInteractive = isDeviceInteractive(context)
-        return if (isForeground && isInteractive) FOREGROUND_PROGRESS_TICK_MS else BACKGROUND_PROGRESS_TICK_MS
-    }
-
-    private fun isAppInForeground(): Boolean {
-        val processInfo = ActivityManager.RunningAppProcessInfo()
-        ActivityManager.getMyMemoryState(processInfo)
-        return processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND ||
-            processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
-    }
-
-    private fun isDeviceInteractive(context: Context): Boolean {
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        return powerManager?.isInteractive ?: true
-    }
-
     private fun emitState() {
         val snapshot = synchronized(lock) { snapshotLocked() }
         NativeAudioPlugin.emitToActive(snapshot)
-    }
-
-    private fun progressPrefs(context: Context): SharedPreferences =
-        context.getSharedPreferences(PROGRESS_PREFS_NAME, Context.MODE_PRIVATE)
-
-    private fun persistProgressCheckpointLocked(context: Context, snapshot: NativeAudioState, force: Boolean) {
-        val storyId = currentStoryId ?: return
-        if (storyId <= 0L) return
-        if (!snapshot.currentTime.isFinite() || snapshot.currentTime <= PROGRESS_NEAR_START_EPSILON_SEC) return
-
-        val now = System.currentTimeMillis()
-        if (!force && now - lastProgressPersistedAtMs < PROGRESS_PERSIST_THROTTLE_MS) return
-
-        val prevStoryId = lastProgressPersistedStoryId
-        val prevTime = lastProgressPersistedTimeSec
-        if (!force && prevStoryId == storyId && prevTime != null && kotlin.math.abs(prevTime - snapshot.currentTime) <= PROGRESS_PERSIST_EPSILON_SEC) {
-            return
-        }
-
-        progressPrefs(context).edit()
-            .putLong(PROGRESS_KEY_STORY_ID, storyId)
-            .putFloat(PROGRESS_KEY_CURRENT_TIME, snapshot.currentTime.toFloat())
-            .putLong(PROGRESS_KEY_UPDATED_AT_MS, now)
-            .putString(PROGRESS_KEY_STATUS, snapshot.status)
-            .apply()
-
-        lastProgressPersistedAtMs = now
-        lastProgressPersistedStoryId = storyId
-        lastProgressPersistedTimeSec = snapshot.currentTime
     }
 
     /**
@@ -932,7 +962,7 @@ object NativeAudioRuntime {
                 .onSuccess { metadataBuilder.setArtworkUri(it) }
         } else {
             val ctx = appContext
-            if (ctx != null && chapter != null) metadataBuilder.setArtworkUri(CarArtwork.chapterUri(ctx, chapter.first, chapter.second))
+            if (ctx != null && chapter != null) metadataBuilder.setArtworkUri(ArtworkTiles.chapterUri(ctx, chapter.first, chapter.second))
         }
         if (group != null) metadataBuilder.setExtras(Bundle().apply { putInt(CarLibrary.EXTRA_READING_GROUP, group) })
         return MediaItem.Builder()
@@ -950,19 +980,29 @@ object NativeAudioRuntime {
         finishedIndexes.clear()
         currentItemId = null
         recordedStartOf = null
+        // A new queue (or the app's stop) ends any sleep timer.
+        if (sleepTimer != null) {
+            clearSleepTimerLocked("new queue")
+            tickHandler.post { refreshCustomLayout() }
+        }
+        sleepCompletedIndex = null
     }
 
     /** A queue arrived through the session (the car, a voice request, the resume card). */
     private fun onExternalQueue(count: Int) {
         synchronized(lock) {
             queueGeneration++
-            queueOrigin = "car"
+            queueOrigin = "external"
             finishedIndexes.clear()
-            currentStoryId = null
             pendingSeekState = null
             lastError = null
             currentItemId = null
             recordedStartOf = null
+            sleepCompletedIndex = null
+            if (sleepTimer != null) {
+                clearSleepTimerLocked("new queue")
+                tickHandler.post { refreshCustomLayout() }
+            }
             appContext?.let { ensureServiceBoundLocked(it) }
             debugLog("queue", "external queue of $count from=${currentController()}")
         }
@@ -983,7 +1023,7 @@ object NativeAudioRuntime {
         val id = item.mediaId.takeIf { MediaIds.parse(it) != null } ?: return
         if (recordedStartOf == id) return
         recordedStartOf = id
-        val src = item.localConfiguration?.uri?.toString() ?: return
+        val src = item.localConfiguration?.uri?.toString()?.takeIf { it.isStreamable() } ?: return
         carLibrary?.store?.addRecent(
             PlayedItem(id, item.mediaMetadata.title?.toString().orEmpty(), item.mediaMetadata.artist?.toString().orEmpty(), src, 0L, System.currentTimeMillis()),
         )
@@ -996,7 +1036,7 @@ object NativeAudioRuntime {
         val store = carLibrary?.store ?: return
         val item = exo.currentMediaItem ?: return
         val id = item.mediaId.takeIf { MediaIds.parse(it) != null } ?: return
-        val src = item.localConfiguration?.uri?.toString() ?: return
+        val src = item.localConfiguration?.uri?.toString()?.takeIf { it.isStreamable() } ?: return
         val now = System.currentTimeMillis()
         if (!force && now - lastPlayedPersistedAtMs < LAST_PLAYED_THROTTLE_MS) return
         lastPlayedPersistedAtMs = now
@@ -1030,7 +1070,7 @@ object NativeAudioRuntime {
     }
 
     private fun notifyLibraryChanged(parentId: String) {
-        val session = mediaSession ?: return
+        val session = synchronized(lock) { mediaSession } ?: return
         val count = carLibrary?.children(parentId)?.size ?: return
         tickHandler.post { runCatching { session.notifyChildrenChanged(parentId, count, null) } }
     }
@@ -1069,20 +1109,223 @@ object NativeAudioRuntime {
         return true
     }
 
+    /* --------------------------------- sleep timer --------------------------------- */
+
+    /**
+     * Start, replace or (all arguments empty) cancel the sleep timer: pause at [atEpochMs], at
+     * the end of the current item, or at the end of the current reading. The last
+     * [SLEEP_FADE_MS] fade out through the player's volume, and playback then PAUSES, so Play
+     * carries on. A Handler on the main looper runs it; while something plays, the service is
+     * in the foreground and ExoPlayer holds a wake lock, so it fires with the app in the
+     * background or the screen off. Cleared by stop and by any new queue.
+     */
+    fun setSleepTimer(@Suppress("UNUSED_PARAMETER") context: Context, atEpochMs: Long?, endOfItem: Boolean, endOfGroup: Boolean) {
+        synchronized(lock) {
+            clearSleepTimerLocked(null)
+            if (player == null) return@synchronized
+            sleepTimer = when {
+                atEpochMs != null -> {
+                    val delay = max(0L, atEpochMs - System.currentTimeMillis())
+                    SleepTimer.At(SystemClock.elapsedRealtime() + delay, ((delay + 30_000L) / 60_000L).toInt())
+                }
+                endOfItem -> SleepTimer.EndOfItem
+                endOfGroup -> SleepTimer.EndOfGroup
+                else -> null
+            }
+            applyPauseAtEndLocked()
+            debugLog("sleep", "set ${describeSleepLocked()}")
+        }
+        sleepTimerChanged()
+    }
+
+    /** The car's sleep button: off → 15 min → 30 min → end of chapter → off. */
+    fun cycleSleepTimer(): Boolean {
+        val now = synchronized(lock) {
+            if (player == null) return false
+            sleepTimer
+        }
+        val next: Pair<Long?, Boolean> = when (now) {
+            null -> System.currentTimeMillis() + 15 * 60_000L to false
+            is SleepTimer.At -> if (now.minutes <= 15) System.currentTimeMillis() + 30 * 60_000L to false else null to true
+            else -> null to false
+        }
+        appContext?.let { setSleepTimer(it, next.first, next.second, false) }
+        return true
+    }
+
+    /** Clear the timer and put the volume back; [why] (when not null) goes to the debug log. */
+    private fun clearSleepTimerLocked(why: String?) {
+        val had = sleepTimer != null
+        sleepTimer = null
+        tickHandler.removeCallbacks(sleepRunnable)
+        player?.let {
+            it.pauseAtEndOfMediaItems = false
+            if (it.volume != 1f) it.volume = 1f
+        }
+        if (had && why != null) debugLog("sleep", "cleared: $why")
+    }
+
+    /** After any change: check the timer now, update the car's button, tell the app. */
+    private fun sleepTimerChanged() {
+        tickHandler.removeCallbacks(sleepRunnable)
+        if (synchronized(lock) { sleepTimer } != null) tickHandler.post(sleepRunnable)
+        refreshCustomLayout()
+        emitState()
+    }
+
+    /** End of item always, end of reading only on the reading's last item. */
+    private fun applyPauseAtEndLocked() {
+        val exo = player ?: return
+        val want = when (sleepTimer) {
+            SleepTimer.EndOfItem -> true
+            SleepTimer.EndOfGroup -> isLastOfGroupLocked(exo)
+            else -> false
+        }
+        if (exo.pauseAtEndOfMediaItems != want) exo.pauseAtEndOfMediaItems = want
+    }
+
+    private fun groupAt(exo: Player, i: Int): Int? =
+        exo.getMediaItemAt(i).mediaMetadata.extras?.let { if (it.containsKey(CarLibrary.EXTRA_READING_GROUP)) it.getInt(CarLibrary.EXTRA_READING_GROUP) else null }
+
+    /** Is the current item the last of its reading group (or in no group)? */
+    private fun isLastOfGroupLocked(exo: Player): Boolean {
+        val index = exo.currentMediaItemIndex
+        if (index !in 0 until exo.mediaItemCount) return true
+        val group = groupAt(exo, index) ?: return true
+        return index + 1 >= exo.mediaItemCount || groupAt(exo, index + 1) != group
+    }
+
+    /** Time left in the current item at the current speed, or null when its length is unknown. */
+    private fun itemRemainingMsLocked(exo: Player): Long? {
+        val duration = exo.duration
+        if (duration == C.TIME_UNSET || duration <= 0) return null
+        val speed = exo.playbackParameters.speed.takeIf { it > 0f } ?: 1f
+        return (max(0L, duration - exo.currentPosition) / speed).toLong()
+    }
+
+    /** Until the timer pauses playback, or null when that is not known yet. */
+    private fun sleepRemainingMsLocked(): Long? {
+        val exo = player ?: return null
+        return when (val t = sleepTimer) {
+            null -> null
+            is SleepTimer.At -> max(0L, t.deadlineElapsedMs - SystemClock.elapsedRealtime())
+            SleepTimer.EndOfItem -> itemRemainingMsLocked(exo)
+            SleepTimer.EndOfGroup -> if (isLastOfGroupLocked(exo)) itemRemainingMsLocked(exo) else null
+        }
+    }
+
+    private fun describeSleepLocked(): String = when (val t = sleepTimer) {
+        null -> "off"
+        is SleepTimer.At -> "in ${sleepRemainingMsLocked()} ms"
+        SleepTimer.EndOfItem -> "end of item"
+        SleepTimer.EndOfGroup -> "end of reading"
+    }
+
+    /**
+     * The timer's check, on the main looper: fade as the end nears and, for a timed timer, pause
+     * when it comes (Media3 pauses at an item's end itself: [onSleepPausedAtEndOfItem]). Posted
+     * again at most [SLEEP_CHECK_MAX_MS] later, every [SLEEP_FADE_STEP_MS] during the fade.
+     */
+    private fun sleepCheck() {
+        var fired = false
+        val delay: Long = synchronized(lock) {
+            val t = sleepTimer ?: return
+            val exo = player ?: run {
+                sleepTimer = null
+                return
+            }
+            if (t !is SleepTimer.At) applyPauseAtEndLocked()
+            val remaining = sleepRemainingMsLocked()
+            if (t is SleepTimer.At && remaining != null && remaining <= 0L) {
+                // Pause first, then restore the volume: the player applies them in that order.
+                (mediaSessionPlayer ?: exo).pause()
+                clearSleepTimerLocked(null)
+                debugLog("sleep", "fired: paused")
+                persistLastPlayedLocked(force = true)
+                fired = true
+                return@synchronized -1L
+            }
+            val volume = if (remaining == null) 1f else (remaining.toFloat() / SLEEP_FADE_MS).coerceIn(0f, 1f)
+            if (exo.volume != volume) exo.volume = volume
+            when {
+                remaining == null -> SLEEP_CHECK_MAX_MS
+                remaining > SLEEP_FADE_MS -> (remaining - SLEEP_FADE_MS).coerceIn(SLEEP_FADE_STEP_MS, SLEEP_CHECK_MAX_MS)
+                else -> SLEEP_FADE_STEP_MS
+            }
+        }
+        if (fired) {
+            refreshCustomLayout()
+            emitState()
+        } else {
+            tickHandler.postDelayed(sleepRunnable, delay)
+        }
+    }
+
+    /**
+     * Media3 paused at the end of an item because the sleep timer asked it to. The item was
+     * heard to its end: record it now (the listener may not press Play again until tomorrow),
+     * and not again when Play moves on to the next item.
+     */
+    private fun onSleepPausedAtEndOfItem() {
+        synchronized(lock) {
+            if (sleepTimer == null || sleepTimer is SleepTimer.At) return
+            val exo = player ?: return
+            val index = exo.currentMediaItemIndex
+            if (index in 0 until exo.mediaItemCount && index != sleepCompletedIndex) {
+                finishedIndexes.add(index)
+                recordCompletionLocked(exo.getMediaItemAt(index))
+                sleepCompletedIndex = index
+            }
+            clearSleepTimerLocked(null)
+            debugLog("sleep", "fired: paused at the end of item $index")
+            persistLastPlayedLocked(force = true)
+        }
+        refreshCustomLayout()
+        emitState()
+    }
+
+    /** The car's buttons show the speed and the sleep timer. */
+    private fun refreshCustomLayout() {
+        val session = synchronized(lock) { mediaSession } ?: return
+        session.setCustomLayout(customLayout(null))
+    }
+
+    /** The custom buttons for the current speed (or [speed]) and sleep timer. */
+    internal fun customLayout(speed: Float?): ImmutableList<CommandButton> = synchronized(lock) {
+        SessionCommands.layout(speed ?: player?.playbackParameters?.speed ?: 1f, sleepLabelLocked())
+    }
+
+    /** What the car's sleep button says while a timer runs. */
+    private fun sleepLabelLocked(): String? = when (val t = sleepTimer) {
+        null -> null
+        is SleepTimer.At -> "${t.minutes} min"
+        SleepTimer.EndOfItem -> "end of chapter"
+        SleepTimer.EndOfGroup -> "end of reading"
+    }
+
+    internal fun sleepTimerForTest(): SleepTimer? = synchronized(lock) { sleepTimer }
+
     /** Step the speed through 1×, 1.2×, 1.5×, 2×, 0.8×. */
     fun cycleSpeed(): Boolean {
         synchronized(lock) {
             val exo = player ?: return false
-            exo.setPlaybackSpeed(CarCommands.nextSpeed(exo.playbackParameters.speed))
+            exo.setPlaybackSpeed(SessionCommands.nextSpeed(exo.playbackParameters.speed))
         }
         emitState()
         return true
     }
 
+    /**
+     * The store behind the library, or a fresh one on the same SharedPreferences when the
+     * player has not been built yet: pushing the car snapshot and collecting completions at
+     * app start must not create ExoPlayer and the media session.
+     */
+    private fun storeLocked(context: Context): PlaybackStore =
+        carLibrary?.store ?: PlaybackStore(context.applicationContext)
+
     /** The app's snapshot for the car (today's reading, devotional audio, narrator). */
     fun setCarSnapshot(context: Context, json: String): Boolean {
-        ensure(context)
-        val ok = synchronized(lock) { carLibrary?.store?.setSnapshot(json) } ?: false
+        val ok = synchronized(lock) { storeLocked(context).setSnapshot(json) }
         if (ok) {
             notifyLibraryChanged(MediaIds.ROOT)
             notifyLibraryChanged(MediaIds.TAB_TODAY)
@@ -1091,23 +1334,20 @@ object NativeAudioRuntime {
         return ok
     }
 
-    fun carCompletions(context: Context): org.json.JSONArray {
-        ensure(context)
-        return synchronized(lock) { carLibrary?.store?.completions() } ?: org.json.JSONArray()
-    }
+    /** Plan chapters and devotionals heard to the end, waiting for the app, oldest first. */
+    fun completions(context: Context): org.json.JSONArray =
+        synchronized(lock) { storeLocked(context).completions() }
 
-    fun ackCarCompletions(context: Context, upTo: Long) {
-        ensure(context)
-        synchronized(lock) { carLibrary?.store?.ackCompletions(upTo) }
+    fun ackCompletions(context: Context, upTo: Long) {
+        synchronized(lock) { storeLocked(context).ackCompletions(upTo) }
         emitState()
     }
 
     internal fun carLibrary(): CarLibrary? = synchronized(lock) { carLibrary }
 
     /** The loaded queue, for the app to adopt one the car started. */
-    fun queueItems(context: Context): org.json.JSONObject {
+    fun queueItems(@Suppress("UNUSED_PARAMETER") context: Context): org.json.JSONObject {
         synchronized(lock) {
-            ensure(context)
             val exo = player
             val items = org.json.JSONArray()
             if (exo != null) {
@@ -1182,8 +1422,17 @@ object NativeAudioRuntime {
             error = lastError,
             queueGeneration = queueGeneration,
             queueOrigin = queueOrigin,
+            // A counter the store keeps, not a parse of the stored list (up to 500 entries).
             pendingCompletions = carLibrary?.store?.pendingCompletionCount() ?: 0,
             finished = finishedIndexes.toList(),
+            sleepTimer = sleepTimer?.let { t ->
+                val remaining = sleepRemainingMsLocked()
+                when (t) {
+                    is SleepTimer.At -> SleepTimerState("time", System.currentTimeMillis() + (remaining ?: 0L), remaining)
+                    SleepTimer.EndOfItem -> SleepTimerState("item", null, remaining)
+                    SleepTimer.EndOfGroup -> SleepTimerState("group", null, remaining)
+                }
+            },
         )
     }
 
@@ -1222,51 +1471,36 @@ internal class AppIconBitmapLoader(
     }
 }
 
+/** Only a URL the car can stream later belongs in Recent and Continue listening, not a cache file. */
+private fun String.isStreamable(): Boolean = startsWith("https://") || startsWith("http://")
+
+/**
+ * The commands the app calls. Kotlin method names are the camelCase of the snake_case command
+ * names in build.rs and the JS (`set_queue` → `setQueue`).
+ */
 @TauriPlugin
 class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
 
     init {
         activeInstance = this
+        // The plugin is created with the activity, which is about to be shown.
+        NativeAudioRuntime.setAppVisible(true)
     }
 
+    private val context: Context get() = activity.applicationContext
+
+    /** Run [action], then resolve with the player's state, or reject with [name]'s failure. */
+    private fun respond(invoke: Invoke, name: String, action: () -> Unit) {
+        runCatching(action)
+            .onSuccess { invoke.resolve(toJsObject(NativeAudioRuntime.getState(context))) }
+            .onFailure { invoke.reject(it.message ?: "$name failed") }
+    }
+
+    /** Builds the player and the session. The app calls it before its first playback. */
     @Command
     fun initialize(invoke: Invoke) {
         requestNotificationPermission()
-        runCatching {
-            NativeAudioRuntime.initialize(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "initialize failed")
-        }
-    }
-
-    @Command
-    fun register_listener(invoke: Invoke) {
-        invoke.resolve()
-    }
-
-    @Command
-    fun remove_listener(invoke: Invoke) {
-        invoke.resolve()
-    }
-
-    @Command
-    fun setSource(invoke: Invoke) {
-        val args = invoke.parseArgs(SetSourceArgs::class.java)
-        val src = args.src?.trim().orEmpty()
-        if (src.isEmpty()) {
-            invoke.reject("src is required")
-            return
-        }
-
-        runCatching {
-            NativeAudioRuntime.setSource(activity.applicationContext, src, args.id, args.title, args.artist, args.artworkUrl)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "setSource failed")
-        }
+        respond(invoke, "initialize") { NativeAudioRuntime.initialize(context) }
     }
 
     @Command
@@ -1277,127 +1511,72 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
             invoke.reject("items is required")
             return
         }
-        runCatching {
-            NativeAudioRuntime.setQueue(activity.applicationContext, items, args.startIndex ?: 0)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "setQueue failed")
+        respond(invoke, "setQueue") { NativeAudioRuntime.setQueue(context, items, args.startIndex ?: 0) }
+    }
+
+    /** Jump within the loaded queue (see [NativeAudioRuntime.skipTo]). Rejects "stale queue". */
+    @Command
+    fun skipTo(invoke: Invoke) {
+        val args = invoke.parseArgs(SkipToArgs::class.java)
+        val index = args.index
+        if (index == null) {
+            invoke.reject("index is required")
+            return
         }
+        runCatching { NativeAudioRuntime.skipTo(context, index, args.positionSec ?: 0.0, args.queueGeneration) }
+            .onSuccess { ok ->
+                if (ok) invoke.resolve(toJsObject(NativeAudioRuntime.getState(context))) else invoke.reject("stale queue")
+            }
+            .onFailure { invoke.reject(it.message ?: "skipTo failed") }
     }
 
     @Command
-    fun next(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.next(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "next failed")
-        }
-    }
+    fun next(invoke: Invoke) = respond(invoke, "next") { NativeAudioRuntime.next(context) }
 
     @Command
-    fun previous(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.previous(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "previous failed")
-        }
-    }
+    fun previous(invoke: Invoke) = respond(invoke, "previous") { NativeAudioRuntime.previous(context) }
 
     @Command
-    fun play(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.play(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "play failed")
-        }
-    }
+    fun play(invoke: Invoke) = respond(invoke, "play") { NativeAudioRuntime.play(context) }
 
     @Command
-    fun pause(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.pause(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "pause failed")
-        }
-    }
+    fun pause(invoke: Invoke) = respond(invoke, "pause") { NativeAudioRuntime.pause(context) }
+
+    /** Unload the queue and let the service go (the app's ✕). */
+    @Command
+    fun stop(invoke: Invoke) = respond(invoke, "stop") { NativeAudioRuntime.stop(context) }
 
     @Command
     fun seekTo(invoke: Invoke) {
-        val args = invoke.parseArgs(SeekToArgs::class.java)
-        val position = args.position
+        val position = invoke.parseArgs(SeekToArgs::class.java).position
         if (position == null || !position.isFinite()) {
             invoke.reject("position is required")
             return
         }
-
-        runCatching {
-            NativeAudioRuntime.seekTo(activity.applicationContext, position)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "seekTo failed")
-        }
+        respond(invoke, "seekTo") { NativeAudioRuntime.seekTo(context, position) }
     }
 
     @Command
     fun setRate(invoke: Invoke) {
-        val args = invoke.parseArgs(SetRateArgs::class.java)
-        val rate = args.rate
+        val rate = invoke.parseArgs(SetRateArgs::class.java).rate
         if (rate == null || !rate.isFinite() || rate <= 0) {
             invoke.reject("rate must be > 0")
             return
         }
+        respond(invoke, "setRate") { NativeAudioRuntime.setRate(context, rate) }
+    }
 
-        runCatching {
-            NativeAudioRuntime.setRate(activity.applicationContext, rate)
-        }.onSuccess {
-            invoke.resolve(toJsObject(NativeAudioRuntime.getState(activity.applicationContext)))
-        }.onFailure {
-            invoke.reject(it.message ?: "setRate failed")
+    /** Start, replace or (no arguments) cancel the sleep timer (see [NativeAudioRuntime.setSleepTimer]). */
+    @Command
+    fun setSleepTimer(invoke: Invoke) {
+        val args = invoke.parseArgs(SetSleepTimerArgs::class.java)
+        respond(invoke, "setSleepTimer") {
+            NativeAudioRuntime.setSleepTimer(context, args.atEpochMs, args.endOfItem == true, args.endOfGroup == true)
         }
     }
 
     @Command
-    fun getState(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.getState(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(toJsObject(it))
-        }.onFailure {
-            invoke.reject(it.message ?: "getState failed")
-        }
-    }
-
-    @Command
-    fun getProgressCheckpoint(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.getProgressCheckpoint(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve(it?.let { checkpoint -> toJsObject(checkpoint) })
-        }.onFailure {
-            invoke.reject(it.message ?: "getProgressCheckpoint failed")
-        }
-    }
-
-    @Command
-    fun clearProgressCheckpoint(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.clearProgressCheckpoint(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve()
-        }.onFailure {
-            invoke.reject(it.message ?: "clearProgressCheckpoint failed")
-        }
-    }
+    fun getState(invoke: Invoke) = respond(invoke, "getState") {}
 
     /** Android Auto: the app's snapshot of today's reading, devotional audio and narrator. */
     @Command
@@ -1407,40 +1586,44 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
             invoke.reject("json is required")
             return
         }
-        runCatching { NativeAudioRuntime.setCarSnapshot(activity.applicationContext, json) }
+        runCatching { NativeAudioRuntime.setCarSnapshot(context, json) }
             .onSuccess { ok -> if (ok) invoke.resolve() else invoke.reject("snapshot is not valid JSON") }
             .onFailure { invoke.reject(it.message ?: "setCarSnapshot failed") }
     }
 
-    /** Plan chapters and devotionals heard to the end, oldest first, whatever loaded the queue
-     *  (the "car" in the name is historical). Kept until acknowledged. */
+    /** Plan chapters and devotionals heard to the end, oldest first, whatever loaded the
+     *  queue. Kept until acknowledged with [ackCompletions]. */
     @Command
-    fun takeCarCompletions(invoke: Invoke) {
-        runCatching { NativeAudioRuntime.carCompletions(activity.applicationContext) }
-            .onSuccess { items ->
-                val payload = JSObject()
-                payload.put("items", items)
-                invoke.resolve(payload)
-            }
-            .onFailure { invoke.reject(it.message ?: "takeCarCompletions failed") }
+    fun takeCompletions(invoke: Invoke) {
+        runCatching { NativeAudioRuntime.completions(context) }
+            .onSuccess { items -> invoke.resolve(JSObject().apply { put("items", items) }) }
+            .onFailure { invoke.reject(it.message ?: "takeCompletions failed") }
     }
 
     @Command
-    fun ackCarCompletions(invoke: Invoke) {
+    fun ackCompletions(invoke: Invoke) {
         val upTo = invoke.parseArgs(AckCompletionsArgs::class.java).upTo
         if (upTo == null) {
             invoke.reject("upTo is required")
             return
         }
-        runCatching { NativeAudioRuntime.ackCarCompletions(activity.applicationContext, upTo) }
+        runCatching { NativeAudioRuntime.ackCompletions(context, upTo) }
             .onSuccess { invoke.resolve() }
-            .onFailure { invoke.reject(it.message ?: "ackCarCompletions failed") }
+            .onFailure { invoke.reject(it.message ?: "ackCompletions failed") }
     }
 
-    /** The loaded queue with each item's chapter and plan position (to adopt a car-started queue). */
+    /** The v0.4.0 name of [takeCompletions]. Kept for one release; remove in v0.5. */
+    @Command
+    fun takeCarCompletions(invoke: Invoke) = takeCompletions(invoke)
+
+    /** The v0.4.0 name of [ackCompletions]. Kept for one release; remove in v0.5. */
+    @Command
+    fun ackCarCompletions(invoke: Invoke) = ackCompletions(invoke)
+
+    /** The loaded queue with each item's chapter and plan position (to adopt an external queue). */
     @Command
     fun getQueue(invoke: Invoke) {
-        runCatching { NativeAudioRuntime.queueItems(activity.applicationContext) }
+        runCatching { NativeAudioRuntime.queueItems(context) }
             .onSuccess { invoke.resolve(JSObject(it.toString())) }
             .onFailure { invoke.reject(it.message ?: "getQueue failed") }
     }
@@ -1453,19 +1636,21 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve(payload)
     }
 
-    @Command
-    fun dispose(invoke: Invoke) {
-        runCatching {
-            NativeAudioRuntime.dispose(activity.applicationContext)
-        }.onSuccess {
-            invoke.resolve()
-        }.onFailure {
-            invoke.reject(it.message ?: "dispose failed")
-        }
+    override fun onResume() {
+        NativeAudioRuntime.setAppVisible(true)
+        super.onResume()
+    }
+
+    override fun onStop() {
+        NativeAudioRuntime.setAppVisible(false)
+        super.onStop()
     }
 
     override fun onDestroy() {
-        if (activeInstance === this) activeInstance = null
+        if (activeInstance === this) {
+            activeInstance = null
+            NativeAudioRuntime.setAppVisible(false)
+        }
         super.onDestroy()
     }
 
@@ -1500,16 +1685,18 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
         payload.put("queueOrigin", state.queueOrigin)
         payload.put("pendingCompletions", state.pendingCompletions)
         payload.put("finished", org.json.JSONArray(state.finished))
+        // Always present, so the app can tell "no timer" from an older plugin that has none.
+        payload.put(
+            "sleepTimer",
+            state.sleepTimer?.let { t ->
+                JSObject().apply {
+                    put("mode", t.mode)
+                    t.endsAtEpochMs?.let { put("endsAtEpochMs", it) }
+                    t.remainingMs?.let { put("remainingMs", it) }
+                }
+            } ?: org.json.JSONObject.NULL,
+        )
         if (!state.error.isNullOrBlank()) payload.put("error", state.error)
-        return payload
-    }
-
-    private fun toJsObject(checkpoint: NativeAudioProgressCheckpoint): JSObject {
-        val payload = JSObject()
-        payload.put("id", checkpoint.id)
-        payload.put("currentTime", checkpoint.currentTime)
-        payload.put("updatedAtMs", checkpoint.updatedAtMs)
-        if (!checkpoint.status.isNullOrBlank()) payload.put("status", checkpoint.status)
         return payload
     }
 

@@ -11,30 +11,48 @@ and — the heart of it — an **answered-prayer log you can look back on**.
 - **Tauri 2** (Rust shell) · **Vite + React 18 + TypeScript** · **Tailwind + Radix** primitives.
 - **State:** Zustand for UI (`src/store/ui.ts`) — the ONLY UI store. Never add a second state system.
 - **Data:** Dexie/IndexedDB for user data (`src/db/`) behind a repository seam; static per-book JSON
-  for scripture (`public/bible/bsb/`, `src/data/bible.ts`). No backend, no auth, no cloud in v1.
+  for scripture (`public/bible/bsb/`, `src/data/bible.ts`).
+- **Sync (optional, shipped):** an account on the hosted or a self-hosted server
+  (`deploy/sync-server/`) syncs the Dexie tables by delta sync (`src/db/sync.ts`). A Dexie
+  middleware (`src/db/syncTracking.ts`) stamps and queues every write; what syncs is listed in
+  `src/db/syncSchema.ts`; UI preferences that follow the account go through
+  `src/store/syncedPrefs.ts`. Journal, prayers and notes can be end-to-end encrypted
+  (`src/db/crypto.ts`). Test with `pnpm test:sync` and `pnpm test:sync-server`; client changes
+  must keep working with the server version in production (the tests run against v0.4.0's
+  server too).
 - **Verse identity:** OSIS + BBCCCVVV everywhere (`src/lib/osis.ts`).
 
 ## Ground rules
 1. Ship the emotional core (prayer, warm reader) before anything clever.
 2. One stack, one state system, one data source. No pivots.
 3. Real data end-to-end — never mock verses.
-4. Offline-first, local-first. Sync/accounts are a deliberate *later* decision.
+4. Offline-first, local-first. Everything works without an account; sync is opt-in.
 5. Keep it warm and uncluttered (amber, Merriweather scripture, whitespace).
 
 ## Commands
 - `pnpm dev` — run in a browser (fast iteration).
 - `pnpm tauri:dev` — run as the desktop app.
 - `pnpm build` — typecheck + production build.
+- `pnpm lint` / `pnpm test` — ESLint, and every `scripts/test-*.mjs` + plan checks. CI (`ci.yml`)
+  runs typecheck, lint, test and build on every PR.
 - `pnpm fetch:bible` — re-download BSB from the HelloAO API into `public/bible/bsb/`.
 - `cd src-tauri && cargo check` — validate the Rust shell.
 
 ## Layout
-- `src/pages/` — Dashboard, Bible, Prayers, Journal, Settings (routes in `src/main.tsx`, HashRouter).
-- `src/components/bible/` — Reader, ChapterPicker, CommentaryRail, CaptureDialog.
-- `src/components/ui.tsx` — the small primitive set (Button/Card/Dialog/Popover/…).
-- `src/data/` — `bible.ts` (scripture), `commentary.ts` (pluggable commentary sources).
-- `scripts/fetch-bible.mjs` — the scripture ingestion pipeline.
+- `src/pages/` — one file per route; routes (lazy-loaded) in `src/main.tsx`, HashRouter.
+- `src/components/` — by feature (`bible/`, `journal/`, `audio/`, `settings/`, …); `ui.tsx` is the
+  small primitive set (Button/Card/Dialog/Popover/…).
+- `src/data/` — static content loaders: scripture, commentary, Strong's/cross-refs (`study.ts`), plans.
+- `src/db/` — Dexie schema, repositories, sync + E2E crypto. `src/store/` — Zustand UI store.
+- `src/audio/` — narration queue/engine (played in Rust on desktop, a native playlist on Android,
+  Android Auto's snapshot in `carSnapshot.ts`, chapters finished natively in `nativeCompletions.ts`).
+- `src/ai/` — the optional study companion's provider client (loaded on demand).
+- `src/lib/` — small shared helpers (OSIS, dates, reminders, `htmlToText`, …).
+- `src-tauri/plugins/` — our own Tauri plugins: `native-audio` (vendored fork), `reminders`,
+  `device-tts`, `all-files`.
+- `scripts/` — data ingestion (`fetch-bible`, `build-*`) and the `test-*.mjs` tests.
+- Only the journal may import the Tiptap editor (ESLint enforces it) — it's the biggest dependency.
 
-## Roadmap (see brief §9)
-SQLite swap → Strong's + cross-refs → Matt's own commentary corpus (from `~/dev/commentary-parser`)
-→ reading plans + devotionals → local `sqlite-vec` AI study companion → optional sync.
+## Roadmap
+See `docs/ROADMAP.md` (shipped, next, decided against) and `docs/HANDOFF.md` (current state and
+open issues). Read both before starting new work.

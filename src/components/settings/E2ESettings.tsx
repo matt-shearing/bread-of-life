@@ -6,6 +6,8 @@ import {
   disableE2E,
   restoreE2E,
   getRecoveryPhrase,
+  onE2EStatusChange,
+  type E2EStatus,
 } from "@/db/sync";
 import {
   Button,
@@ -21,7 +23,7 @@ import {
 } from "@/components/ui";
 
 export function E2ESettings() {
-  const [status, setStatus] = useState<{ enabled: boolean; needsKey: boolean }>({ enabled: false, needsKey: false });
+  const [status, setStatus] = useState<E2EStatus>({ enabled: false, needsKey: false, keyMismatch: false, accountEncrypted: false });
   const [phrase, setPhrase] = useState<string | null>(null); // shown in the reveal dialog
   const [confirming, setConfirming] = useState(false); // enable confirmation
   const [restoreOpen, setRestoreOpen] = useState(false);
@@ -29,19 +31,29 @@ export function E2ESettings() {
   const [restoreErr, setRestoreErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const refresh = () => setStatus(getE2EStatus());
+  const refresh = () => void getE2EStatus().then(setStatus);
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 3000);
-    return () => clearInterval(t);
+    const off = onE2EStatusChange(refresh);
+    return () => {
+      clearInterval(t);
+      off();
+    };
   }, []);
 
   async function doEnable() {
     setBusy(true);
     try {
-      const p = await enableE2E();
+      const r = await enableE2E();
       setConfirming(false);
-      setPhrase(p);
+      if (r.ok) setPhrase(r.phrase);
+      else {
+        // The account already encrypts on another device: a second key would leave each
+        // device unable to read the other's entries. Ask for the existing phrase instead.
+        setRestoreErr("This account already uses encryption. Enter the recovery phrase from the device where you turned it on.");
+        setRestoreOpen(true);
+      }
       refresh();
     } finally {
       setBusy(false);
@@ -57,9 +69,13 @@ export function E2ESettings() {
     setRestoreErr(null);
     setBusy(true);
     try {
-      const ok = await restoreE2E(restoreText.trim());
-      if (!ok) {
+      const result = await restoreE2E(restoreText.trim());
+      if (result === "invalid") {
         setRestoreErr("That doesn't look like a valid 24-word recovery phrase. Check the words and spacing.");
+        return;
+      }
+      if (result === "mismatch") {
+        setRestoreErr("That is a valid phrase, but it belongs to a different key from this account's. Check that it is the phrase for this account.");
         return;
       }
       setRestoreOpen(false);
@@ -74,15 +90,28 @@ export function E2ESettings() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Lock style={{ width: 16, height: 16 }} /> End-to-end encryption
+          <Lock size={16} /> End-to-end encryption
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {status.needsKey && (
+        {status.keyMismatch && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
-            <TriangleAlert style={{ width: 16, height: 16 }} className="mt-0.5 shrink-0 text-amber-600" />
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-amber-600" />
             <div>
-              Some synced entries are locked on this device. Enter your recovery phrase to unlock them.
+              This device's key doesn't match the one your account uses, so entries from your other devices can't be
+              read here. Enter the recovery phrase from the device where you first turned on encryption.
+              <button className="ml-1 font-semibold underline" onClick={() => setRestoreOpen(true)}>
+                Enter phrase
+              </button>
+            </div>
+          </div>
+        )}
+        {status.needsKey && !status.keyMismatch && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-amber-600" />
+            <div>
+              Your account encrypts its journal, prayers and notes, and this device doesn't have the key yet. Entries from
+              your other devices stay locked, and changes made here wait, until you enter your recovery phrase.
               <button className="ml-1 font-semibold underline" onClick={() => setRestoreOpen(true)}>
                 Restore now
               </button>
@@ -93,15 +122,23 @@ export function E2ESettings() {
         {status.enabled ? (
           <>
             <div className="flex items-center gap-2 text-sm text-success">
-              <ShieldCheck style={{ width: 16, height: 16 }} />
+              <ShieldCheck size={16} />
               Your journal, prayers and notes are encrypted before they sync. The server can’t read them.
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={doReveal}>
-                <KeyRound style={{ width: 15, height: 15 }} /> Show recovery phrase
+                <KeyRound size={15} /> Show recovery phrase
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => { disableE2E(); refresh(); }}>
-                Turn off on this device
+              <Button
+                variant="ghost"
+                size="sm"
+                title="Your journal, prayers and notes stay on this device. Changes to them stop syncing until you enter the recovery phrase again."
+                onClick={() => {
+                  disableE2E();
+                  refresh();
+                }}
+              >
+                Forget the key on this device
               </Button>
             </div>
           </>
@@ -114,11 +151,13 @@ export function E2ESettings() {
               normally.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => setConfirming(true)}>
-                <Lock style={{ width: 15, height: 15 }} /> Turn on encryption
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setRestoreOpen(true)}>
-                Restore from recovery phrase
+              {!status.accountEncrypted && (
+                <Button size="sm" onClick={() => setConfirming(true)}>
+                  <Lock size={15} /> Turn on encryption
+                </Button>
+              )}
+              <Button variant={status.accountEncrypted ? "primary" : "outline"} size="sm" onClick={() => setRestoreOpen(true)}>
+                Enter recovery phrase
               </Button>
             </div>
           </>
@@ -173,7 +212,15 @@ export function E2ESettings() {
       </Dialog>
 
       {/* Restore */}
-      <Dialog open={restoreOpen} onOpenChange={(o) => !o && setRestoreOpen(false)}>
+      <Dialog
+        open={restoreOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRestoreOpen(false);
+            setRestoreErr(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogTitle>Restore from recovery phrase</DialogTitle>
           <DialogDescription>
@@ -181,6 +228,7 @@ export function E2ESettings() {
             will unlock and decrypt on this device.
           </DialogDescription>
           <Textarea
+            aria-label="Recovery phrase"
             value={restoreText}
             onChange={(e) => setRestoreText(e.target.value)}
             placeholder="word1 word2 word3 …"

@@ -1,20 +1,30 @@
 /**
  * The playback ENGINE seam. The audio controller owns the queue, auto-advance, mark-read
- * and mini-player state; the engine only knows how to play ONE track and report progress.
+ * and mini-player state; an engine plays and reports progress. Three engines:
  *
- * - `Html5Engine` (this file) plays via an `Audio()` element — the default for the browser
- *   and for macOS/Windows Tauri. OS transport controls come from the web Media Session
- *   (in the controller).
- * - `TauriDesktopEngine` plays through Rust instead, on Linux Tauri: WebKitGTK routes
+ * - `Html5Engine` plays one track at a time through an `Audio()` element: the browser, and
+ *   macOS/Windows Tauri, whose webviews play media in-process. OS transport controls come
+ *   from the web Media Session (in the controller).
+ * - `NativeEngine` (Android) hands the whole queue to the native audio plugin: Media3
+ *   ExoPlayer in a MediaLibraryService, which advances by itself in the background and owns
+ *   the lock screen, the notification, earphone buttons and Android Auto. See
+ *   `src/audio/nativeAudio.ts` and `docs/NATIVE-AUDIO.md`.
+ * - `TauriDesktopEngine` (Linux desktop) plays one track at a time in Rust: WebKitGTK routes
  *   `<audio>` through GStreamer and aborts the whole web process on a host without
  *   `gst-plugins-good`. See `src-tauri/src/desktop_audio.rs` and `docs/DESKTOP.md`.
- * - A future `NativeEngine` (Android/iOS) will implement this SAME interface on top of a
- *   native Media3 ExoPlayer + foreground MediaSessionService (e.g. tauri-plugin-native-audio),
- *   so true background playback + lock-screen controls come from the OS. It sets
- *   `usesWebMediaSession = false` so the controller skips the web Media Session there.
  *
- * Swapping engines is a drop-in: `selectEngine()` picks one; nothing else in the app changes.
+ * `selectEngine()` picks one; nothing else in the app changes.
  */
+import { isLinuxDesktop, isTauri, isTauriAndroid } from "@/lib/platform";
+import {
+  nativeAudio,
+  type NativeQueueItem,
+  type NativeSleepTimer,
+  type NativeSleepTimerArg,
+  type NativeSnapshot,
+} from "./nativeAudio";
+
+export type { NativeQueueItem, NativeSleepTimer, NativeSleepTimerArg } from "./nativeAudio";
 
 export interface EngineTrack {
   src: string;
@@ -23,26 +33,19 @@ export interface EngineTrack {
   artworkUrl?: string;
   /** Speech-engine tracks only: the words to say (see speechEngine.ts). */
   speech?: import("@/lib/devotionalSpeech").SpeechSegment[];
-  /** Native only: names the item for Android Auto's Recent / Continue listening and the
-   *  car's queue ("ch/JHN/3", or a plan track id; see nativeMediaId in queue.ts). */
+  /** Native only: names the item for Android Auto's Recent / Continue listening, the car's
+   *  queue and native completions ("ch/JHN/3", a plan track id, "dev/<id>"; see
+   *  nativeMediaId in controller.ts). */
   mediaId?: string;
   /** Native only: which of a plan day's readings this chapter belongs to ("Next reading"). */
   group?: number;
 }
 
-/** A queue item as the native player reports it (see the plugin's `get_queue`). */
-export interface NativeQueueItem {
-  mediaId: string;
-  src: string;
-  title: string;
-  subtitle: string;
-  ho?: string;
-  chapter?: number;
-  planId?: string;
-  planDay?: number;
-  planReadingIndex?: number;
-  readingGroup?: number;
-}
+/** A transport command from outside the app: the Linux desktop's media keys (MPRIS). */
+export type RemoteCommand =
+  | { action: "play" | "pause" | "toggle" | "next" | "previous" | "stop" }
+  | { action: "seek"; position: number }
+  | { action: "seekBy"; offset: number };
 
 export interface EngineHandlers {
   onTime?: (seconds: number) => void;
@@ -63,25 +66,35 @@ export interface EngineHandlers {
   onRate?: (rate: number) => void;
   /** Native only: plan chapters or devotionals native heard to the end are waiting to be recorded. */
   onPendingCompletions?: (count: number) => void;
+  /** A media key or desktop media widget asked for something (Linux desktop). */
+  onRemote?: (command: RemoteCommand) => void;
+  /** Native sleep timer only: the timer native runs changed (set, fired, cleared by a new
+   *  queue, or set from Android Auto's button). Null: no timer. */
+  onSleepTimer?: (timer: NativeSleepTimer | null) => void;
 }
 
 export interface AudioEngine {
   /** True if OS transport controls come from the web Media Session (Html5) rather than
-   *  natively from the engine itself (native plugin). */
+   *  natively from the engine itself (native plugin, Rust MPRIS). */
   readonly usesWebMediaSession: boolean;
   /** True if the engine plays a whole PLAYLIST natively (advances itself, even in the
-   *  background). When true the controller hands over the whole queue via loadQueue and
-   *  lets the engine drive next/prev; when false it drives one track at a time. */
+   *  background). When true the controller hands over the whole queue via `loadQueue` and
+   *  lets the engine drive next/prev/skip; when false it drives one track at a time and
+   *  the queue methods below are absent. */
   readonly supportsNativeQueue: boolean;
   handlers: EngineHandlers;
+  /** One-track engines: load this track (paused). */
   load(track: EngineTrack): void;
-  /** Native-queue engines only: load a whole playlist and start at startIndex. */
-  loadQueue(tracks: EngineTrack[], startIndex: number): void;
+  /** Native-queue engines only: load a whole playlist and play from startIndex. */
+  loadQueue?(tracks: EngineTrack[], startIndex: number): void;
+  /** Native-queue engines only: advance/rewind within the native playlist. */
+  queueNext?(): void;
+  queuePrev?(): void;
+  /** Native-queue engines only: jump to `index` of the loaded playlist and play. `tracks` is
+   *  the whole queue again, used only if native no longer holds the queue the app thinks. */
+  queueSkipTo?(index: number, tracks: EngineTrack[]): void;
   play(): void;
   pause(): void;
-  /** Native-queue engines only: advance/rewind within the native playlist. */
-  queueNext(): void;
-  queuePrev(): void;
   seekTo(seconds: number): void;
   /** True if `setRate` works on this engine. Optional so engines without it need no stub. */
   readonly supportsRate?: boolean;
@@ -89,7 +102,14 @@ export interface AudioEngine {
   setRate?(rate: number): void;
   currentTime(): number;
   duration(): number;
+  /** Stop and forget the track (and, on native, the whole queue). */
   release(): void;
+  /** Output volume, 0–1: the sleep timer's fade. Engines without it pause without a fade. */
+  setVolume?(volume: number): void;
+  /** True if the engine runs the sleep timer itself (Android: in the playback service, which
+   *  keeps going while JS is frozen in the background). Otherwise the controller runs it. */
+  readonly supportsNativeSleepTimer?: boolean;
+  setSleepTimer?(timer: NativeSleepTimerArg | null): void;
 }
 
 /** HTML5 `<audio>` engine — the default (browser, and macOS/Windows Tauri, whose webviews
@@ -101,11 +121,6 @@ export class Html5Engine implements AudioEngine {
   handlers: EngineHandlers = {};
   private el: HTMLAudioElement | null = null;
   private rate = 1;
-
-  // Html5 plays one track at a time; the controller drives the queue, so these are no-ops.
-  loadQueue() {}
-  queueNext() {}
-  queuePrev() {}
 
   private audio(): HTMLAudioElement {
     if (this.el) return this.el;
@@ -151,6 +166,9 @@ export class Html5Engine implements AudioEngine {
     const a = this.audio();
     a.currentTime = Math.max(0, Math.min(seconds, a.duration || seconds));
   }
+  setVolume(volume: number) {
+    this.audio().volume = Math.max(0, Math.min(1, volume));
+  }
   currentTime() {
     return this.el?.currentTime ?? 0;
   }
@@ -167,62 +185,72 @@ export class Html5Engine implements AudioEngine {
 }
 
 /**
- * Native mobile engine — plays through `tauri-plugin-native-audio` (Media3 ExoPlayer +
- * a foreground MediaSessionService on Android), so audio keeps going when the app is
- * backgrounded/closed and the OS shows lock-screen controls. The plugin owns the OS
- * controls, so `usesWebMediaSession = false`. The plugin API is DYNAMICALLY imported so
- * it's a separate chunk that never loads on desktop/browser.
+ * Android engine — the native audio plugin (Media3 ExoPlayer + a MediaLibraryService), so
+ * audio keeps going when the app is backgrounded or closed and the OS shows lock-screen
+ * controls. The plugin owns the OS controls, so `usesWebMediaSession = false`.
+ *
+ * Nothing native is built until the first playback: the constructor only listens for state
+ * events and asks once whether something already plays (the car, or the service outliving
+ * an earlier app session), neither of which creates the player or asks for the notification
+ * permission. `initialize` (player, session, permission prompt) runs on the first play.
  */
 class NativeEngine implements AudioEngine {
   readonly usesWebMediaSession = false;
   readonly supportsNativeQueue = true;
   readonly supportsRate = true;
+  readonly supportsNativeSleepTimer = true;
   handlers: EngineHandlers = {};
-  private api: typeof import("tauri-plugin-native-audio-api") | null = null;
-  private invoke: typeof import("@tauri-apps/api/core").invoke | null = null;
-  private ready: Promise<void>;
+  /** The sleep timer last passed on, as a comparable key ("" = none). */
+  private sleepKey = "";
+  /** `set_sleep_timer` calls in flight: until the reply, events captured before the command
+   *  landed would undo the timer the controller shows, so their timer is not passed on. */
+  private sleepPending = 0;
+  /** The state listener is registered. */
+  private listening: Promise<boolean>;
+  /** `initialize` has run (created on the first playback command). */
+  private initialized: Promise<boolean> | null = null;
   private cur = 0;
   private dur = 0;
+  private loading = false;
   private idx = 0;
   private wasPlaying = false;
   private ended = false;
   /** Native capture time (ms, monotonic) of the newest state applied. */
   private lastCapturedAt = -1;
-  /**
-   * Bumped by every `loadQueue`. While a `set_queue` is in flight, state events are
-   * ignored: ticks native captured before the new playlist landed still carry the OLD
-   * index, and taking them as "the player advanced" marked skipped chapters read (a jump
-   * back) or flicked the mini-player to the old chapter (a jump forward). The command's
-   * own reply, a snapshot taken after the switch, is applied when it resolves.
-   */
-  private queueGen = 0;
-  private queueSwitching = false;
   /** Native's queue generation last seen, and whether we are fetching a queue to adopt. */
   private seenNativeGen = -1;
   private adopting = false;
+  /**
+   * Events from queue generations older than this are ignored. `loadQueue` sets it past the
+   * generation it replaces: ticks native captured before `set_queue` landed still carry the
+   * old queue's index, and taking one as "the player advanced" marked skipped chapters read
+   * or flicked the mini-player to the old chapter.
+   */
+  private minGen = 0;
+  /** While a `skip_to` is in flight, the index it goes to. Events still showing another index
+   *  were captured before the skip; the command's own reply (or the first event at the
+   *  target) ends the wait, so nothing needs a timer. */
+  private pendingIndex: number | null = null;
+  /** The app has a queue loaded in native (false before the first play and after stop). */
+  private hasQueue = false;
+  /** Bumped by every loadQueue, so a superseded set_queue's reply is ignored. */
+  private loadSeq = 0;
   private rate = 1;
   /** Length of native's `finished` list last passed on (it only grows within a queue). */
   private finishedSeen = -1;
 
   constructor() {
-    this.ready = (async () => {
-      const [api, core] = await Promise.all([
-        import("tauri-plugin-native-audio-api"),
-        import("@tauri-apps/api/core"),
-      ]);
-      await api.initialize();
-      await api.addStateListener((s) => this.onState(s));
-      this.invoke = core.invoke;
-      this.api = api;
-    })().catch(() => {
-      /* plugin unavailable — leave api null; calls no-op */
-    });
+    this.listening = nativeAudio
+      .onState((s) => this.onState(s))
+      .then(() => true)
+      .catch(() => false); // plugin unavailable: every call no-ops
     // The app may start while the car (or an earlier app session) is already playing:
     // take native's state once, so a queue started without us is adopted.
     this.resync();
     // The player keeps going while the WebView is frozen in the background, and it can be
     // paused or resumed from earphones, the lock screen or the notification without JS
-    // hearing about it in time. When the app comes back, take native's word for everything.
+    // hearing about it (native sends no timed events while the app is not visible). When
+    // the app comes back, take native's word for everything.
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") this.resync();
@@ -230,12 +258,26 @@ class NativeEngine implements AudioEngine {
     }
   }
 
+  /** Build the native player on first use (see the class comment). */
+  private ready(): Promise<boolean> {
+    this.initialized ??= this.listening.then(async (ok) => {
+      if (!ok) return false;
+      try {
+        await nativeAudio.initialize();
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return this.initialized;
+  }
+
   /** Replace what JS believes with the native player's current snapshot. */
   resync() {
-    void this.ready.then(async () => {
-      if (!this.api) return;
+    void this.listening.then(async (ok) => {
+      if (!ok) return;
       try {
-        this.onState(await this.api.getState(), true);
+        this.onState(await nativeAudio.getState(), true);
       } catch {
         /* keep the last known state */
       }
@@ -243,7 +285,6 @@ class NativeEngine implements AudioEngine {
   }
 
   private onState(s: NativeSnapshot, authoritative = false) {
-    if (this.queueSwitching) return;
     // Events queued while the WebView was frozen can arrive after a fresher snapshot;
     // anything captured earlier than what we already applied is stale.
     if (typeof s.capturedAtMs === "number") {
@@ -257,31 +298,52 @@ class NativeEngine implements AudioEngine {
       this.rate = s.rate;
       this.handlers.onRate?.(s.rate);
     }
+    const gen = typeof s.queueGeneration === "number" ? s.queueGeneration : null;
+    if (gen !== null && gen < this.minGen) return; // from a queue the app has replaced
     // A queue the app did not load: the car started one, or the app has just started and
     // native was already playing. Its indexes mean nothing against our queue, so adopt it
     // before anything is taken as "the player advanced" (which marks chapters read).
-    if (typeof s.queueGeneration === "number" && s.queueGeneration !== this.seenNativeGen) {
+    if (gen !== null && gen !== this.seenNativeGen) {
       const firstLook = this.seenNativeGen < 0;
-      this.seenNativeGen = s.queueGeneration;
-      if (s.queueOrigin === "car" || (firstLook && this.queueGen === 0 && s.queueGeneration > 0)) {
+      this.seenNativeGen = gen;
+      const external = s.queueOrigin === "external" || s.queueOrigin === "car";
+      if (external || (firstLook && !this.hasQueue && gen > 0)) {
         this.adopting = true;
-        void this.adoptNativeQueue(s.queueGeneration);
+        this.hasQueue = true;
+        void this.adoptNativeQueue(gen);
       }
+    }
+    // Nothing of ours is loaded (before the first play, or after stop): native's state
+    // belongs to no queue the app shows.
+    if (!this.hasQueue) return;
+    if (this.pendingIndex !== null) {
+      if (s.index !== this.pendingIndex) return; // captured before the skip landed
+      this.pendingIndex = null;
     }
     if (this.adopting) {
       // Keep time and play state live; the index is applied with the adopted queue.
       if (typeof s.index === "number") this.idx = s.index;
       this.ended = s.status === "ended";
     }
-    this.cur = s.currentTime;
-    if (s.duration) this.dur = s.duration;
-    this.handlers.onTime?.(s.currentTime);
-    if (s.duration) this.handlers.onDuration?.(s.duration);
-    this.handlers.onLoading?.(s.buffering || s.status === "loading");
+    // Only what changed goes on: most ticks move the time and nothing else.
+    if (s.currentTime !== this.cur) {
+      this.cur = s.currentTime;
+      this.handlers.onTime?.(s.currentTime);
+    }
+    if (s.duration && s.duration !== this.dur) {
+      this.dur = s.duration;
+      this.handlers.onDuration?.(s.duration);
+    }
+    const loading = s.buffering || s.status === "loading";
+    if (loading !== this.loading || authoritative) {
+      this.loading = loading;
+      this.handlers.onLoading?.(loading);
+    }
     if (authoritative || s.isPlaying !== this.wasPlaying) {
       this.wasPlaying = s.isPlaying;
       (s.isPlaying ? this.handlers.onPlay : this.handlers.onPause)?.();
     }
+    this.applySleepTimer(s);
     if (this.adopting) return;
     // Chapters heard to their end, before the index moves on, so they are marked in order.
     if (Array.isArray(s.finished) && s.finished.length !== this.finishedSeen) {
@@ -302,17 +364,45 @@ class NativeEngine implements AudioEngine {
     }
   }
 
+  /** Pass native's sleep timer on when it changed (not on every tick). */
+  private applySleepTimer(s: NativeSnapshot, force = false) {
+    if (!("sleepTimer" in s) || (this.sleepPending > 0 && !force)) return;
+    const t = s.sleepTimer ?? null;
+    const key = t ? `${t.mode}:${t.mode === "time" ? (t.endsAtEpochMs ?? "") : ""}` : "";
+    if (key === this.sleepKey && !force) return;
+    this.sleepKey = key;
+    this.handlers.onSleepTimer?.(t);
+  }
+
+  setSleepTimer(timer: NativeSleepTimerArg | null) {
+    if (!this.hasQueue) return;
+    this.sleepPending++;
+    void this.ready().then(async (ok) => {
+      try {
+        if (!ok) return;
+        const snapshot = await nativeAudio.setSleepTimer(timer);
+        this.sleepPending--;
+        if (snapshot) this.applySleepTimer(snapshot, this.sleepPending === 0);
+      } catch {
+        this.sleepPending--;
+        // Native refused or failed: show what it runs now, not what was asked for.
+        this.sleepKey = "?";
+        this.resync();
+      } finally {
+        if (this.sleepPending < 0) this.sleepPending = 0;
+      }
+    });
+  }
+
   /** Fetch the native queue and hand it to the controller as its own. */
   private async adoptNativeQueue(gen: number) {
-    await this.ready;
     try {
-      const q = await this.invoke?.<{ items: NativeQueueItem[]; index: number; queueGeneration: number }>(
-        "plugin:native-audio|get_queue",
-      );
-      if (!q || gen !== this.seenNativeGen || this.queueSwitching) return; // superseded
+      const q = await nativeAudio.getQueue();
+      if (gen !== this.seenNativeGen || gen < this.minGen) return; // superseded
       this.idx = q.index;
       this.finishedSeen = -1;
       if (q.items.length) this.handlers.onExternalQueue?.(q.items, q.index);
+      else this.hasQueue = false;
     } catch {
       /* keep what we had */
     } finally {
@@ -320,90 +410,111 @@ class NativeEngine implements AudioEngine {
     }
   }
 
-  loadQueue(tracks: EngineTrack[], startIndex: number) {
+  private resetTrack(index: number) {
     this.cur = 0;
     this.dur = 0;
     this.ended = false;
-    this.idx = startIndex;
+    this.idx = index;
+  }
+
+  loadQueue(tracks: EngineTrack[], startIndex: number) {
+    this.resetTrack(startIndex);
     this.finishedSeen = -1;
-    const gen = ++this.queueGen;
-    this.queueSwitching = true;
-    const settle = (snapshot?: unknown) => {
-      if (gen !== this.queueGen) return; // a newer jump owns the player now
-      this.queueSwitching = false;
-      const s = snapshot as NativeSnapshot | null | undefined;
-      if (s && typeof s === "object" && typeof s.currentTime === "number") this.onState(s);
-    };
-    // Never go deaf for good if the command hangs: after a few seconds, listen again.
-    setTimeout(() => settle(), 5000);
-    void this.ready.then(async () => {
-      if (!this.invoke) return settle();
+    this.pendingIndex = null;
+    this.hasQueue = true;
+    this.adopting = false;
+    // Whatever native reports from the queue loaded so far is stale from here on.
+    if (this.seenNativeGen >= 0) this.minGen = Math.max(this.minGen, this.seenNativeGen + 1);
+    const seq = ++this.loadSeq;
+    void this.ready().then(async (ok) => {
+      if (!ok) return this.handlers.onPause?.();
       try {
-        const snapshot = await this.invoke<NativeSnapshot>("plugin:native-audio|set_queue", {
-          items: tracks.map((t) => {
-            const { src } = splitOffset(t.src);
-            return { src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl, mediaId: t.mediaId, group: t.group };
-          }),
+        const snapshot = await nativeAudio.setQueue(
+          tracks.map((t) => ({
+            src: splitOffset(t.src).src,
+            title: t.title,
+            artist: t.subtitle,
+            artworkUrl: t.artworkUrl,
+            mediaId: t.mediaId,
+            group: t.group,
+          })),
           startIndex,
-        });
-        if (snapshot && typeof snapshot.queueGeneration === "number") this.seenNativeGen = snapshot.queueGeneration;
-        settle(snapshot);
-        if (gen !== this.queueGen) return; // superseded: that jump plays its own queue
-        await this.api?.play();
-        // Missler chapters can start mid-file (#t= hint) — ExoPlayer ignores the
-        // fragment, so seek the start track ourselves.
+        );
+        if (seq !== this.loadSeq) return; // a newer queue owns the player now
+        if (typeof snapshot?.queueGeneration === "number") {
+          // Exactly the generation this queue got: anything older is stale.
+          this.minGen = Math.max(this.minGen, snapshot.queueGeneration);
+          this.seenNativeGen = snapshot.queueGeneration;
+        }
+        if (snapshot && typeof snapshot.currentTime === "number") this.onState(snapshot);
+        // Missler chapters can start mid-file (a #t= hint); ExoPlayer ignores the
+        // fragment, so the start track is played through skip_to with its offset.
         const off = splitOffset(tracks[startIndex]?.src ?? "").startSec;
-        if (off > 0) await this.api?.seekTo(off);
+        if (off > 0) await nativeAudio.skipTo(startIndex, off, this.seenNativeGen);
+        else await nativeAudio.play();
       } catch {
-        if (gen !== this.queueGen) return;
-        settle();
+        if (seq !== this.loadSeq) return;
+        this.handlers.onPause?.();
+      }
+    });
+  }
+
+  queueSkipTo(index: number, tracks: EngineTrack[]) {
+    if (!this.hasQueue || this.adopting) return this.loadQueue(tracks, index);
+    this.resetTrack(index);
+    this.pendingIndex = index;
+    const startSec = splitOffset(tracks[index]?.src ?? "").startSec;
+    const gen = this.seenNativeGen >= 0 ? this.seenNativeGen : undefined;
+    void this.ready().then(async (ok) => {
+      if (!ok) return;
+      try {
+        const snapshot = await nativeAudio.skipTo(index, startSec, gen);
+        if (this.pendingIndex === index) this.pendingIndex = null;
+        this.onState(snapshot);
+      } catch {
+        // Native no longer holds the queue the app shows (or the command failed): hand
+        // the whole queue over again, starting at the chosen track.
+        if (this.pendingIndex !== index) return; // a newer skip owns the player now
+        this.pendingIndex = null;
+        this.loadQueue(tracks, index);
+      }
+    });
+  }
+
+  // Every plugin call is awaited + caught, so a native error surfaces as "paused"
+  // instead of an unhandled rejection / crash (esp. during track transitions).
+  private run(fn: () => Promise<unknown>) {
+    void this.ready().then(async (ok) => {
+      if (!ok) return;
+      try {
+        await fn();
+      } catch {
         this.handlers.onPause?.();
       }
     });
   }
   queueNext() {
-    void this.ready.then(() => this.invoke?.("plugin:native-audio|next").catch(() => {}));
+    this.run(() => nativeAudio.next());
   }
   queuePrev() {
-    void this.ready.then(() => this.invoke?.("plugin:native-audio|previous").catch(() => {}));
+    this.run(() => nativeAudio.previous());
   }
-
-  // Every plugin call is awaited + caught, so a native error surfaces as "paused"
-  // instead of an unhandled rejection / crash (esp. during track transitions).
-  private run(fn: (api: NonNullable<NativeEngine["api"]>) => Promise<unknown>) {
-    void this.ready.then(async () => {
-      if (!this.api) return;
-      try {
-        await fn(this.api);
-      } catch {
-        this.handlers.onPause?.();
-      }
-    });
-  }
-  load(t: EngineTrack) {
-    this.cur = 0;
-    this.dur = 0;
-    this.ended = false;
-    const { src, startSec } = splitOffset(t.src);
-    this.run(async (api) => {
-      await api.setSource({ src, title: t.title, artist: t.subtitle, artworkUrl: t.artworkUrl });
-      if (startSec > 0) await api.seekTo(startSec);
-    });
-  }
+  /** Native holds the queue; a single-track load has no meaning here. */
+  load() {}
   play() {
-    this.run((api) => api.play());
+    this.run(() => nativeAudio.play());
   }
   pause() {
-    this.run((api) => api.pause());
+    this.run(() => nativeAudio.pause());
   }
   seekTo(seconds: number) {
     this.cur = seconds;
-    this.run((api) => api.seekTo(seconds));
+    this.run(() => nativeAudio.seekTo(seconds));
   }
   setRate(rate: number) {
     // ExoPlayer's speed belongs to the player, not the item, so it carries across the queue.
     this.rate = rate;
-    this.run((api) => api.setRate(rate));
+    this.run(() => nativeAudio.setRate(rate));
   }
   currentTime() {
     return this.cur;
@@ -411,28 +522,24 @@ class NativeEngine implements AudioEngine {
   duration() {
     return this.dur;
   }
+  /** The mini-player's ✕: unload the queue natively, not just pause it. */
   release() {
-    this.run((api) => api.pause());
+    const had = this.hasQueue;
+    this.hasQueue = false;
+    this.pendingIndex = null;
+    this.adopting = false;
+    this.resetTrack(0);
+    this.wasPlaying = false;
+    this.finishedSeen = -1;
+    this.sleepKey = ""; // native's stop clears its timer
+    // Whatever the old queue still reports is stale; stop moves native's generation on.
+    if (this.seenNativeGen >= 0) this.minGen = Math.max(this.minGen, this.seenNativeGen + 1);
+    this.loadSeq++;
+    if (!had) return;
+    // Also for a queue adopted from the car before the app ever played (no initialize).
+    void this.listening.then((ok) => (ok ? nativeAudio.stop() : undefined)).catch(() => {});
   }
 }
-
-/** The plugin's state event, plus the fields our vendored plugin adds to it. */
-type NativeSnapshot = import("tauri-plugin-native-audio-api").NativeAudioState & {
-  /** Position in the native playlist. */
-  index?: number;
-  /** When native took this snapshot (monotonic ms). Orders events against `getState`. */
-  capturedAtMs?: number;
-  /** Bumped by every queue change; with `queueOrigin`, tells the app of a car-started queue. */
-  queueGeneration?: number;
-  queueOrigin?: "app" | "car";
-  /** Plan chapters and devotionals native recorded as heard, waiting for the app
-   *  (take_car_completions). */
-  pendingCompletions?: number;
-  /** Indexes of the current queue that played to their natural end (Media3's AUTO
-   *  transitions and the end of the playlist); skips never add to it. Reset with each
-   *  queue generation. */
-  finished?: number[];
-};
 
 /** What `desktop_audio_state` reports (see `src-tauri/src/desktop_audio.rs`). */
 interface DesktopAudioState {
@@ -448,6 +555,11 @@ interface DesktopAudioState {
 
 type Invoke = typeof import("@tauri-apps/api/core").invoke;
 
+/** How often the Linux engine polls Rust while something plays or loads. */
+const DESKTOP_POLL_MS = 250;
+/** After a command, keep polling at least this long before concluding playback is idle. */
+const DESKTOP_POLL_GRACE_MS = 1500;
+
 /**
  * Linux desktop engine — playback happens in Rust (rodio → cpal → ALSA), never in the
  * webview. WebKitGTK plays an `<audio>` element through GStreamer, and a host without
@@ -457,46 +569,49 @@ type Invoke = typeof import("@tauri-apps/api/core").invoke;
  *
  * Rust holds one track at a time, so `supportsNativeQueue = false` and the controller
  * keeps driving the queue exactly as it does for HTML5. There is no state event to
- * subscribe to, so this polls `desktop_audio_state` every 250 ms — the rate an `<audio>`
- * element fires `timeupdate` at — and turns the diffs into `EngineHandlers` calls.
+ * subscribe to, so this polls `desktop_audio_state` every 250 ms while a track plays or
+ * loads (the rate an `<audio>` element fires `timeupdate` at), and not at all while it is
+ * paused or stopped.
  *
- * `usesWebMediaSession` stays true. What aborts is WebKit's *media pipeline*; the Media
- * Session API is plain JavaScript and goes nowhere near GStreamer, so leaving it on keeps
- * whatever OS transport controls the host offers and keeps the controller on one code
- * path with HTML5. It is already behind feature checks and try/catch there.
+ * `desktop_audio_load` returns at once and fetches in the background, and Rust drops a
+ * fetch a newer load has replaced, so pressing Next five times does not download four
+ * chapters first. A play sent while the track loads is remembered by Rust and applied
+ * when it is ready.
+ *
+ * OS media keys and the desktop's media widget come from Rust too (MPRIS on Linux), since
+ * WebKitGTK only publishes a Media Session for an `<audio>` element that plays: Rust sends
+ * `desktop-media-control` events, which become `onRemote`. So `usesWebMediaSession` is false.
  */
 class TauriDesktopEngine implements AudioEngine {
-  readonly usesWebMediaSession = true;
+  readonly usesWebMediaSession = false;
   readonly supportsNativeQueue = false;
   handlers: EngineHandlers = {};
 
   private invoke: Invoke | null = null;
   private ready: Promise<void>;
-  /** Commands run strictly in order: `load` may go to the network, and a `play` that
-   *  overtook it would land on the track we just replaced. */
+  /** Commands keep their order. Each returns at once (a load fetches in the background). */
   private chain: Promise<void> = Promise.resolve();
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
+  private pollUntil = 0;
   private cur = 0;
   private dur = 0;
   private wasPlaying = false;
   private wasLoading = false;
   private endedGeneration = -1;
   private errorGeneration = -1;
+  private remote: Promise<unknown> | null = null;
 
-  // One track at a time; the controller drives the queue, so these are no-ops.
-  loadQueue() {}
-  queueNext() {}
-  queuePrev() {}
-
-  constructor() {
-    this.ready = import("@tauri-apps/api/core")
-      .then(({ invoke }) => {
-        this.invoke = invoke;
-      })
-      .catch(() => {
-        /* not in Tauri after all — every call no-ops */
-      });
+  constructor(invoke?: Invoke) {
+    this.ready = invoke
+      ? Promise.resolve().then(() => void (this.invoke = invoke))
+      : import("@tauri-apps/api/core")
+          .then(({ invoke }) => {
+            this.invoke = invoke;
+          })
+          .catch(() => {
+            /* not in Tauri after all — every call no-ops */
+          });
   }
 
   private run(fn: (invoke: Invoke) => Promise<unknown>) {
@@ -513,13 +628,36 @@ class TauriDesktopEngine implements AudioEngine {
     });
   }
 
-  private startPolling() {
-    if (this.timer !== null) return;
-    this.timer = setInterval(() => void this.poll(), 250);
+  /** Media keys (MPRIS), subscribed on the first load. */
+  private listenForMediaKeys() {
+    this.remote ??= import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<{ action: string; position?: number; offset?: number }>("desktop-media-control", (e) => {
+          const { action, position, offset } = e.payload;
+          if (action === "seek" && typeof position === "number") this.handlers.onRemote?.({ action, position });
+          else if (action === "seekBy" && typeof offset === "number") this.handlers.onRemote?.({ action, offset });
+          else if (["play", "pause", "toggle", "next", "previous", "stop"].includes(action)) {
+            this.handlers.onRemote?.({ action } as RemoteCommand);
+          }
+        }),
+      )
+      .catch(() => null);
   }
 
-  /** Deliberately NOT on `chain` — a long download must not starve progress updates. */
-  private async poll() {
+  /** Poll while something plays or loads, and for a short while after any command. */
+  private keepPolling() {
+    this.pollUntil = Date.now() + DESKTOP_POLL_GRACE_MS;
+    if (this.timer !== null) return;
+    this.timer = setInterval(() => void this.poll(), DESKTOP_POLL_MS);
+  }
+
+  private stopPolling() {
+    if (this.timer !== null) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  /** Deliberately NOT on `chain`, so progress keeps coming whatever the commands do. */
+  async poll() {
     if (this.polling) return; // a slow reply must not let two polls answer out of order
     await this.ready;
     if (!this.invoke) return;
@@ -533,8 +671,10 @@ class TauriDesktopEngine implements AudioEngine {
       this.polling = false;
     }
 
-    this.cur = s.position;
-    this.handlers.onTime?.(s.position);
+    if (s.position !== this.cur) {
+      this.cur = s.position;
+      this.handlers.onTime?.(s.position);
+    }
     if (s.duration > 0 && s.duration !== this.dur) {
       this.dur = s.duration;
       this.handlers.onDuration?.(s.duration);
@@ -556,6 +696,8 @@ class TauriDesktopEngine implements AudioEngine {
       this.endedGeneration = s.generation;
       this.handlers.onEnded?.();
     }
+    // Paused, finished or failed: nothing will change until the next command.
+    if (!s.playing && !s.loading && Date.now() > this.pollUntil) this.stopPolling();
   }
 
   load(track: EngineTrack) {
@@ -567,19 +709,30 @@ class TauriDesktopEngine implements AudioEngine {
     this.wasPlaying = false;
     this.wasLoading = true;
     this.handlers.onLoading?.(true);
-    this.startPolling();
-    this.run((invoke) => invoke("desktop_audio_load", { url: src, startSec }));
+    this.listenForMediaKeys();
+    this.keepPolling();
+    this.run((invoke) =>
+      invoke("desktop_audio_load", { url: src, startSec, title: track.title, artist: track.subtitle }),
+    );
   }
   play() {
+    this.keepPolling();
     this.run((invoke) => invoke("desktop_audio_play"));
   }
   pause() {
+    this.keepPolling();
     this.run((invoke) => invoke("desktop_audio_pause"));
   }
   seekTo(seconds: number) {
     const position = Math.max(0, this.dur > 0 ? Math.min(seconds, this.dur) : seconds);
     this.cur = position;
+    this.keepPolling();
     this.run((invoke) => invoke("desktop_audio_seek", { position }));
+  }
+  /** Rust keeps the volume across tracks until it is set again. */
+  setVolume(volume: number) {
+    const v = Math.round(Math.max(0, Math.min(1, volume)) * 100) / 100;
+    this.run((invoke) => invoke("desktop_audio_volume", { volume: v }));
   }
   currentTime() {
     return this.cur;
@@ -588,10 +741,7 @@ class TauriDesktopEngine implements AudioEngine {
     return this.dur;
   }
   release() {
-    if (this.timer !== null) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    this.stopPolling();
     this.cur = 0;
     this.dur = 0;
     this.wasPlaying = false;
@@ -600,10 +750,10 @@ class TauriDesktopEngine implements AudioEngine {
   }
 }
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const isMobile = typeof navigator !== "undefined" && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-/** Linux desktop, i.e. a WebKitGTK webview. Android reports "Linux" too, hence !isMobile. */
-const isLinux = typeof navigator !== "undefined" && /linux/i.test(navigator.userAgent) && !isMobile;
+/** For scripts/test-audio-queue.mjs: the Linux engine over a stub `invoke`. */
+export function createDesktopEngineForTest(invoke: Invoke): AudioEngine & { poll(): Promise<void> } {
+  return new TauriDesktopEngine(invoke);
+}
 
 /** Split a trailing "#t=<seconds>" media-fragment start hint off a URI. The native
  *  ExoPlayer and the Rust desktop player both take the URI literally (unlike the HTML5
@@ -615,13 +765,13 @@ function splitOffset(src: string): { src: string; startSec: number } {
 
 /**
  * Pick the playback engine:
- * - mobile Tauri → `NativeEngine` (background playback, OS-owned transport controls);
+ * - the Android app → `NativeEngine` (background playback, OS-owned transport controls);
  * - Linux Tauri → `TauriDesktopEngine`, because WebKitGTK's `<audio>` can kill the webview;
  * - everything else (browser, macOS/Windows Tauri) → `Html5Engine`. WKWebView and WebView2
  *   play media in-process, with nothing to work around.
  */
 export function selectEngine(): AudioEngine {
-  if (isTauri && isMobile) return new NativeEngine();
-  if (isTauri && isLinux) return new TauriDesktopEngine();
+  if (isTauriAndroid) return new NativeEngine();
+  if (isTauri && isLinuxDesktop) return new TauriDesktopEngine();
   return new Html5Engine();
 }

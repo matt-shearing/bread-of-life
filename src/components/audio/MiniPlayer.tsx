@@ -1,13 +1,9 @@
 import { Headphones, Loader2, Pause, Play, SkipBack, SkipForward, X } from "lucide-react";
-import { useAudio, toggle, next, prev, stop, seekTo } from "@/audio/controller";
+import { useAudioSelector, toggle, next, prev, stop, seekTo } from "@/audio/controller";
+import { formatClock as fmt } from "@/lib/day";
 import { useOpenNowPlaying } from "./NowPlaying";
+import { SleepBadge } from "./SleepTimer";
 
-function fmt(s: number): string {
-  if (!Number.isFinite(s) || s < 0) s = 0;
-  const m = Math.floor(s / 60);
-  const ss = Math.floor(s % 60);
-  return `${m}:${String(ss).padStart(2, "0")}`;
-}
 
 /**
  * A small, persistent audio player bar shown across the app while narration plays —
@@ -15,14 +11,21 @@ function fmt(s: number): string {
  * drives the same playback the OS media controls do.
  */
 export function MiniPlayer() {
-  const { queue, index, playing, currentTime, duration, loading } = useAudio();
+  const { track, multi, position, playing, currentTime, duration, loading } = useAudioSelector((s) => ({
+    track: s.queue[s.index],
+    multi: s.queue.length > 1,
+    position: `${s.index + 1}/${s.queue.length}`,
+    playing: s.playing,
+    // Whole seconds: the bar and the clock move once a second, not on every update.
+    currentTime: Math.floor(s.currentTime),
+    duration: s.duration,
+    loading: s.loading,
+  }));
   const openNowPlaying = useOpenNowPlaying();
 
-  const track = queue[index];
   if (!track) return null;
 
   const pct = duration ? (currentTime / duration) * 100 : 0;
-  const multi = queue.length > 1;
 
   return (
     <div className="shrink-0 border-t border-border bg-card/95 backdrop-blur">
@@ -52,7 +55,8 @@ export function MiniPlayer() {
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
               <span className="truncate text-sm font-medium">{track.title}</span>
-              {multi && <span className="shrink-0 text-xs text-muted-foreground">{index + 1}/{queue.length}</span>}
+              {multi && <span className="shrink-0 text-xs text-muted-foreground">{position}</span>}
+              <SleepBadge />
             </span>
             <span className="block truncate text-xs text-muted-foreground">
               {track.subtitle} · {fmt(currentTime)} / {fmt(duration)}

@@ -56,7 +56,7 @@ class AndroidAutoTest {
         NativeAudioRuntime.playerFactory = { ctx ->
             TestExoPlayerBuilder(ctx).setMediaSourceFactory(FakeMediaSourceFactory()).build()
         }
-        CarStore(context).clearForTest()
+        PlaybackStore(context).clearForTest()
         NativeAudioRuntime.ensure(context)
     }
 
@@ -65,7 +65,7 @@ class AndroidAutoTest {
         browser?.release()
         browser = null
         NativeAudioRuntime.dispose(context)
-        CarStore(context).clearForTest()
+        PlaybackStore(context).clearForTest()
         ShadowLooper.idleMainLooper()
     }
 
@@ -111,7 +111,7 @@ class AndroidAutoTest {
         val three = chapters[2]
         assertEquals("ch/GEN/3", three.mediaId)
         assertEquals("Genesis 3", three.mediaMetadata.title.toString())
-        assertEquals(CarArtwork.chapterUri(context, "GEN", 3), three.mediaMetadata.artworkUri)
+        assertEquals(ArtworkTiles.chapterUri(context, "GEN", 3), three.mediaMetadata.artworkUri)
         assertTrue(three.mediaMetadata.isPlayable == true)
 
         // The car sends only the media id; the session works out the URL and the queue.
@@ -129,7 +129,7 @@ class AndroidAutoTest {
 
         // And the app, when it next looks, is told the queue came from outside it.
         val state = NativeAudioRuntime.getState(context)
-        assertEquals("car", state.queueOrigin)
+        assertEquals("external", state.queueOrigin)
     }
 
     @Test
@@ -255,7 +255,7 @@ class AndroidAutoTest {
     fun customButtons_reachTheSession() {
         NativeAudioRuntime.setCarSnapshot(context, snapshotJson())
         val b = connect()
-        assertEquals(listOf("Back 30 seconds", "Next reading", "Speed 1×"), b.customLayout.map { it.displayName.toString() })
+        assertEquals(listOf("Back 30 seconds", "Next reading", "Speed 1×", "Sleep timer"), b.customLayout.map { it.displayName.toString() })
 
         b.setMediaItem(MediaItem.Builder().setMediaId(MediaIds.TODAY_ALL).build())
         b.prepare()
@@ -264,24 +264,32 @@ class AndroidAutoTest {
         runMainLooperUntil { player.isPlaying && player.currentMediaItemIndex == 0 }
 
         // Next reading skips Genesis 1–2 (two chapters) to Matthew 1.
-        assertEquals(SessionResult.RESULT_SUCCESS, await(b.sendCustomCommand(SessionCommand(CarCommands.NEXT_READING, Bundle.EMPTY), Bundle.EMPTY)).resultCode)
+        assertEquals(SessionResult.RESULT_SUCCESS, await(b.sendCustomCommand(SessionCommand(SessionCommands.NEXT_READING, Bundle.EMPTY), Bundle.EMPTY)).resultCode)
         runMainLooperUntil { player.currentMediaItemIndex == 2 }
         assertTrue(player.currentMediaItem!!.mediaId.endsWith("/MAT/1"))
         // A skip, not listening: Genesis 1–2 are neither reported to the app nor recorded.
         ShadowLooper.idleMainLooper()
         assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
-        assertEquals(0, NativeAudioRuntime.carCompletions(context).length())
+        assertEquals(0, NativeAudioRuntime.completions(context).length())
 
         // Back 30 seconds.
         player.seekTo(100_000L)
         ShadowLooper.idleMainLooper()
-        await(b.sendCustomCommand(SessionCommand(CarCommands.BACK_30, Bundle.EMPTY), Bundle.EMPTY))
+        await(b.sendCustomCommand(SessionCommand(SessionCommands.BACK_30, Bundle.EMPTY), Bundle.EMPTY))
         assertTrue("position ${player.currentPosition}", player.currentPosition in 69_000L..72_000L)
 
         // Speed steps to 1.2×, and the button now says so.
-        await(b.sendCustomCommand(SessionCommand(CarCommands.SPEED, Bundle.EMPTY), Bundle.EMPTY))
+        await(b.sendCustomCommand(SessionCommand(SessionCommands.SPEED, Bundle.EMPTY), Bundle.EMPTY))
         assertEquals(1.2f, player.playbackParameters.speed, 0.001f)
         runMainLooperUntil { b.customLayout.any { it.displayName.toString() == "Speed 1.2×" } }
+
+        // The sleep timer steps off → 15 min → 30 min → end of chapter → off, and says so.
+        for ((label, mode) in listOf("Sleep: 15 min" to "time", "Sleep: 30 min" to "time", "Sleep: end of chapter" to "item", "Sleep timer" to null)) {
+            assertEquals(SessionResult.RESULT_SUCCESS, await(b.sendCustomCommand(SessionCommand(SessionCommands.SLEEP, Bundle.EMPTY), Bundle.EMPTY)).resultCode)
+            runMainLooperUntil { b.customLayout.any { it.displayName.toString() == label } }
+            assertEquals(label, mode, NativeAudioRuntime.getState(context).sleepTimer?.mode)
+        }
+        assertTrue("not paused: the car's button only sets the timer", player.playWhenReady)
     }
 
     @Test
@@ -298,7 +306,7 @@ class AndroidAutoTest {
         runMainLooperUntil { player.currentMediaItemIndex == 1 }
         assertEquals(listOf(0), NativeAudioRuntime.getState(context).finished)
 
-        val completions = NativeAudioRuntime.carCompletions(context)
+        val completions = NativeAudioRuntime.completions(context)
         assertEquals(1, completions.length())
         val c = completions.getJSONObject(0)
         assertEquals("plan", c.getString("kind"))
@@ -307,11 +315,11 @@ class AndroidAutoTest {
         assertEquals(0, c.getInt("planReadingIndex"))
         assertEquals(1, NativeAudioRuntime.getState(context).pendingCompletions)
         // The car's Today list ticks it straight away.
-        val track = CarStore(context).snapshot().today!!.tracks[0]
+        val track = PlaybackStore(context).snapshot().today!!.tracks[0]
         assertTrue(track.done)
 
-        NativeAudioRuntime.ackCarCompletions(context, c.getLong("seq"))
-        assertEquals(0, NativeAudioRuntime.carCompletions(context).length())
+        NativeAudioRuntime.ackCompletions(context, c.getLong("seq"))
+        assertEquals(0, NativeAudioRuntime.completions(context).length())
     }
 
     @Test
@@ -325,15 +333,15 @@ class AndroidAutoTest {
         assertEquals("app", NativeAudioRuntime.getState(context).queueOrigin)
         playToTheEndOfTheCurrentChapter(player)
         runMainLooperUntil { player.currentMediaItemIndex == 1 }
-        val completions = NativeAudioRuntime.carCompletions(context)
+        val completions = NativeAudioRuntime.completions(context)
         assertEquals(1, completions.length())
         assertEquals(0, completions.getJSONObject(0).getInt("planReadingIndex"))
         assertEquals(listOf(0), NativeAudioRuntime.getState(context).finished)
         assertEquals(1, NativeAudioRuntime.getState(context).pendingCompletions)
         // …and it still shows in Recent, with its tile.
-        val recent = CarStore(context).recent()
+        val recent = PlaybackStore(context).recent()
         assertEquals("ch/GEN/2", MediaIds.chapterOf(recent[0].mediaId)!!.let { (ho, c) -> MediaIds.chapter(ho, c) })
-        assertEquals(CarArtwork.chapterUri(context, "GEN", 1), player.getMediaItemAt(0).mediaMetadata.artworkUri)
+        assertEquals(ArtworkTiles.chapterUri(context, "GEN", 1), player.getMediaItemAt(0).mediaMetadata.artworkUri)
     }
 
     @Test
@@ -347,7 +355,7 @@ class AndroidAutoTest {
         b.play()
         val player = sessionPlayer()
         runMainLooperUntil { player.isPlaying }
-        assertEquals("car", NativeAudioRuntime.getState(context).queueOrigin)
+        assertEquals("external", NativeAudioRuntime.getState(context).queueOrigin)
 
         NativeAudioRuntime.setQueue(context, planItems(planId = "soul-food-max", day = 11), 1)
         NativeAudioRuntime.play(context)
@@ -358,7 +366,7 @@ class AndroidAutoTest {
         // Genesis 2 (the last item here) runs to its end.
         playToTheEndOfTheCurrentChapter(player)
         runMainLooperUntil { player.playbackState == Player.STATE_ENDED }
-        val completions = NativeAudioRuntime.carCompletions(context)
+        val completions = NativeAudioRuntime.completions(context)
         assertEquals(1, completions.length())
         assertEquals("soul-food-max", completions.getJSONObject(0).getString("planId"))
         assertEquals(1, completions.getJSONObject(0).getInt("planReadingIndex"))
@@ -377,7 +385,7 @@ class AndroidAutoTest {
         runMainLooperUntil { player.currentMediaItemIndex == 2 }
         ShadowLooper.idleMainLooper()
         assertEquals(emptyList<Int>(), NativeAudioRuntime.getState(context).finished)
-        assertEquals(0, NativeAudioRuntime.carCompletions(context).length())
+        assertEquals(0, NativeAudioRuntime.completions(context).length())
         // A chapter that then plays out is finished, under its own index.
         playToTheEndOfTheCurrentChapter(player)
         runMainLooperUntil { player.currentMediaItemIndex == 3 }
@@ -398,7 +406,7 @@ class AndroidAutoTest {
         runMainLooperUntil { player.isPlaying }
         playToTheEndOfTheCurrentChapter(player)
         runMainLooperUntil { player.playbackState == Player.STATE_ENDED }
-        val completions = NativeAudioRuntime.carCompletions(context)
+        val completions = NativeAudioRuntime.completions(context)
         assertEquals(1, completions.length())
         val c = completions.getJSONObject(0)
         assertEquals("devotional", c.getString("kind"))
@@ -438,7 +446,7 @@ class AndroidAutoTest {
         b.prepare()
         runMainLooperUntil { sessionPlayer().mediaItemCount == 3 }
         val q = NativeAudioRuntime.queueItems(context)
-        assertEquals("car", q.getString("queueOrigin"))
+        assertEquals("external", q.getString("queueOrigin"))
         assertEquals(2, q.getInt("index"))
         val item = q.getJSONArray("items").getJSONObject(2)
         assertEquals("MAT", item.getString("ho"))
@@ -464,14 +472,14 @@ class AndroidAutoTest {
 
     @Test
     fun artworkProvider_servesAPngTile() {
-        val provider = Robolectric.setupContentProvider(CarArtworkProvider::class.java, CarArtwork.authority(context))
-        val pfd = provider.openFile(CarArtwork.chapterUri(context, "JHN", 3), "r")
+        val provider = Robolectric.setupContentProvider(ArtworkTilesProvider::class.java, ArtworkTiles.authority(context))
+        val pfd = provider.openFile(ArtworkTiles.chapterUri(context, "JHN", 3), "r")
         val bytes = android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes() }
         assertTrue(bytes.size > 8)
         assertEquals(0x89.toByte(), bytes[0])
         assertEquals('P'.code.toByte(), bytes[1])
         // Unknown paths are refused rather than drawn.
-        assertFalse(runCatching { provider.openFile(Uri.parse("content://${CarArtwork.authority(context)}/chapter/JHN/99"), "r") }.isSuccess)
+        assertFalse(runCatching { provider.openFile(Uri.parse("content://${ArtworkTiles.authority(context)}/chapter/JHN/99"), "r") }.isSuccess)
     }
 
     /* ------------------------------------ helpers ------------------------------------ */

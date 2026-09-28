@@ -1,4 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
+import { syncTracking } from "./syncTracking";
+import { normaliseDevotionId } from "@/lib/devotionDone";
 
 /**
  * The single source of truth for MUTABLE user data. Immutable scripture lives in
@@ -68,6 +70,26 @@ export interface ReadingProgress {
   at: number;
 }
 
+/** How a chapter came to be read: opened in the reader, ticked in a plan, or heard to the end. */
+export type ReadingSource = "reader" | "plan" | "audio";
+
+/**
+ * The reading log: one row per chapter read per LOCAL day, never overwritten. `progress`
+ * keeps only the latest time per chapter, so re-reading a chapter erased the earlier day;
+ * this keeps every day. The id is derived from the day and the chapter, so the same
+ * reading recorded twice (or on two devices) is the same row and sync merges it for free.
+ * See src/db/readingLog.ts.
+ */
+export interface ReadingLogEntry {
+  id: string; // `${dayKey}:${osisChapter}`, e.g. "2026-09-27:John.3"
+  dayKey: string; // localDayKey(at): the reader's local calendar day
+  osis: string; // "John.3"
+  ho: string;
+  chapter: number;
+  source: ReadingSource;
+  at: number; // first time it was read that day
+}
+
 export interface Setting {
   key: string;
   value: unknown;
@@ -80,9 +102,13 @@ export interface CommentaryCache {
 }
 
 export interface BibleCache {
-  key: string; // `${translation}:${chapterOsis}` — non-bundled translations only
+  key: string; // `${translation}:${chapterOsis}` — non-bundled translations only; `lic:…` for licensed ones
   json: string; // serialised Chapter
   fetchedAt: number;
+  /** Licensed rows only: verses held, counted against the provider's cap (src/data/licensed/cache.ts). */
+  verses?: number;
+  /** Licensed rows only: last read, the eviction order. */
+  usedAt?: number;
 }
 
 export interface PlanProgress {
@@ -98,6 +124,14 @@ export interface PlanProgress {
    */
   chapterProgress?: Record<number, number[]>;
   /**
+   * Day index → when that day's state (done or not, and its ticked readings) last
+   * changed on any device (epoch ms, the same monotonic kind as `updatedAt`). Sync merges
+   * plan progress per day with it (src/db/planMerge.ts), so days finished on two
+   * devices both survive, and un-ticking a day on one device beats the older tick on
+   * another. Rows written before v0.5 lack it. Non-indexed.
+   */
+  dayAt?: Record<number, number>;
+  /**
    * Day index → when that day was completed (epoch ms). The daily-reading reminders
    * need to know whether a reading was finished TODAY (local day), and `completedDays`
    * only says which days are done, not when. Syncs with the row, so a day finished on
@@ -108,7 +142,7 @@ export interface PlanProgress {
 }
 
 export interface DevotionDone {
-  id: string; // `${MM-DD}:${'m'|'e'}`
+  id: string; // `${devotionalId}:${YYYY-MM-DD}:${index}` — see src/lib/devotionDone.ts
   completedAt: number;
 }
 
@@ -153,14 +187,53 @@ export interface OutboxEntry {
   table: string;
   id: string;
   op: "upsert" | "delete";
+  /** Unique, increasing per change (src/db/syncTracking.ts): an entry whose `at` moved during a push was edited meanwhile. */
   at: number;
+  /** A delete's tombstone stamp: after the removed row's own `updatedAt`. */
+  stamp?: number;
+  /**
+   * Set when a push of this change got a 2xx from a server that does not report
+   * rejected rows (v0.4.0). The entry is only cleared once a pull shows the server holds
+   * this stamp or a newer one; see `confirmsSent` in src/db/sync.ts.
+   */
+  sent?: { at: number; updatedAt: number };
+  /** Pushes the server silently ignored; after a few the change is parked (`stuck`). */
+  tries?: number;
+  stuck?: boolean;
+}
+/**
+ * A pulled record this device could not apply yet: encrypted, and either there is no
+ * key here or the key is wrong. Kept so it applies once the recovery phrase is entered,
+ * instead of being skipped for good as the cursor moves past it.
+ */
+export interface HeldChange {
+  key: string; // `${table}:${id}`
+  table: string;
+  id: string;
+  updatedAt: number;
+  data: Record<string, unknown>;
+}
+/**
+ * One of the user's own Bible API keys, shared with their other devices (src/store/keySync.ts).
+ * Plaintext here, like the journal; it only ever leaves the device end-to-end encrypted.
+ */
+export interface SyncedApiKey {
+  id: "esv" | "nlt" | "apiBible";
+  value: string;
+  updatedAt?: number;
 }
 export interface SyncStateRow {
   key: string; // single row "main"
   value: unknown;
 }
 
-export const db = new Dexie("bread-of-life") as Dexie & {
+/**
+ * Tests (scripts/test-sync.mjs) run several "devices" in one Node process, each with its
+ * own fake-indexeddb, by setting this global before importing the module.
+ */
+const injected = (globalThis as { __bolIndexedDB?: { indexedDB: IDBFactory; IDBKeyRange: typeof IDBKeyRange } }).__bolIndexedDB;
+
+export const db = new Dexie("bread-of-life", injected ? { indexedDB: injected.indexedDB, IDBKeyRange: injected.IDBKeyRange } : undefined) as Dexie & {
   highlights: EntityTable<Highlight, "id">;
   notes: EntityTable<Note, "id">;
   prayers: EntityTable<Prayer, "id">;
@@ -173,9 +246,14 @@ export const db = new Dexie("bread-of-life") as Dexie & {
   devotions: EntityTable<DevotionDone, "id">;
   customPlans: EntityTable<CustomPlan, "id">;
   memory: EntityTable<MemoryCard, "id">;
+  readingLog: EntityTable<ReadingLogEntry, "id">;
+  apiKeys: EntityTable<SyncedApiKey, "id">;
   outbox: EntityTable<OutboxEntry, "key">;
   syncState: EntityTable<SyncStateRow, "key">;
+  syncHeld: EntityTable<HeldChange, "key">;
 };
+
+db.use(syncTracking);
 
 db.version(1).stores({
   highlights: "id, osis, bbcccvvv, color, createdAt",
@@ -211,14 +289,8 @@ db.version(6).stores({
   syncState: "key",
 });
 
-// On-rails guided reader: PlanProgress gains a non-indexed `chapterProgress`
-// map (day → completed reading indices) for partial per-day completion. The
-// field needs no new index, but we bump the version so the schema intent is
-// explicit and existing rows migrate cleanly (chapterProgress just starts
-// undefined and is filled in as days are read).
-db.version(7).stores({
-  plans: "planId",
-});
+// (Version 7 only restated `plans` for the guided reader's non-indexed
+// `chapterProgress` map; a version that changes nothing needs no declaration.)
 
 // Journal ↔ Prayer cross-referencing. Adds multiEntry indexes for the new link
 // arrays so we can look up either side. Non-indexed fields would work too (Dexie
@@ -232,6 +304,45 @@ db.version(8).stores({
 // can cheaply query cards due now.
 db.version(9).stores({
   memory: "id, osis, bbcccvvv, dueAt, createdAt",
+});
+
+// v0.5 sync fixes:
+//  - `syncHeld`: pulled encrypted rows this device can't read yet (see HeldChange).
+//  - Devotion completion keys gain the year (src/lib/devotionDone.ts). The rewrite is
+//    local and untracked (schema upgrades bypass sync tracking): every device converts
+//    the same old keys to the same new ones from `completedAt`, and pulled old keys are
+//    converted on arrival, so nothing needs to travel.
+//  - The Missler library path used to sync. A path that arrived from a desktop switches
+//    off the phone's own folder probe, so an Android device drops a saved path that
+//    isn't an Android one. (The server copy is removed by the v0.5 server.)
+db.version(10)
+  .stores({ syncHeld: "key" })
+  .upgrade(async (tx) => {
+    const devotions = tx.table("devotions");
+    for (const row of (await devotions.toArray()) as DevotionDone[]) {
+      const id = normaliseDevotionId(row.id, row.completedAt);
+      if (!id) continue;
+      await devotions.delete(row.id);
+      if (!(await devotions.get(id))) await devotions.put({ ...row, id });
+    }
+    const isAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+    const path = (await tx.table("settings").get("misslerLibraryPath")) as Setting | undefined;
+    if (isAndroid && typeof path?.value === "string" && path.value && !/^\/(storage|sdcard|data)\//.test(path.value)) {
+      await tx.table("settings").delete("misslerLibraryPath");
+    }
+  });
+
+// The reading log (see ReadingLogEntry). Filled from `progress` and plan completions by a
+// one-off backfill after open (src/db/readingLog.ts), not here: that needs plan data, which
+// is fetched, and fetching inside an upgrade transaction would end it early. Its writes go
+// through sync tracking, so the backfilled rows reach the account like any other.
+db.version(11).stores({
+  readingLog: "id, dayKey, at",
+});
+
+// The user's own Bible API keys, synced only end-to-end encrypted (see SyncedApiKey).
+db.version(12).stores({
+  apiKeys: "id",
 });
 
 export function uid(): string {

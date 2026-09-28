@@ -7,6 +7,8 @@
  * OT (Hebrew) word-alignment is approximate — the UI flags OT accordingly.
  */
 
+import { lexiconShard } from "./lexiconShard";
+
 const BASE = import.meta.env.BASE_URL;
 
 /* ------------------------------ cross-references ------------------------------ */
@@ -51,7 +53,32 @@ export interface LexEntry {
 }
 
 const strongsBookCache = new Map<string, Record<string, StrongToken[]>>();
-let lexiconCache: Record<string, LexEntry> | null = null;
+
+/** Shards already fetched (or in flight), keyed by URL. A failed fetch caches as
+ *  empty, like the per-book files, so one missing shard can't wedge the panel. */
+const lexShardCache = new Map<string, Promise<Record<string, LexEntry>>>();
+
+function loadLexShard(url: string): Promise<Record<string, LexEntry>> {
+  let hit = lexShardCache.get(url);
+  if (!hit) {
+    hit = fetch(url)
+      .then((res) => (res.ok ? (res.json() as Promise<Record<string, LexEntry>>) : {}))
+      .catch(() => ({}));
+    lexShardCache.set(url, hit);
+  }
+  return hit;
+}
+
+/** The lexicon entries for `ids`, fetching only the shards that hold them. */
+async function lexiconEntries(dir: string, ids: Iterable<string>): Promise<Record<string, LexEntry>> {
+  const wanted = [...new Set(ids)];
+  const shards = new Set(wanted.map(lexiconShard).filter((s): s is string => s != null));
+  const loaded = await Promise.all([...shards].map((s) => loadLexShard(`${BASE}data/strongs/${dir}/${s}.json`)));
+  const all: Record<string, LexEntry> = Object.assign({}, ...loaded);
+  const out: Record<string, LexEntry> = {};
+  for (const id of wanted) if (all[id]) out[id] = all[id];
+  return out;
+}
 
 async function loadStrongsBook(ho: string): Promise<Record<string, StrongToken[]>> {
   const hit = strongsBookCache.get(ho);
@@ -72,21 +99,14 @@ export async function getStrongsVerse(ho: string, chapter: number, verse: number
   return book[`${chapter}.${verse}`] ?? [];
 }
 
-export async function loadLexicon(): Promise<Record<string, LexEntry>> {
-  if (lexiconCache) return lexiconCache;
-  try {
-    const res = await fetch(`${BASE}data/strongs/lexicon.json`);
-    lexiconCache = res.ok ? ((await res.json()) as Record<string, LexEntry>) : {};
-  } catch {
-    lexiconCache = {};
-  }
-  return lexiconCache;
+/** Greek (NT) lexicon entries for the given Strong's ids. */
+export function loadLexicon(ids: Iterable<string>): Promise<Record<string, LexEntry>> {
+  return lexiconEntries("lexicon", ids);
 }
 
 /* ---- Accurate OT Hebrew interlinear (Open Scriptures Hebrew Bible, CC-BY) ---- */
 
 const hebBookCache = new Map<string, Record<string, StrongToken[]>>();
-let hebLexiconCache: Record<string, LexEntry> | null = null;
 
 async function loadHebBook(ho: string): Promise<Record<string, StrongToken[]>> {
   const hit = hebBookCache.get(ho);
@@ -107,13 +127,7 @@ export async function getHebrewVerse(ho: string, chapter: number, verse: number)
   return book[`${chapter}.${verse}`] ?? [];
 }
 
-export async function loadHebLexicon(): Promise<Record<string, LexEntry>> {
-  if (hebLexiconCache) return hebLexiconCache;
-  try {
-    const res = await fetch(`${BASE}data/strongs/lexicon-heb.json`);
-    hebLexiconCache = res.ok ? ((await res.json()) as Record<string, LexEntry>) : {};
-  } catch {
-    hebLexiconCache = {};
-  }
-  return hebLexiconCache;
+/** Hebrew (OT, OSHB) lexicon entries for the given Strong's ids. */
+export function loadHebLexicon(ids: Iterable<string>): Promise<Record<string, LexEntry>> {
+  return lexiconEntries("lexicon-heb", ids);
 }
