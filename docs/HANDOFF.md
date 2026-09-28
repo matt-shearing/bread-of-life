@@ -1,9 +1,8 @@
 # Handoff
 
-Bread of Life v0.4.0 is released on every platform. v0.5.0 is merged on `integrate/v0.5` and waits
-for Matt's approval. The v0.5 sync server is written but not deployed, because SSH to the sync VM is
-blocked. Read this page, then `CLAUDE.md`, before changing anything. What comes next is in
-[`ROADMAP.md`](ROADMAP.md).
+Bread of Life v0.5.0 is released on every platform, the rewritten website is live, and the v0.5
+sync server runs in production. Read this page, then `CLAUDE.md`, before changing anything. What
+comes next is in [`ROADMAP.md`](ROADMAP.md).
 
 ## What the app is
 
@@ -103,25 +102,22 @@ changes.
 - **DNS:** Porkbun, scriptable with the credentials in `~/.porkbun.json`. Matt also owns
   breadoflife.app.
 
-## The sync server cannot be reached by SSH
+## Reaching and redeploying the sync server
 
-Since 25 September 2026, port 22 on `bol-sync-01` times out from outside and from `hermes-prod-01`
-on the same subnet, while port 443 answers. The fault is the host firewall or sshd, not the
-security group. Sync keeps working, but production still runs the v0.4.0 server.
+`bol-sync-01` runs the v0.5 server (`/health` lists its features). Public SSH is closed at the
+security group. Reach it over the private network through `nextcloud-prod`: `ssh bol-sync` (the
+alias sets `ubuntu@10.20.0.245` with `ProxyJump nextcloud-prod`). To redeploy after a server
+change:
 
-To deploy v0.5:
+```
+ssh bol-sync 'cd /opt/bol && sudo git -c safe.directory=/opt/bol pull && cd deploy/sync-server && sudo docker compose up -d --build'
+curl -s https://sync.breadoflife.dev/health
+```
 
-1. Open the console with `openstack console url show bol-sync-01` and restore SSH.
-2. Confirm that `/opt/bol/deploy/sync-server/.env` sets `TOKEN_SECRET`. The v0.5 server refuses to
-   start in production without it, and changing it signs everyone out. Existing v0.4.0 tokens and
-   password hashes keep working.
-3. If Cloudflare fronts the server, set `TRUSTED_PROXIES` to Cloudflare's ranges (listed in the
-   server README). Otherwise every user shares one rate-limit bucket.
-4. Pull the new bundle and run `docker compose up -d --build`, then check that `/health` lists the
-   new `features`.
-
-After the deploy, the app shows the account buttons (sign out everywhere, change password, delete
-account) and starts syncing reading history.
+Keep `TOKEN_SECRET` in `/opt/bol/deploy/sync-server/.env` unchanged; changing it signs everyone
+out. Back up `/var/lib/docker/volumes/bol-sync-data/_data/` before a server upgrade (the last copy
+is in `/opt/bol-backups/`). If SSH is ever lost again, the rescue recipe is in the `oneqode-deploy`
+skill and in `~/dev/oneqode-deploy/deployments/bol-sync.md`.
 
 ## Android and Tauri traps
 
@@ -147,8 +143,6 @@ account) and starts syncing reading history.
 
 ## Known open issues
 
-- The v0.5 sync server is not deployed (see above).
-- `feat/website-v2` (pull request #18), the rewritten website, targets `main` and is not merged.
 - The E2E data key, the AI key and the Bible API keys sit in plain text in localStorage.
 - The licensed translations (ESV, NLT, API.Bible) have only run against faked responses; check
   them with real keys (see [`LICENSED-TRANSLATIONS.md`](LICENSED-TRANSLATIONS.md)).

@@ -1,8 +1,6 @@
 # Roadmap
 
-Bread of Life is at v0.4.0, with v0.5.0 built on `integrate/v0.5` and waiting for Matt's approval.
-The biggest open item is deploying the v0.5 sync server, which is blocked because SSH to the
-sync VM is closed at the host firewall. This page lists what has shipped, what comes next and what
+Bread of Life is at v0.5.0, and the v0.5 sync server runs in production. This page lists what has shipped, what comes next and what
 we decided not to build. For how the project works day to day, see [`HANDOFF.md`](HANDOFF.md).
 
 ## Shipped
@@ -58,7 +56,8 @@ Everything below is merged on `integrate/v0.5` and not yet released.
   copies on the server, and a second device asks for the recovery phrase instead of making a second
   key. Device-only settings stay on the device, and journal HTML is sanitised before it is shown.
   The client works with the v0.4.0 server in production. The v0.5 server adds token expiry, sign
-  out on all devices, password change, account deletion and per-row errors, but it is not deployed.
+  out on all devices, password change, account deletion and per-row errors; it has been live since
+  28 September 2026.
 - **Finding and landing.** Every reference opens on its verse with a brief highlight and a "Back
   to…" bar. The Bible tab remembers the verse you were on, and reading a plan no longer moves it.
   Search understands typed references such as "jn 3:16" and searches your journal, prayers and
@@ -98,16 +97,6 @@ Everything below is merged on `integrate/v0.5` and not yet released.
   day changes at local midnight.
 
 ## Next
-
-### Waiting on the server
-
-- **Deploy the v0.5 sync server.** SSH to `bol-sync-01` times out at the host firewall, even from
-  the same subnet, so the fix needs the OpenStack noVNC console. Before deploying, confirm that the
-  VM's `.env` sets `TOKEN_SECRET`, because the new server refuses to start without it. If the
-  server sits behind Cloudflare, set `TRUSTED_PROXIES` too. Account deletion, which Google Play
-  requires for apps with accounts, only appears after this deploy.
-- **Reading-history sync.** The `readingLog` table syncs only to a server that advertises the
-  `readingLog` feature. Until the deploy, each device keeps its own history, and nothing fails.
 
 ### Needs Matt's phone
 
