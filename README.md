@@ -10,7 +10,13 @@ built for busy people who long to know God more.
 
 ### [**breadoflife.dev**](https://breadoflife.dev) · [Download](#-install-now) · [What's inside](#whats-inside)
 
-**Latest: v0.5.1** — **a new icon**: an arched window at first light, with a loaf on the sill. It
+**Latest: v0.5.2** — **today, at a glance on your desk**. On Linux, Bread of Life now tells a
+desk dashboard such as the XENEON Edge deck the verse of the day, whether today's reading is done,
+which devotion is up and how many memory verses are due. A small timer keeps it current while the
+app is closed. Only public-domain BSB text and your reading progress are shared, never your journal,
+prayers or notes.
+
+**v0.5.1** — **a new icon**: an arched window at first light, with a loaf on the sill. It
 replaces the old loaf on every platform, including Android's single-colour themed icons and the
 status bar during playback.
 
