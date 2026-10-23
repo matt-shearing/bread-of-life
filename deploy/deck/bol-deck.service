@@ -1,0 +1,8 @@
+[Unit]
+Description=Bread of Life: render the XENEON Edge deck card's snapshot (deck.json)
+Documentation=file://%h/.local/share/bread-of-life-deck/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I %h/.local/bin/bol-deck
+Nice=10

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "Desktop only: the Rust audio player (Linux) and reading a Missler library in place from the home folder or removable media.",
+  "description": "Desktop only: the Rust audio player (Linux), reading a Missler library in place from the home folder or removable media, and the XENEON Edge deck card's snapshot.",
   "platforms": [
     "linux",
     "macOS",
@@ -12,6 +12,7 @@
   ],
   "permissions": [
     "allow-desktop-audio",
+    "allow-deck-snapshot",
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [
