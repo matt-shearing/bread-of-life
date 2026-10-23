@@ -6,6 +6,9 @@ mod desktop_audio;
 // Media keys and the desktop media widget for that player (MPRIS on Linux).
 #[cfg(desktop)]
 mod media_keys;
+// The XENEON Edge deck card's snapshot files (src/lib/deckBridge.ts).
+#[cfg(desktop)]
+mod deck_snapshot;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -47,6 +50,7 @@ pub fn run() {
                 desktop_audio::desktop_audio_volume,
                 desktop_audio::desktop_audio_stop,
                 desktop_audio::desktop_audio_state,
+                deck_snapshot::write_deck_snapshot,
             ]);
     }
 

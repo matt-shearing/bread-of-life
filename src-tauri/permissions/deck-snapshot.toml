@@ -1,0 +1,7 @@
+# The XENEON Edge deck card's snapshot (src-tauri/src/deck_snapshot.rs). The command writes
+# two fixed files under $XDG_STATE_HOME/bread-of-life/; the webview chooses only their content.
+
+[[permission]]
+identifier = "allow-deck-snapshot"
+description = "Write the deck card's deck-source.json and deck.json in the app's state folder."
+commands.allow = ["write_deck_snapshot"]

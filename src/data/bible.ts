@@ -357,7 +357,7 @@ const VOTD: Array<{ ho: string; ch: number; v: number }> = [
   { ho: "PSA", ch: 1, v: 1 }, { ho: "JHN", ch: 1, v: 1 }, { ho: "EPH", ch: 2, v: 8 },
 ];
 
-export async function verseOfTheDay(): Promise<{
+export async function verseOfTheDay(ts: number = Date.now()): Promise<{
   ho: string;
   chapter: number;
   verse: number;
@@ -365,7 +365,7 @@ export async function verseOfTheDay(): Promise<{
 }> {
   // The LOCAL calendar day, so the verse changes at local midnight (a UTC day number
   // changed it at 08:00 in Perth).
-  const dayNum = localDayNumber();
+  const dayNum = localDayNumber(ts);
   const pick = VOTD[dayNum % VOTD.length];
   const ch = await getChapter(pick.ho, pick.ch);
   const v = ch ? verses(ch).find((x) => x.n === pick.v) : undefined;

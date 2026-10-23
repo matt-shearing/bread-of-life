@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { RouteFallback } from "@/components/layout/RouteFallback";
 import { startSync } from "@/db/sync";
 import { startPrefSync } from "@/store/syncedPrefs";
+import { startDeckBridge } from "@/lib/deckBridge";
 import { startKeySync } from "@/store/keySync";
 import { ensureAndroidDropFolder } from "@/data/missler";
 import { ensureReadingLogBackfill } from "@/db/readingLog";
@@ -98,4 +99,6 @@ setTimeout(() => {
   void ensureAndroidDropFolder();
   // Once per device: seed the reading log from reading done before it existed.
   void ensureReadingLogBackfill();
+  // Linux desktop: keep the XENEON Edge deck card's snapshot current (no-op elsewhere).
+  startDeckBridge();
 }, 0);
